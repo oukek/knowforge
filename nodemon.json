@@ -1,0 +1,6 @@
+{
+  "watch": ["server", "shared", "data/catalog.json"],
+  "ext": "mjs,json",
+  "delay": 200,
+  "signal": "SIGTERM"
+}
