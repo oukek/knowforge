@@ -1,11 +1,12 @@
 <script setup>
-import { onMounted, onUnmounted, watch } from "vue";
-import { useRoute } from "vue-router";
+import { onUnmounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { store, init, dueReviews, signOut } from "./store";
 import Icon from "./components/Icon.vue";
-import AuthScreen from "./components/AuthScreen.vue";
+import { afterLoginPath, loginLocation } from "./auth-routing.js";
 import SearchDialog from "./components/SearchDialog.vue";
 const route = useRoute();
+const router = useRouter();
 const nav = [
   ["/", "LayoutDashboard", "学习概览"],
   ["/learn", "LibraryBig", "知识资料库"],
@@ -25,17 +26,43 @@ const active = (path) =>
   path === "/" ? route.path === "/" : route.path.startsWith(path);
 const clockTick = setInterval(() => (store.now = Date.now()), 30000);
 onUnmounted(() => clearInterval(clockTick));
-onMounted(init);
 watch(
-  () => route.path,
+  [
+    () => route.fullPath,
+    () => store.user?.id,
+    () => store.loading,
+    () => store.initialized,
+    () => store.error,
+  ],
   () => {
     store.sidebarOpen = false;
-    document.title = `${route.meta.title || "学习"} · KnowForge`;
+    document.title = `${store.user ? route.meta.title || "学习" : "登录与注册"} · KnowForge`;
+    if (!store.initialized || store.loading || store.error) return;
+    if (!store.user && route.name !== "login")
+      void router.replace(loginLocation(route.fullPath));
+    else if (store.user && route.name === "login")
+      void router.replace(afterLoginPath(route.query.redirect));
   },
+  { immediate: true },
 );
 </script>
 <template>
-  <AuthScreen v-if="!store.user && !store.loading && !store.error" />
+  <main
+    v-if="!store.user && (store.loading || store.error)"
+    class="session-screen"
+  >
+    <div v-if="store.loading" class="loading-state" role="status">
+      <div class="spinner"></div>
+      <p>正在确认登录状态…</p>
+    </div>
+    <div v-else class="empty-state">
+      <Icon name="Unplug" :size="36" />
+      <h1>暂时无法连接学习服务</h1>
+      <p>{{ store.error }}</p>
+      <button class="btn primary" @click="init">重新连接</button>
+    </div>
+  </main>
+  <RouterView v-else-if="!store.user" />
   <div v-else class="app-layout">
     <a class="skip-link" href="#main-content">跳到主要内容</a>
     <div
@@ -83,12 +110,6 @@ watch(
         <RouterLink to="/sources" :class="{ active: active('/sources') }"
           ><Icon name="Database" :size="18" />资料来源与数据</RouterLink
         >
-        <div class="local-status">
-          <span class="status-dot"></span>学习数据 ·
-          {{ store.database === "mysql" ? "MySQL" : "SQLite" }} 持久化<span
-            >v2.0</span
-          >
-        </div>
       </div>
     </aside>
     <div class="main-shell">
@@ -127,7 +148,7 @@ watch(
           <Icon name="Unplug" :size="36" />
           <h1>暂时无法连接学习服务</h1>
           <p>{{ store.error }}</p>
-          <p class="muted">在项目目录执行 npm run dev，然后重试。</p>
+          <p class="muted">请稍后重试，或联系站点维护者检查服务。</p>
           <button class="btn primary" @click="init">重新连接</button>
         </div>
         <RouterView v-else :key="store.user?.id" />

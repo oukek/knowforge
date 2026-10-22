@@ -6,6 +6,7 @@ export const store = reactive({
   database: "sqlite",
   state: null,
   loading: true,
+  initialized: false,
   error: "",
   toast: "",
   searchOpen: false,
@@ -57,6 +58,7 @@ export async function request(path, method = "GET", body) {
 function clearSession() {
   sessionGeneration++;
   store.loading = false;
+  store.initialized = true;
   store.user = null;
   store.csrfToken = "";
   store.catalog = null;
@@ -103,8 +105,19 @@ export async function init() {
   } catch (e) {
     if (generation === sessionGeneration) store.error = e.message;
   } finally {
-    if (generation === sessionGeneration) store.loading = false;
+    if (generation === sessionGeneration) {
+      store.loading = false;
+      store.initialized = true;
+    }
   }
+}
+let initialization;
+export function ensureInitialized() {
+  if (store.initialized) return Promise.resolve();
+  initialization ??= init().finally(() => {
+    initialization = null;
+  });
+  return initialization;
 }
 export async function mutate(path, method = "POST", body) {
   const userId = store.user?.id;

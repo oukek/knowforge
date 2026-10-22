@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+stage="validate deployment configuration"
+trap 'status=$?; echo "SSH deployment failed during: $stage (line $LINENO, exit $status)." >&2; exit "$status"' ERR
 
 for key in SSH_HOST SSH_USERNAME SSH_PASSWORD DEPLOY_ARCHIVE DEPLOY_UPLOAD_ID; do
   if [[ -z "${!key:-}" ]]; then
@@ -27,8 +29,14 @@ destination="$SSH_USERNAME@$SSH_HOST"
 options=(-o "UserKnownHostsFile=$scratch/known_hosts" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=6)
 incoming="/www/wwwroot/knowforge/.incoming/$DEPLOY_UPLOAD_ID"
 
+stage="create upload directory on server"
+echo "[SSH 1/3] $stage"
 sshpass -e ssh "${options[@]}" -p "$port" "$destination" "mkdir -p '$incoming'"
+stage="upload archive, checksum and restart configuration"
+echo "[SSH 2/3] $stage"
 sshpass -e scp "${options[@]}" -P "$port" \
   "$DEPLOY_ARCHIVE" "$DEPLOY_ARCHIVE.sha256" "$scratch/restart-command" "$destination:$incoming/"
+stage="run remote dependency checks and deployment"
+echo "[SSH 3/3] $stage"
 sshpass -e ssh "${options[@]}" -p "$port" "$destination" \
   "bash -s -- '$DEPLOY_UPLOAD_ID' '$archive_name'" < scripts/deploy-remote.sh

@@ -6,7 +6,7 @@ A local-first learning workbench for frontend, Python, web scraping, REST APIs, 
 
 **KnowForge · 知行实验室** 是一个基于 Vue 3 与 Node.js 的本地工程学习工作台。把知识讲解、可运行示例、自动验证练习、面试题库和复习记录放在一起，让你边读、边写、边验证。
 
-主要内容为中文，支持 JavaScript 与 Python 双语言代码实验。学习数据可保存在服务端 MySQL 或本机 SQLite，支持账号密码公开注册，无需验证码，也无需配置模型 API Key。
+主要内容为中文，支持 JavaScript 与 Python 双语言代码实验。学习数据可保存在服务端 MySQL 或本机 SQLite，支持账号密码公开注册，无需验证码，也无需配置模型 API Key。未登录会跳转到 `/login`，登录后返回原本访问的页面。
 
 [快速开始](#快速开始) · [功能介绍](#功能介绍) · [学习内容](#学习内容) · [开发与扩展](#开发与扩展) · [文档](#文档)
 

@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from "vue-router";
-export default createRouter({
+import { store, ensureInitialized } from "./store.js";
+import { afterLoginPath, loginLocation } from "./auth-routing.js";
+const router = createRouter({
   history: createWebHistory(),
   scrollBehavior(to, from, saved) {
     if (saved) return saved;
@@ -7,6 +9,12 @@ export default createRouter({
     return { top: 0 };
   },
   routes: [
+    {
+      path: "/login",
+      name: "login",
+      component: () => import("./components/AuthScreen.vue"),
+      meta: { title: "登录与注册" },
+    },
     {
       path: "/",
       component: () => import("./views/Dashboard.vue"),
@@ -54,3 +62,11 @@ export default createRouter({
     },
   ],
 });
+router.beforeEach(async (to) => {
+  await ensureInitialized();
+  if (store.error) return true;
+  if (!store.user && to.name !== "login") return loginLocation(to.fullPath);
+  if (store.user && to.name === "login")
+    return afterLoginPath(to.query.redirect);
+});
+export default router;

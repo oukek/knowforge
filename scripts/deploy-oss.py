@@ -1,11 +1,28 @@
 """Upload a Vite build without deleting old assets; publish HTML last."""
 import mimetypes
 import os
+import re
 from pathlib import Path, PurePosixPath
 import sys
 
 
 BACKEND_RESOURCES = {"runner.js", "python-runner.js"}
+
+
+def signing_region(value):
+    region = value.strip()
+    if "_" in region:
+        raise ValueError(
+            f"Invalid OSS_REGION: {region!r}. Use hyphens, not underscores; "
+            f"for example {region.replace('_', '-')!r}. "
+            "Update the existing GitHub Actions repository Variable OSS_REGION."
+        )
+    if region.startswith("oss-") or not re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)+", region):
+        raise ValueError(
+            "OSS_REGION must be a Region ID such as cn-guangzhou, "
+            "without the oss- prefix, URL or Endpoint hostname."
+        )
+    return region
 
 
 def upload_frontend(bucket, directory, prefix=""):
@@ -40,12 +57,13 @@ def upload_frontend(bucket, directory, prefix=""):
 
 
 def main():
+    region = signing_region(os.environ["OSS_REGION"])
     import oss2
     from oss2.credentials import EnvironmentVariableCredentialsProvider
 
     auth = oss2.ProviderAuthV4(EnvironmentVariableCredentialsProvider())
     bucket = oss2.Bucket(auth, os.environ["OSS_ENDPOINT"], os.environ["OSS_BUCKET"],
-                         region=os.environ["OSS_REGION"], connect_timeout=60)
+                         region=region, connect_timeout=60)
     upload_frontend(bucket, sys.argv[1], os.environ.get("OSS_PREFIX", ""))
 
 

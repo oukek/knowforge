@@ -27,6 +27,17 @@ class Bucket:
 
 
 class DeploymentTests(unittest.TestCase):
+    def test_oss_region_rejects_underscores_with_existing_variable_fix(self):
+        with self.assertRaisesRegex(ValueError, "cn-guangzhou.*existing.*OSS_REGION"):
+            upload.signing_region('cn_guangzhou')
+
+    def test_oss_region_uses_plain_region_id(self):
+        for region in ['cn-guangzhou', 'cn-hangzhou', 'us-west-1', 'ap-southeast-1']:
+            self.assertEqual(upload.signing_region(' ' + region + '\n'), region)
+        for invalid in ['', 'oss-cn-guangzhou', 'https://oss-cn-guangzhou.aliyuncs.com', 'cn-guangzhou.aliyuncs.com']:
+            with self.subTest(region=invalid), self.assertRaises(ValueError):
+                upload.signing_region(invalid)
+
     def test_ssh_upload_needs_no_host_key_secret_and_keeps_password_out_of_arguments(self):
         with tempfile.TemporaryDirectory() as folder:
             work = Path(folder)
@@ -38,7 +49,8 @@ class DeploymentTests(unittest.TestCase):
                             'import json,os,sys\n'
                             'assert os.environ["SSHPASS"]==os.environ["FIXTURE_PASSWORD"]\n'
                             'assert os.environ["SSHPASS"] not in " ".join(sys.argv)\n'
-                            'with open(os.environ["FIXTURE_LOG"],"a") as f: f.write(json.dumps(sys.argv[1:])+"\\n")\n')
+                            'with open(os.environ["FIXTURE_LOG"],"a") as f: f.write(json.dumps(sys.argv[1:])+"\\n")\n'
+                            'if os.environ.get("FIXTURE_FAIL")=="scp" and "scp" in sys.argv: sys.exit(1)\n')
             mock.chmod(0o755)
             archive = work / 'knowforge-2.0.0-deploy.tar.gz'
             archive.write_bytes(b'fixture')
@@ -56,6 +68,12 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual(len(calls), 3)
             self.assertTrue(all('StrictHostKeyChecking=accept-new' in call for call in calls))
             self.assertIn('/www/wwwroot/knowforge/.incoming/mock-upload', ' '.join(calls[0]))
+            failed = subprocess.run(['bash', 'scripts/deploy-ssh.sh'], cwd=ROOT,
+                                    env={**env, 'FIXTURE_FAIL': 'scp'}, text=True,
+                                    capture_output=True, input='', timeout=10)
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn('SSH deployment failed during: upload archive', failed.stderr)
+            self.assertNotIn(env['SSH_PASSWORD'], failed.stdout + failed.stderr)
 
     def test_oss_publishes_index_last_and_keeps_worker_on_backend(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -82,7 +100,7 @@ class DeploymentTests(unittest.TestCase):
                 upload.upload_frontend(bucket, root)
             self.assertFalse(any(key == 'index.html' for key, *_ in bucket.files))
 
-    def run_remote(self, npm_ok=True, restart='', health_ok=True):
+    def run_remote(self, npm_ok=True, restart='', health_ok=True, missing_tool=None):
         with tempfile.TemporaryDirectory() as folder:
             work = Path(folder).resolve()
             root = work / 'application'
@@ -127,6 +145,12 @@ class DeploymentTests(unittest.TestCase):
             script = (ROOT / 'scripts/deploy-remote.sh').read_text()
             self.assertEqual(script.count('readonly root=/www/wwwroot/knowforge'), 1)
             script = script.replace('readonly root=/www/wwwroot/knowforge', 'readonly root=' + str(root))
+            if missing_tool:
+                script = f'''command() {{
+  if [[ "${{1:-}}" == -v && "${{2:-}}" == "{missing_tool}" ]]; then return 1; fi
+  builtin command "$@"
+}}
+''' + script
             env = {**os.environ, 'PATH': str(bins) + os.pathsep + os.environ['PATH']}
             result = subprocess.run(['bash', '-s', '--', 'test-upload', archive_name],
                                     input=script, text=True, capture_output=True, env=env, timeout=15)
@@ -137,7 +161,7 @@ class DeploymentTests(unittest.TestCase):
             self.assertFalse(incoming.exists())
             self.assertFalse((root / 'current').exists())
             self.assertFalse((root / 'releases').exists())
-            if npm_ok:
+            if npm_ok and not missing_tool:
                 self.assertEqual((root / 'package.json').read_text(), '{"name":"knowforge"}')
                 self.assertFalse((root / 'node_modules/old-package').exists())
                 self.assertEqual((root / 'node_modules/new-package').read_text(), 'new')
@@ -146,13 +170,23 @@ class DeploymentTests(unittest.TestCase):
                 self.assertTrue((root / 'node_modules/old-package').exists())
             return result
 
+    def test_missing_node_or_npm_reports_noninteractive_path_and_preserves_app(self):
+        for tool in ['node', 'npm']:
+            with self.subTest(tool=tool):
+                result = self.run_remote(missing_tool=tool)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('Missing server command: ' + tool, result.stderr)
+                self.assertIn('non-interactive SSH PATH', result.stderr)
+
     def test_remote_upload_updates_root_and_preserves_data(self):
         result = self.run_remote()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('service was not restarted', result.stdout)
 
     def test_install_failure_leaves_existing_application_unchanged(self):
-        self.assertNotEqual(self.run_remote(npm_ok=False).returncode, 0)
+        result = self.run_remote(npm_ok=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Remote deployment failed during: install production dependencies', result.stderr)
 
     def test_restart_failure_is_reported_without_losing_data(self):
         result = self.run_remote(restart='exit 1\n')

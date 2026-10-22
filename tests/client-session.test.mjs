@@ -1,5 +1,46 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { afterLoginPath, loginLocation } from "../client/src/auth-routing.js";
+
+test("登录页保留内部目标路径，拒绝外部地址和登录循环", () => {
+  const target = "/learn/js-event-loop?tab=practice#notes";
+  assert.deepEqual(loginLocation(target), {
+    name: "login",
+    query: { redirect: target },
+    replace: true,
+  });
+  assert.deepEqual(loginLocation("/"), { name: "login", replace: true });
+  assert.equal(afterLoginPath(target), target);
+  for (const invalid of [
+    undefined,
+    ["/learn"],
+    "https://evil.invalid",
+    "//evil.invalid",
+    "/\\evil.invalid",
+    "/login?redirect=/login",
+    "/LOGIN/",
+    "/\n/evil.invalid",
+  ])
+    assert.equal(afterLoginPath(invalid), "/");
+});
+
+test("并发路由初始化只检查一次登录状态，匿名状态正常完成", async (t) => {
+  const previous = globalThis.fetch;
+  t.after(() => (globalThis.fetch = previous));
+  const { store, ensureInitialized } = await load();
+  let count = 0;
+  globalThis.fetch = async (path) => {
+    count++;
+    assert.equal(path, "/api/auth/me");
+    return response({ user: null, csrfToken: "" });
+  };
+  await Promise.all([ensureInitialized(), ensureInitialized()]);
+  await ensureInitialized();
+  assert.equal(count, 1);
+  assert.equal(store.initialized, true);
+  assert.equal(store.loading, false);
+  assert.equal(store.user, null);
+});
 
 const load = () => import(`../client/src/store.js?test=${Math.random()}`);
 const response = (data, status = 200) =>
