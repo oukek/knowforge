@@ -1,12 +1,12 @@
-name: Build deployment package
-run-name: Package KnowForge · ${{ github.ref_name }}
+name: Deploy backend (SSH)
+run-name: Backend KnowForge · ${{ github.ref_name }}
 
 # Manual runs only. No push, pull_request, tag, or scheduled triggers.
 on:
   workflow_dispatch:
     inputs:
       deploy:
-        description: Upload frontend to OSS and backend to SSH (disable for package only)
+        description: Upload backend to SSH (disable for package only)
         type: boolean
         default: true
 
@@ -76,7 +76,7 @@ jobs:
       - name: Test deployment upload and data preservation
         run: python3 -m unittest discover -s tests -p 'test_deploy.py' -v
 
-      - name: Package frontend and backend
+      - name: Package server runtime
         id: package
         run: npm run package:deploy
 
@@ -115,13 +115,13 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
-    name: Deploy OSS frontend and SSH backend
+    name: Deploy backend to SSH
     needs: package
     if: ${{ inputs.deploy }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     concurrency:
-      group: knowforge-production-deploy
+      group: knowforge-production-backend
       cancel-in-progress: false
     steps:
       - name: Checkout deployment scripts
@@ -132,13 +132,8 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
           SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
-          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          OSS_BUCKET: ${{ vars.OSS_BUCKET }}
-          OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT }}
-          OSS_REGION: ${{ vars.OSS_REGION }}
         run: |
-          for key in SSH_HOST SSH_USERNAME SSH_PASSWORD OSS_ACCESS_KEY_ID OSS_ACCESS_KEY_SECRET OSS_BUCKET OSS_ENDPOINT OSS_REGION; do
+          for key in SSH_HOST SSH_USERNAME SSH_PASSWORD; do
             if [ -z "${!key}" ]; then
               echo "::error::Missing deployment configuration: $key. See docs/服务器部署.md"
               exit 1
@@ -151,21 +146,17 @@ jobs:
           name: ${{ needs.package.outputs.artifact_name }}
           path: ${{ runner.temp }}/knowforge-artifact
 
-      - name: Verify and extract package
+      - name: Verify downloaded package
         env:
           ARCHIVE_NAME: ${{ needs.package.outputs.archive_name }}
         run: |
           cd "$RUNNER_TEMP/knowforge-artifact"
           sha256sum -c "$ARCHIVE_NAME.sha256"
-          mkdir -p "$RUNNER_TEMP/knowforge-upload"
-          tar -xzf "$ARCHIVE_NAME" -C "$RUNNER_TEMP/knowforge-upload"
 
       - name: Install deployment tools
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends sshpass
-          python3 -m venv "$RUNNER_TEMP/oss-sdk"
-          "$RUNNER_TEMP/oss-sdk/bin/pip" install 'oss2==2.19.1'
 
       - name: Upload backend to SSH server
         env:
@@ -178,23 +169,12 @@ jobs:
           DEPLOY_UPLOAD_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
         run: bash scripts/deploy-ssh.sh
 
-      - name: Upload frontend to OSS (publish index last)
-        env:
-          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-          OSS_BUCKET: ${{ vars.OSS_BUCKET }}
-          OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT }}
-          OSS_REGION: ${{ vars.OSS_REGION }}
-          OSS_PREFIX: ${{ vars.OSS_PREFIX }}
-        run: '"$RUNNER_TEMP/oss-sdk/bin/python" scripts/deploy-oss.py "$RUNNER_TEMP/knowforge-upload/knowforge/dist"'
-
       - name: Write deployment summary
         run: |
           {
             echo '## Deployment completed'
-            echo '- Frontend uploaded to OSS; existing hashed assets are retained and index.html is uploaded last.'
             echo '- Backend files deployed directly to /www/wwwroot/knowforge.'
             echo '- Existing /www/wwwroot/knowforge/runtime data is preserved.'
             echo '- Service restart runs only when SSH_RESTART_COMMAND is configured.'
-            echo '- Configure CDN dynamic origin routes as documented in docs/服务器部署.md.'
+            echo '- Run Deploy frontend (OSS) separately when frontend changes need publishing.'
           } >> "$GITHUB_STEP_SUMMARY"

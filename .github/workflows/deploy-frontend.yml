@@ -1,0 +1,118 @@
+name: Deploy frontend (OSS)
+run-name: Frontend KnowForge · ${{ github.ref_name }}
+
+# Repository Secrets and Variables are shared with the backend workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Upload frontend to OSS (disable for build only)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Set up Python for tests
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend and learning data
+        run: npm run build
+
+      - name: Validate learning data
+        run: npm run check:data
+
+      - name: Run tests
+        run: npm test
+
+      - name: Upload frontend build
+        uses: actions/upload-artifact@v6
+        with:
+          name: knowforge-frontend-${{ github.run_number }}-${{ github.run_attempt }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  deploy:
+    name: Deploy frontend to OSS
+    needs: build
+    if: ${{ inputs.deploy }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    concurrency:
+      group: knowforge-production-frontend
+      cancel-in-progress: false
+    steps:
+      - name: Checkout upload script
+        uses: actions/checkout@v6
+
+      - name: Validate existing OSS configuration
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_BUCKET: ${{ vars.OSS_BUCKET }}
+          OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT }}
+          OSS_REGION: ${{ vars.OSS_REGION }}
+        run: |
+          for key in OSS_ACCESS_KEY_ID OSS_ACCESS_KEY_SECRET OSS_BUCKET OSS_ENDPOINT OSS_REGION; do
+            if [ -z "${!key}" ]; then
+              echo "::error::Missing existing repository configuration: $key. See docs/服务器部署.md"
+              exit 1
+            fi
+          done
+
+      - name: Download tested frontend
+        uses: actions/download-artifact@v6
+        with:
+          name: knowforge-frontend-${{ github.run_number }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/knowforge-frontend
+
+      - name: Set up Python for OSS upload
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install OSS SDK
+        run: |
+          python3 -m venv "$RUNNER_TEMP/oss-sdk"
+          "$RUNNER_TEMP/oss-sdk/bin/pip" install 'oss2==2.19.1'
+
+      - name: Upload frontend (publish index last)
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_BUCKET: ${{ vars.OSS_BUCKET }}
+          OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT }}
+          OSS_REGION: ${{ vars.OSS_REGION }}
+          OSS_PREFIX: ${{ vars.OSS_PREFIX }}
+        run: '"$RUNNER_TEMP/oss-sdk/bin/python" scripts/deploy-oss.py "$RUNNER_TEMP/knowforge-frontend"'
+
+      - name: Write deployment summary
+        run: |
+          {
+            echo '## Frontend deployed to OSS'
+            echo "Built commit: $GITHUB_SHA"
+            echo '- Existing repository OSS Secrets and Variables were used.'
+            echo '- Existing hashed assets are retained; index.html is uploaded last.'
+            echo '- Run Deploy backend (SSH) separately for API, catalog and runner updates.'
+          } >> "$GITHUB_STEP_SUMMARY"

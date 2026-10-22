@@ -120,13 +120,20 @@ npm start
 
 构建后仍通过 `http://127.0.0.1:16666/` 访问。前端服务托管 `dist/` 并代理后端，后端 API 保持在 6666。运行时需要安装项目依赖，包括本地 Pyodide 文件。
 
-### GitHub Actions 手动打包
+### GitHub Actions 手动部署
 
-仓库提供 **Build deployment package** 工作流，仅支持手动触发，推送、PR 和标签不会自动打包。
+前后端使用两个独立工作流，均只支持手动触发，推送、PR 和标签不会自动部署：
 
-将工作流提交到默认分支后，打开 **Actions → Build deployment package → Run workflow**，选择分支并运行。`deploy` 默认开启：构建、数据检查、完整测试和生产包检查通过后，会通过 SSH 上传后端到 `/www/wwwroot/knowforge`，再发布前端到 OSS；取消勾选则仅打包。也可从 **Artifacts** 下载部署包及 SHA-256 校验文件，产物保留 30 天。
+| Actions 名称 | 工作流文件 | 发布目标 |
+| --- | --- | --- |
+| **Deploy frontend (OSS)** | `.github/workflows/deploy-frontend.yml` | 构建前端，上传 OSS |
+| **Deploy backend (SSH)** | `.github/workflows/build-package.yml` | 检查、打包后端运行文件，更新 `/www/wwwroot/knowforge` 并按配置重启 |
 
-部署包包含已构建前端、Node 后端、学习资料及运行说明，不包含个人数据库或 node_modules。手动部署时可解压后运行 `npm ci --omit=dev` 和 `npm start`。自动部署所需 Secrets、Variables、重启命令与 CDN 同源回源规则详见 [服务器部署](docs/服务器部署.md)。
+两者直接复用仓库已配置的 Secrets 和 Variables，名称保持不变，不需要创建 GitHub Environment，也不需要按工作流重复填写。前端仅使用 `OSS_*` 配置，后端仅使用 `SSH_*` 配置；MySQL 仍读取服务器现有 `.env`。
+
+将工作流提交到默认分支后，在 **Actions** 中选择对应名称，点击 **Run workflow**、选择分支并运行。`deploy` 默认开启；取消勾选则前端只构建、后端只生成部署包。两条工作流互不触发，可以单独运行。修改接口、知识数据或 Worker 时需要部署后端；两端都有改动时，对同一个 commit 先部署后端，再部署前端。
+
+构建产物在对应运行的 **Artifacts** 中保留 30 天。后端完整运行包可手动解压后运行 `npm ci --omit=dev` 和 `npm start`。配置项、重启命令与 CDN 同源回源规则详见 [服务器部署](docs/服务器部署.md)。
 
 ### 配置
 
