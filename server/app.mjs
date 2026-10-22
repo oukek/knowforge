@@ -1,3 +1,5 @@
+import { PRODUCTION_FRONTEND_ORIGIN } from "../shared/deployment.mjs";
+import { runnerFrame } from "./runner-frame.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createAuth } from "./auth.mjs";
 import express from "express";
@@ -81,6 +83,8 @@ export async function createApp({
   allowedOrigins = [],
   serveClient = true,
   resourcePaths = {},
+  publicApiOrigin,
+  secureCookies,
 } = {}) {
   const resources = {
     runner: resolve("client/public/runner.js"),
@@ -105,28 +109,83 @@ export async function createApp({
   app.disable("x-powered-by");
   app.set("trust proxy", "loopback");
   app.use(express.json({ limit: "12mb" }));
+  const trustedOrigins = new Set([
+    PRODUCTION_FRONTEND_ORIGIN,
+    ...allowedOrigins,
+    ...(publicApiOrigin ? [publicApiOrigin] : []),
+  ]);
+  const corsHeaders = new Set([
+    "content-type",
+    "x-csrf-token",
+    "x-knowforge-user",
+  ]);
   app.use((req, res, next) => {
     res.set("X-Content-Type-Options", "nosniff");
     if (req.path.startsWith("/api")) res.set("Cache-Control", "no-store");
-    if (
-      !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
-      req.headers.origin
-    ) {
+    const origin = req.headers.origin;
+    res.vary("Origin");
+    if (origin) {
       try {
+        const parsed = new URL(origin);
+        const sameOrigin =
+          parsed.origin === `${req.protocol}://${req.get("host")}`;
         if (
-          new URL(req.headers.origin).host !== req.headers.host &&
-          !allowedOrigins.includes(new URL(req.headers.origin).origin)
+          origin !== parsed.origin ||
+          (!sameOrigin && !trustedOrigins.has(parsed.origin))
         )
-          return res.status(403).json({ error: "仅允许当前站点写入" });
+          return res.status(403).json({ error: "不允许该站点访问" });
       } catch {
         return res.status(403).json({ error: "无效来源" });
       }
+      res.set({
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Expose-Headers": "Content-Disposition",
+      });
+    }
+    if (req.method === "OPTIONS") {
+      const method = req.headers["access-control-request-method"];
+      const headers = String(
+        req.headers["access-control-request-headers"] || "",
+      )
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+      if (
+        !origin ||
+        !["GET", "HEAD", "POST", "PUT"].includes(method) ||
+        headers.some((h) => !corsHeaders.has(h))
+      )
+        return res.status(403).json({ error: "不允许该跨域请求" });
+      return res
+        .set({
+          "Access-Control-Allow-Methods": "GET, HEAD, POST, PUT",
+          "Access-Control-Allow-Headers":
+            "Content-Type, X-CSRF-Token, X-KnowForge-User",
+          "Access-Control-Max-Age": "600",
+        })
+        .status(204)
+        .end();
     }
     next();
   });
+  app.get("/runner-frame", (req, res) => {
+    const frame = runnerFrame([
+      ...trustedOrigins,
+      publicApiOrigin || `${req.protocol}://${req.get("host")}`,
+    ]);
+    res
+      .set({
+        "Content-Security-Policy": frame.csp,
+        "Cache-Control": "no-store",
+        "Referrer-Policy": "no-referrer",
+      })
+      .type("html")
+      .send(frame.html);
+  });
   const ok = async (res, extra = {}) =>
     res.json({ state: await snapshot(), ...extra });
-  const auth = createAuth(app, store);
+  const auth = createAuth(app, store, { secureCookies });
   app.get("/api/health", (req, res, next) =>
     store
       .session(async () => {
@@ -618,7 +677,7 @@ export async function createApp({
   app.get("/python-runner.js", async (req, res) => {
     const runtimeOrigin = new URL(
       "/python-runtime/",
-      `${req.protocol}://${req.get("host")}`,
+      publicApiOrigin || `${req.protocol}://${req.get("host")}`,
     ).href;
     res
       .type("application/javascript")

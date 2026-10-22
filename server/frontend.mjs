@@ -11,7 +11,13 @@ export function createFrontend({
   const app = express();
   app.disable("x-powered-by");
   app.use(
-    ["/api", "/runner.js", "/python-runner.js", "/python-runtime"],
+    [
+      "/api",
+      "/runner.js",
+      "/python-runner.js",
+      "/python-runtime",
+      "/runner-frame",
+    ],
     (req, res) => {
       // Keep the browser-facing Host so Origin checks and Worker CSP stay same-origin.
       const upstream = request(

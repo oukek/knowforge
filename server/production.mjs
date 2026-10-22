@@ -1,3 +1,4 @@
+import { PRODUCTION_API_ORIGIN } from "../shared/deployment.mjs";
 import { loadEnvFile } from "node:process";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
@@ -46,6 +47,8 @@ try {
     driver: process.env.DB_DRIVER || "sqlite",
     dbPath: process.env.DB_PATH,
     serveClient: false,
+    publicApiOrigin: PRODUCTION_API_ORIGIN,
+    secureCookies: true,
     resourcePaths: {
       runner: resolve("resources/runner.js"),
       pythonRunner: resolve("resources/python-runner.js"),

@@ -1,4 +1,5 @@
 <script setup>
+import { apiUrl } from "../api-config.js";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -81,7 +82,7 @@ watch(
           示例与自动验证练习。
         </p>
       </div>
-      <a href="/api/export/handbook" class="btn"
+      <a :href="apiUrl('/export/handbook')" class="btn"
         ><Icon name="Download" :size="17" />下载完整手册</a
       >
     </div>

@@ -3,6 +3,96 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createApp } from "../server/app.mjs";
 import { mysqlFixture } from "./helpers/mysql.mjs";
+import { PRODUCTION_FRONTEND_ORIGIN } from "../shared/deployment.mjs";
+
+test("正式前端域名可跨域登录与保存，CORS 预检无需登录且拒绝其他来源", async (t) => {
+  const { client, base } = await fixture(t);
+  const origin = PRODUCTION_FRONTEND_ORIGIN;
+  const preflight = await fetch(base + "/api/notes/js-event-loop", {
+    method: "OPTIONS",
+    headers: {
+      Origin: origin,
+      "Access-Control-Request-Method": "PUT",
+      "Access-Control-Request-Headers":
+        "content-type,x-csrf-token,x-knowforge-user",
+    },
+  });
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get("access-control-allow-origin"), origin);
+  assert.equal(
+    preflight.headers.get("access-control-allow-credentials"),
+    "true",
+  );
+  assert.match(preflight.headers.get("vary"), /Origin/);
+  for (const headers of [
+    { Origin: "https://evil.invalid", "Access-Control-Request-Method": "PUT" },
+    { Origin: origin, "Access-Control-Request-Method": "DELETE" },
+    {
+      Origin: origin,
+      "Access-Control-Request-Method": "PUT",
+      "Access-Control-Request-Headers": "authorization",
+    },
+  ]) {
+    const res = await fetch(base + "/api/notes/js-event-loop", {
+      method: "OPTIONS",
+      headers,
+    });
+    assert.equal(res.status, 403);
+  }
+  const a = client();
+  const headers = { Origin: origin, "X-Forwarded-Proto": "https" };
+  const registered = await a.api(
+    "/auth/register",
+    "POST",
+    { username: "cross_origin", password: "cross-origin-password" },
+    headers,
+  );
+  assert.equal(registered.status, 201);
+  assert.match(registered.headers.get("set-cookie"), /Secure/);
+  assert(!registered.headers.get("set-cookie").includes("Domain="));
+  assert.equal(registered.headers.get("access-control-allow-origin"), origin);
+  assert.equal(
+    (await a.api("/auth/me", "GET", undefined, headers)).data.user.username,
+    "cross_origin",
+  );
+  const { catalog } = (await a.api("/bootstrap", "GET", undefined, headers))
+    .data;
+  const saved = await a.api(
+    `/notes/${catalog.lessons[0].id}`,
+    "PUT",
+    { content: "跨域 Cookie 与 CSRF" },
+    headers,
+  );
+  assert.equal(saved.status, 200);
+  assert.equal(
+    saved.data.state.notes[catalog.lessons[0].id].content,
+    "跨域 Cookie 与 CSRF",
+  );
+  const denied = await a.api("/auth/me", "GET", undefined, {
+    Origin: "https://knowforge.ookew.com.evil.invalid",
+  });
+  assert.equal(denied.status, 403);
+  assert.equal(denied.headers.get("access-control-allow-origin"), null);
+});
+
+test("跨域运行器页面仅允许正式前端嵌入，Worker 保留独立 CSP", async (t) => {
+  const { base } = await fixture(t);
+  const frame = await fetch(base + "/runner-frame");
+  assert.equal(frame.status, 200);
+  const csp = frame.headers.get("content-security-policy");
+  assert(csp.includes("frame-ancestors 'self' " + PRODUCTION_FRONTEND_ORIGIN));
+  assert(csp.includes("worker-src 'self'"));
+  const html = await frame.text();
+  const nonce = html.match(/nonce="([^"]+)"/)[1];
+  assert(csp.includes(`'nonce-${nonce}'`));
+  assert(html.includes("knowforge:run"));
+  const worker = await fetch(base + "/runner.js");
+  assert(
+    worker.headers
+      .get("content-security-policy")
+      .includes("connect-src 'none'"),
+  );
+});
 
 async function fixture(t) {
   const mysql = process.env.TEST_MYSQL === "1" ? await mysqlFixture() : null;

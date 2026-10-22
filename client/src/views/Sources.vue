@@ -1,4 +1,5 @@
 <script setup>
+import { apiUrl } from "../api-config.js";
 import { ref } from "vue";
 import { store, mutate, toast } from "../store";
 import Icon from "../components/Icon.vue";
@@ -54,17 +55,17 @@ async function importBackup() {
       </p>
     </div>
     <section class="data-actions">
-      <a href="/api/export/catalog" class="data-action"
+      <a :href="apiUrl('/export/catalog')" class="data-action"
         ><Icon name="Database" :size="25" />
         <h3>完整结构化题库</h3>
         <p>专题、知识点、题目、答案、实验、用例、校正和引用。</p>
         <span>下载 JSON <Icon name="Download" :size="16" /></span></a
-      ><a href="/api/export/handbook" class="data-action"
+      ><a :href="apiUrl('/export/handbook')" class="data-action"
         ><Icon name="BookOpenText" :size="25" />
         <h3>完整学习手册</h3>
         <p>全部讲解、问答、客观题解析与参考实现，便于离线阅读。</p>
         <span>下载 Markdown <Icon name="Download" :size="16" /></span></a
-      ><a href="/api/export/backup" class="data-action"
+      ><a :href="apiUrl('/export/backup')" class="data-action"
         ><Icon name="HardDriveDownload" :size="25" />
         <h3>我的学习备份</h3>
         <p>进度、收藏、笔记、答题、复习计划和模拟记录。</p>
@@ -72,7 +73,7 @@ async function importBackup() {
       ></a>
     </section>
     <p class="muted">
-      <a href="/api/export/python-demo" class="text-link"
+      <a :href="apiUrl('/export/python-demo')" class="text-link"
         >下载 Python 全链路练习项目</a
       >
       · 标准库采集、SQLite、REST API 与确定性检索；Python 3.11+。

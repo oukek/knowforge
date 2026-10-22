@@ -1,3 +1,4 @@
+import { PRODUCTION_API_ORIGIN } from "../shared/deployment.mjs";
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
 import { createServer } from "node:net";
@@ -167,7 +168,7 @@ try {
   assert(
     worker.headers
       .get("content-security-policy")
-      .includes(base.replace("http:", "https:") + "/python-runtime/"),
+      .includes(PRODUCTION_API_ORIGIN + "/python-runtime/"),
   );
   if (mysqlCheck)
     assert(

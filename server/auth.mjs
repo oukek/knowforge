@@ -54,7 +54,7 @@ async function verifyPassword(password, encoded) {
 }
 const publicUser = (user) => ({ id: user.id, username: user.username });
 
-export function createAuth(app, store) {
+export function createAuth(app, store, { secureCookies } = {}) {
   const limits = new Map();
   function allow(key, max, duration) {
     const now = Date.now();
@@ -82,7 +82,7 @@ export function createAuth(app, store) {
   function setCookie(req, res, token) {
     res.cookie(cookieName, token || "", {
       httpOnly: true,
-      secure: req.secure,
+      secure: secureCookies ?? req.secure,
       sameSite: "lax",
       path: "/",
       maxAge: token ? lifetime : 0,

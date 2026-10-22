@@ -1,4 +1,5 @@
 import { reactive, computed } from "vue";
+import { apiUrl } from "./api-config.js";
 export const store = reactive({
   user: null,
   csrfToken: "",
@@ -22,8 +23,9 @@ export function toast(message) {
 }
 export async function request(path, method = "GET", body) {
   const userId = store.user?.id;
-  const response = await fetch("/api" + path, {
+  const response = await fetch(apiUrl(path), {
     method,
+    credentials: "include",
     headers: {
       ...(body ? { "Content-Type": "application/json" } : {}),
       ...(store.csrfToken && method !== "GET"

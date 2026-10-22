@@ -1,4 +1,5 @@
 import { ref, onBeforeUnmount } from "vue";
+import { createCodeWorker } from "./code-worker.js";
 export function useCodeRunner() {
   const running = ref(false),
     result = ref(null),
@@ -34,7 +35,7 @@ export function useCodeRunner() {
     return new Promise((resolve) => {
       settle = resolve;
       try {
-        worker = new Worker(python ? "/python-runner.js" : "/runner.js");
+        worker = createCodeWorker(python);
         function deadline(limit, initializing = false) {
           clearTimeout(timer);
           timer = setTimeout(

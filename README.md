@@ -135,7 +135,9 @@ npm start
 
 构建产物在对应运行的 **Artifacts** 中保留 30 天。后端独立运行包可手动解压后运行 `npm ci --omit=dev` 和 `npm start`。包中只有编译后的 API 服务、题库、实验及下载资源和后端专用依赖清单，不包含前端 dist、原始源码树或整个 docs；原有 .env、服务入口和 16666 API 网关保持兼容。
 
-本地执行 `npm run build:backend` 可检查 `backend-dist/`；执行 `npm run package:deploy` 构建并生成后端压缩包。服务器运行的是编译产物，不执行构建。配置项、重启命令与 CDN 同源回源规则详见 [服务器部署](docs/服务器部署.md)。
+本地执行 `npm run build:backend` 可检查 `backend-dist/`；执行 `npm run package:deploy` 构建并生成后端压缩包。服务器运行的是编译产物，不执行构建。配置项、重启命令与正式域名配置详见 [服务器部署](docs/服务器部署.md)。
+
+正式前端：`https://knowforge.ookew.com`；正式 API：`https://knowforge-api.ookew.com`。域名已配置在代码中，生产构建自动使用，开发继续走本地代理。请求携带 API 域名会话 Cookie，跨域预检与 CSRF 校验由后端处理；无需新增 Actions Secrets 或 Variables。
 
 ### 配置
 
