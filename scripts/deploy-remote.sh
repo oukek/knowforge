@@ -43,6 +43,17 @@ mkdir -p "$root/runtime"
 # Only replace generated dependencies; preserve databases, .env and other local files.
 rm -rf -- "$root/node_modules"
 mv "$payload/node_modules" "$root/node_modules"
+# Replace generated runtime directories so obsolete source files/chunks do not linger.
+for directory in server data resources; do
+  if [[ -d "$payload/$directory" ]]; then
+    rm -rf -- "$root/$directory"
+    mv "$payload/$directory" "$root/$directory"
+  fi
+done
+# These application-owned directories belonged to the old full-stack package.
+# Personal data and local configuration live in runtime/ and .env, never here.
+rm -rf -- "$root/dist" "$root/client" "$root/shared" "$root/docs" "$root/examples"
+rm -f -- "$root/README.md"
 for entry in "$payload"/*; do
   cp -a "$entry" "$root/"
 done

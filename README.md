@@ -127,13 +127,15 @@ npm start
 | Actions 名称 | 工作流文件 | 发布目标 |
 | --- | --- | --- |
 | **Deploy frontend (OSS)** | `.github/workflows/deploy-frontend.yml` | 构建前端，上传 OSS |
-| **Deploy backend (SSH)** | `.github/workflows/build-package.yml` | 检查、打包后端运行文件，更新 `/www/wwwroot/knowforge` 并按配置重启 |
+| **Deploy backend (SSH)** | `.github/workflows/build-package.yml` | 编译独立 backend-dist 产物，更新 `/www/wwwroot/knowforge` 并按配置重启 |
 
 两者直接复用仓库已配置的 Secrets 和 Variables，名称保持不变，不需要创建 GitHub Environment，也不需要按工作流重复填写。前端仅使用 `OSS_*` 配置，后端仅使用 `SSH_*` 配置；MySQL 仍读取服务器现有 `.env`。
 
 将工作流提交到默认分支后，在 **Actions** 中选择对应名称，点击 **Run workflow**、选择分支并运行。`deploy` 默认开启；取消勾选则前端只构建、后端只生成部署包。两条工作流互不触发，可以单独运行。修改接口、知识数据或 Worker 时需要部署后端；两端都有改动时，对同一个 commit 先部署后端，再部署前端。
 
-构建产物在对应运行的 **Artifacts** 中保留 30 天。后端完整运行包可手动解压后运行 `npm ci --omit=dev` 和 `npm start`。配置项、重启命令与 CDN 同源回源规则详见 [服务器部署](docs/服务器部署.md)。
+构建产物在对应运行的 **Artifacts** 中保留 30 天。后端独立运行包可手动解压后运行 `npm ci --omit=dev` 和 `npm start`。包中只有编译后的 API 服务、题库、实验及下载资源和后端专用依赖清单，不包含前端 dist、原始源码树或整个 docs；原有 .env、服务入口和 16666 API 网关保持兼容。
+
+本地执行 `npm run build:backend` 可检查 `backend-dist/`；执行 `npm run package:deploy` 构建并生成后端压缩包。服务器运行的是编译产物，不执行构建。配置项、重启命令与 CDN 同源回源规则详见 [服务器部署](docs/服务器部署.md)。
 
 ### 配置
 

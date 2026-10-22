@@ -55,8 +55,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build frontend and learning data
-        run: npm run build
+      - name: Build learning data
+        run: npm run build:data
 
       - name: Validate learning data
         run: npm run check:data
@@ -85,6 +85,17 @@ jobs:
           DEPLOY_ARCHIVE: ${{ steps.package.outputs.archive_path }}
         run: node scripts/check-deploy.mjs
 
+      - name: Verify compiled backend with isolated MySQL
+        env:
+          DEPLOY_ARCHIVE: ${{ steps.package.outputs.archive_path }}
+          CHECK_DEPLOY_MYSQL: "1"
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: "3306"
+          MYSQL_DATABASE: knowforge_ci
+          MYSQL_USER: knowforge_ci
+          MYSQL_PASSWORD: ci-test-only
+        run: node scripts/check-deploy.mjs
+
       - name: Upload deployment package
         uses: actions/upload-artifact@v6
         with:
@@ -111,7 +122,7 @@ jobs:
             echo
             echo 'Server: Node.js 24, then `npm ci --omit=dev` and `npm start` in the extracted knowforge directory.'
             echo
-            echo 'Frontend: 127.0.0.1:16666. Backend: 127.0.0.1:6666. See docs/服务器部署.md inside the package.'
+            echo 'API: 127.0.0.1:6666. API gateway: 127.0.0.1:16666. Frontend is deployed separately to OSS.'
           } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:

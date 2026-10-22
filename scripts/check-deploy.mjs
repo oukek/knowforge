@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { once } from "node:events";
+import { randomBytes } from "node:crypto";
+import { tableColumns } from "../server/study-store.mjs";
+import { accountTables } from "../server/account-schema.mjs";
 
 const archive = resolve(process.env.DEPLOY_ARCHIVE || process.argv[2] || "");
 assert(archive.endsWith(".tar.gz"), "Pass a deployment .tar.gz archive");
@@ -12,6 +15,9 @@ const stage = mkdtempSync(join(tmpdir(), "knowforge-deploy-check-"));
 let child;
 let exited;
 let output = "";
+const mysqlCheck = process.env.CHECK_DEPLOY_MYSQL === "1";
+const mysqlPrefix = `kf_smoke_${randomBytes(8).toString("hex")}_`;
+let mysqlStore;
 
 async function freePort() {
   const server = createServer();
@@ -24,6 +30,44 @@ async function freePort() {
 try {
   execFileSync("tar", ["-xzf", archive, "-C", stage]);
   const cwd = join(stage, "knowforge");
+  if (mysqlCheck) {
+    const { createMySQLStore } = await import("../server/mysql-store.mjs");
+    mysqlStore = await createMySQLStore({ prefix: mysqlPrefix });
+  }
+  assert.deepEqual(
+    readdirSync(cwd).sort(),
+    [
+      "build-info.json",
+      "data",
+      "package-lock.json",
+      "package.json",
+      "resources",
+      "runtime",
+      "server",
+    ].sort(),
+    "Backend archive must contain only the standalone runtime",
+  );
+  const manifest = JSON.parse(readFileSync(join(cwd, "package.json"), "utf8"));
+  assert.deepEqual(Object.keys(manifest.dependencies).sort(), [
+    "express",
+    "mysql2",
+    "pyodide",
+    "zod",
+  ]);
+  assert.equal(manifest.scripts.start, "node server/index.mjs");
+  const lock = JSON.parse(readFileSync(join(cwd, "package-lock.json"), "utf8"));
+  for (const name of [
+    "vue",
+    "vite",
+    "codemirror",
+    "prettier",
+    "esbuild",
+    "nodemon",
+  ])
+    assert(
+      !lock.packages[`node_modules/${name}`],
+      `${name} must not be in the backend runtime`,
+    );
   execFileSync("npm", ["ci", "--omit=dev", "--no-audit", "--no-fund"], {
     cwd,
     stdio: "inherit",
@@ -39,7 +83,8 @@ try {
       NODE_ENV: "production",
       FRONTEND_PORT: String(frontendPort),
       PORT: String(backendPort),
-      DB_DRIVER: "sqlite",
+      DB_DRIVER: mysqlCheck ? "mysql" : "sqlite",
+      MYSQL_TABLE_PREFIX: mysqlPrefix,
       DB_PATH: join(stage, "smoke.sqlite"),
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -61,9 +106,13 @@ try {
     await new Promise((done) => setTimeout(done, 100));
   }
   assert(ready, `Deployment server did not start: ${output}`);
-  const page = await fetch(`${base}/learn/js-event-loop`);
-  assert.equal(page.status, 200);
-  assert((await page.text()).includes("KnowForge"));
+  for (const path of ["/", "/login", "/learn/js-event-loop"])
+    assert.equal(
+      (await fetch(base + path)).status,
+      404,
+      "Backend gateway must not host frontend pages",
+    );
+  assert.equal((await fetch(`${base}/api/bootstrap`)).status, 401);
   const registration = await fetch(`${base}/api/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Origin: base },
@@ -79,6 +128,7 @@ try {
     await fetch(`${base}/api/bootstrap`, { headers: { Cookie: cookie } })
   ).json();
   assert(bootstrap.catalog.lessons.length > 0);
+  assert.equal(bootstrap.database, mysqlCheck ? "mysql" : "sqlite");
   for (const path of [
     "/runner.js",
     "/python-runner.js",
@@ -104,8 +154,28 @@ try {
     },
   );
   assert.equal(note.status, 200);
+  const saved = await (
+    await fetch(`${base}/api/bootstrap`, { headers: { Cookie: cookie } })
+  ).json();
+  assert.equal(
+    saved.state.notes[bootstrap.catalog.lessons[0].id].content,
+    "deployment smoke check",
+  );
+  const worker = await fetch(`${base}/python-runner.js`, {
+    headers: { "X-Forwarded-Proto": "https" },
+  });
+  assert(
+    worker.headers
+      .get("content-security-policy")
+      .includes(base.replace("http:", "https:") + "/python-runtime/"),
+  );
+  if (mysqlCheck)
+    assert(
+      !output.includes("ExperimentalWarning: SQLite"),
+      "MySQL production bundle must not load the SQLite adapter",
+    );
   console.log(
-    "Deployment smoke check passed with production dependencies only.",
+    "Standalone backend smoke check passed: compiled entry, locked runtime dependencies, login, persistence, Workers and downloads; no frontend pages or source directories.",
   );
 } finally {
   if (child && child.exitCode === null) {
@@ -115,6 +185,16 @@ try {
       await exited;
     } finally {
       clearTimeout(timeout);
+    }
+  }
+  if (mysqlStore) {
+    try {
+      for (const table of [...Object.keys(tableColumns), ...accountTables])
+        await mysqlStore.exec(
+          `DROP TABLE IF EXISTS \`${mysqlPrefix}${table}\``,
+        );
+    } finally {
+      await mysqlStore.close();
     }
   }
   rmSync(stage, { recursive: true, force: true });

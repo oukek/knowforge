@@ -80,7 +80,15 @@ export async function createApp({
   store,
   allowedOrigins = [],
   serveClient = true,
+  resourcePaths = {},
 } = {}) {
+  const resources = {
+    runner: resolve("client/public/runner.js"),
+    pythonRunner: resolve("client/public/python-runner.js"),
+    handbook: resolve("docs/完整学习手册.md"),
+    pythonDemo: resolve("examples/python/workbench.py"),
+    ...resourcePaths,
+  };
   store ??= await createConfiguredStore({ driver, dbPath, mysql });
   const accounts = new AsyncLocalStorage();
   const personal = () => {
@@ -151,12 +159,10 @@ export async function createApp({
               req.headers["x-knowforge-user"] &&
               req.headers["x-knowforge-user"] !== session.user.id
             )
-              return res
-                .status(409)
-                .json({
-                  error: "账号已在其他页面切换，请重新登录",
-                  code: "SESSION_CHANGED",
-                });
+              return res.status(409).json({
+                error: "账号已在其他页面切换，请重新登录",
+                code: "SESSION_CHANGED",
+              });
             if (
               !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
               !auth.csrf(req, res, session)
@@ -182,7 +188,7 @@ export async function createApp({
     res
       .type("text/x-python")
       .attachment("knowforge-python-workbench.py")
-      .send(readFileSync(resolve("examples/python/workbench.py"), "utf8"));
+      .send(readFileSync(resources.pythonDemo, "utf8"));
   });
   api.post("/api/lesson-exercises/:id/attempt", async (req, res) => {
     const exercise = lessonExerciseMap.get(req.params.id);
@@ -473,7 +479,7 @@ export async function createApp({
     res.attachment("knowforge-catalog.json").json(catalog),
   );
   api.get("/api/export/handbook", async (_, res) =>
-    res.download(resolve("docs/完整学习手册.md"), "knowforge-handbook.md"),
+    res.download(resources.handbook, "knowforge-handbook.md"),
   );
   api.get("/api/export/backup", async (_, res) =>
     res.attachment("knowforge-study-backup.json").json({
@@ -610,7 +616,7 @@ export async function createApp({
     }),
   );
   app.get("/python-runner.js", async (req, res) => {
-    const resources = new URL(
+    const runtimeOrigin = new URL(
       "/python-runtime/",
       `${req.protocol}://${req.get("host")}`,
     ).href;
@@ -618,18 +624,16 @@ export async function createApp({
       .type("application/javascript")
       .set(
         "Content-Security-Policy",
-        `default-src 'none'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; connect-src ${resources}; worker-src 'none'`,
+        `default-src 'none'; script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; connect-src ${runtimeOrigin}; worker-src 'none'`,
       )
-      .send(readFileSync(resolve("client/public/python-runner.js"), "utf8"));
+      .send(readFileSync(resources.pythonRunner, "utf8"));
   });
   app.get("/runner.js", async (_, res) => {
     res.set(
       "Content-Security-Policy",
       "default-src 'none'; script-src 'unsafe-eval'; connect-src 'none'; worker-src 'none'",
     );
-    res
-      .type("text/javascript")
-      .send(readFileSync(resolve("client/public/runner.js"), "utf8"));
+    res.type("text/javascript").send(readFileSync(resources.runner, "utf8"));
   });
   if (serveClient && existsSync(resolve("dist/index.html"))) {
     app.use(express.static(resolve("dist"), { maxAge: 0 }));

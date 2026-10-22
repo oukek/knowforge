@@ -18,22 +18,20 @@ const root = process.cwd();
 const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
 if (!/^[a-zA-Z0-9.+-]+$/.test(pkg.version))
   throw new Error("Invalid package version");
+const artifact = resolve(root, "backend-dist");
 const included = [
-  "dist",
   "server",
-  "shared",
-  "data/catalog.json",
-  "docs",
-  "client/public/runner.js",
-  "client/public/python-runner.js",
-  "examples/python/workbench.py",
+  "data",
+  "resources",
   "package.json",
   "package-lock.json",
-  "README.md",
+  "build-info.json",
 ];
-for (const path of [...included, "dist/index.html", "docs/服务器部署.md"])
-  if (!existsSync(resolve(root, path)))
-    throw new Error(`Missing ${path}; run npm run build before packaging`);
+for (const path of [...included, "server/index.mjs"])
+  if (!existsSync(join(artifact, path)))
+    throw new Error(
+      `Missing backend-dist/${path}; run npm run build:backend first`,
+    );
 
 function includeFile(path) {
   const name = basename(path);
@@ -58,7 +56,7 @@ try {
   for (const path of included) {
     const target = join(destination, path);
     mkdirSync(resolve(target, ".."), { recursive: true });
-    cpSync(resolve(root, path), target, {
+    cpSync(join(artifact, path), target, {
       recursive: true,
       filter: includeFile,
     });
@@ -73,14 +71,15 @@ try {
       }).trim();
     } catch {}
   }
+  const info = JSON.parse(
+    readFileSync(join(destination, "build-info.json"), "utf8"),
+  );
   writeFileSync(
     join(destination, "build-info.json"),
     JSON.stringify(
       {
-        name: pkg.name,
-        version: pkg.version,
+        ...info,
         commit,
-        builtAt: new Date().toISOString(),
         buildNode: process.version,
         runId: process.env.GITHUB_RUN_ID || null,
       },

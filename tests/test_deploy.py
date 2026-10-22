@@ -111,6 +111,12 @@ class DeploymentTests(unittest.TestCase):
             (root / 'runtime/study.sqlite-wal').write_bytes(b'original WAL')
             (root / '.env').write_text('KEEP_LOCAL_CONFIG=yes')
             (root / 'package.json').write_text('old package')
+            (root / 'custom.keep').write_text('local file')
+            (root / 'server').mkdir()
+            (root / 'server/app.mjs').write_text('old source')
+            for directory in ['dist', 'client', 'shared', 'docs', 'examples']:
+                (root / directory).mkdir()
+                (root / directory / 'legacy-file').write_text('old full-stack artifact')
             (root / 'node_modules').mkdir()
             (root / 'node_modules/old-package').write_text('stale dependency')
             incoming = root / '.incoming/test-upload'
@@ -118,14 +124,19 @@ class DeploymentTests(unittest.TestCase):
             archive_name = 'knowforge-2.0.0-deploy.tar.gz'
             archive = incoming / archive_name
             with tarfile.open(archive, 'w:gz') as bundle:
-                for name in ['knowforge', 'knowforge/runtime']:
+                for name in ['knowforge', 'knowforge/runtime', 'knowforge/server', 'knowforge/resources', 'knowforge/data']:
                     item = tarfile.TarInfo(name)
                     item.type = tarfile.DIRTYPE
+                    item.mode = 0o755
                     bundle.addfile(item)
                 payload = b'{"name":"knowforge"}'
                 item = tarfile.TarInfo('knowforge/package.json')
                 item.size = len(payload)
                 bundle.addfile(item, io.BytesIO(payload))
+                for name, body in [('server/index.mjs', b'compiled service'), ('resources/runner.js', b'worker'), ('data/catalog.json', b'{}')]:
+                    item = tarfile.TarInfo('knowforge/' + name)
+                    item.size = len(body)
+                    bundle.addfile(item, io.BytesIO(body))
             digest = hashlib.sha256(archive.read_bytes()).hexdigest()
             (incoming / (archive_name + '.sha256')).write_text(digest + '  ' + archive_name + '\n')
             (incoming / 'restart-command').write_text(restart)
@@ -157,15 +168,22 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual(database.read_bytes(), b'original user data')
             self.assertEqual((root / 'runtime/study.sqlite-wal').read_bytes(), b'original WAL')
             self.assertEqual((root / '.env').read_text(), 'KEEP_LOCAL_CONFIG=yes')
+            self.assertEqual((root / 'custom.keep').read_text(), 'local file')
             self.assertFalse((root / 'runtime').is_symlink())
             self.assertFalse(incoming.exists())
             self.assertFalse((root / 'current').exists())
             self.assertFalse((root / 'releases').exists())
             if npm_ok and not missing_tool:
+                self.assertEqual((root / 'server/index.mjs').read_text(), 'compiled service')
+                self.assertFalse((root / 'server/app.mjs').exists())
+                for directory in ['dist', 'client', 'shared', 'docs', 'examples']:
+                    self.assertFalse((root / directory).exists())
                 self.assertEqual((root / 'package.json').read_text(), '{"name":"knowforge"}')
                 self.assertFalse((root / 'node_modules/old-package').exists())
                 self.assertEqual((root / 'node_modules/new-package').read_text(), 'new')
             else:
+                self.assertEqual((root / 'server/app.mjs').read_text(), 'old source')
+                self.assertTrue((root / 'dist/legacy-file').exists())
                 self.assertEqual((root / 'package.json').read_text(), 'old package')
                 self.assertTrue((root / 'node_modules/old-package').exists())
             return result
