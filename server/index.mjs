@@ -1,34 +1,75 @@
+import { loadEnvFile } from "node:process";
+try {
+  loadEnvFile();
+} catch (error) {
+  if (error.code !== "ENOENT") throw error;
+}
 import { createApp } from "./app.mjs";
+import { createFrontend } from "./frontend.mjs";
 import { createServer } from "node:http";
 const port = Number(process.env.PORT || 6666);
+const frontendPort = Number(process.env.FRONTEND_PORT || 16666);
 const development = process.argv.includes("--dev");
-const { app, store } = createApp({
-  dbPath: process.env.DB_PATH,
+let app, store;
+try {
+  ({ app, store } = await createApp({
+    dbPath: process.env.DB_PATH,
+    driver: process.env.DB_DRIVER || "sqlite",
+    serveClient: false,
+  }));
+} catch (error) {
+  console.error(`KnowForge 数据库初始化失败: ${error.message}`);
+  process.exit(1);
+}
+const server = createServer(app);
+const frontend = createFrontend({
+  backendPort: port,
   serveClient: !development,
 });
-const server = createServer(app);
+const frontendServer = createServer(frontend);
 let vite;
-if (development) {
-  const { createServer: createViteServer } = await import("vite");
-  vite = await createViteServer({
-    server: { middlewareMode: true, hmr: { server } },
-    appType: "spa",
-  });
-  app.use(vite.middlewares);
-}
-server.listen(port, "127.0.0.1", () =>
-  console.log(`KnowForge: http://127.0.0.1:${port}`),
-);
 let stopping = false;
-async function shutdown() {
+async function shutdown(code = 0) {
   if (stopping) return;
   stopping = true;
   setTimeout(() => process.exit(1), 5000).unref();
   await vite?.close();
-  server.close(() => {
-    store.close();
-    process.exit(0);
+  await Promise.all(
+    [frontendServer, server].map(
+      (httpServer) => new Promise((done) => httpServer.close(done)),
+    ),
+  );
+  await store.close();
+  process.exit(code);
+}
+process.on("SIGINT", () => shutdown());
+process.on("SIGTERM", () => shutdown());
+
+function listen(httpServer, listenPort) {
+  return new Promise((resolve, reject) => {
+    httpServer.once("error", reject);
+    httpServer.listen(listenPort, "127.0.0.1", () => {
+      httpServer.removeListener("error", reject);
+      resolve();
+    });
   });
 }
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+
+try {
+  if (development) {
+    const { createServer: createViteServer } = await import("vite");
+    vite = await createViteServer({
+      server: { middlewareMode: true, hmr: { server: frontendServer } },
+      appType: "spa",
+    });
+    frontend.use(vite.middlewares);
+  }
+  await listen(server, port);
+  await listen(frontendServer, frontendPort);
+  console.log(`KnowForge 前端: http://127.0.0.1:${frontendPort}`);
+  console.log(`KnowForge 后端 API: http://127.0.0.1:${port}/api`);
+  console.log(`KnowForge 数据库: ${store.driver}`);
+} catch (error) {
+  console.error(`KnowForge 启动失败: ${error.message}`);
+  await shutdown(1);
+}

@@ -201,7 +201,11 @@ async function importBackup() {
         中运行并设超时，属于本地自学工具，不能作为安全在线评测或招聘评分平台。
       </p>
       <p>
-        数据保存在本机 runtime/study.sqlite。代码编辑草稿保存在当前浏览器
+        {{
+          store.database === "mysql"
+            ? "学习数据保存在服务器配置的 MySQL 数据库。"
+            : "学习数据保存在服务端 SQLite 数据库。"
+        }}代码编辑草稿保存在当前浏览器
         localStorage，个人数据导出不包含这些未提交草稿，重要代码请复制保存。本项目不接入大模型，不产生模型费用。
       </p>
     </section>

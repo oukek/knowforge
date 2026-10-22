@@ -31,7 +31,7 @@ async function save() {
     <div class="section-line">
       <h3><Icon name="NotebookPen" :size="18" /> 我的学习笔记</h3>
       <span class="muted tiny">{{
-        dirty ? "有未保存修改" : "保存在本地数据库"
+        dirty ? "有未保存修改" : "已保存到当前账号"
       }}</span>
     </div>
     <textarea

@@ -6,7 +6,7 @@ A local-first learning workbench for frontend, Python, web scraping, REST APIs, 
 
 **KnowForge · 知行实验室** 是一个基于 Vue 3 与 Node.js 的本地工程学习工作台。把知识讲解、可运行示例、自动验证练习、面试题库和复习记录放在一起，让你边读、边写、边验证。
 
-主要内容为中文，支持 JavaScript 与 Python 双语言代码实验。学习数据保存在本机，不需要注册账号或配置模型 API Key。
+主要内容为中文，支持 JavaScript 与 Python 双语言代码实验。学习数据可保存在服务端 MySQL 或本机 SQLite，支持账号密码公开注册，无需验证码，也无需配置模型 API Key。
 
 [快速开始](#快速开始) · [功能介绍](#功能介绍) · [学习内容](#学习内容) · [开发与扩展](#开发与扩展) · [文档](#文档)
 
@@ -21,6 +21,7 @@ A local-first learning workbench for frontend, Python, web scraping, REST APIs, 
 | 手写实验室 | 在浏览器里实现算法、异步控制与工程工具函数，运行边界用例 |
 | 模拟面试 | 按专题随机组卷、限时作答、保存草稿，交卷后复盘 |
 | 复习与计划 | 管理薄弱题、到期复习、收藏、笔记及 7 / 14 / 21 / 30 天学习计划 |
+| 账号空间 | 公开注册、登录与退出；个人记录按账号隔离，同账号跨设备接续学习 |
 | 数据管理 | 导出完整资料、Markdown 手册和个人备份，合并导入已有学习记录 |
 
 ### 代码编辑与运行
@@ -75,7 +76,7 @@ JavaScript 在独立 Web Worker 中执行；Python 通过本地 Pyodide 运行�
 
 ### 环境要求
 
-- **Node.js 22.13 或更高版本**，项目使用 Node 内置 SQLite。
+- **Node.js 22.13 或更高版本**（部署建议 Node.js 24），支持 MySQL 与 Node 内置 SQLite。
 - **npm**，用于安装依赖与运行脚本。
 - 本机 **Python 3.11+** 仅用于独立 Python 配套项目及相关集成测试；浏览器中的 Python 练习使用 Pyodide。
 
@@ -88,26 +89,27 @@ npm ci
 npm run dev
 ```
 
-打开 **[http://127.0.0.1:6666/](http://127.0.0.1:6666/)**。
+打开 **[http://127.0.0.1:16666/](http://127.0.0.1:16666/)**。
 
-一条命令同时启动前端和后端：页面、API、代码运行资源和热更新共用 **6666**，服务只监听本机 `127.0.0.1`。停止使用 `Ctrl+C`。
+一条命令同时启动前端 **16666** 与后端 API **6666**，两个服务都只监听本机 `127.0.0.1`。浏览器通过前端入口访问页面；API、JavaScript / Python 运行器及 Python 运行时资源由前端服务转发到后端，热更新使用前端端口。停止使用 `Ctrl+C`。
 
-> **端口兼容性**：6666 属于 Chromium 的受限端口。若浏览器提示 `ERR_UNSAFE_PORT`，可显式选择其他端口；项目默认值仍为 6666。服务不会自动修改浏览器设置。
+6666 属于 Chromium 的受限端口，因此应在浏览器访问 **16666**，不需要放开浏览器端口限制。
 
-macOS / Linux 可这样指定端口：
+如需自定义端口，macOS / Linux：
 
 ```bash
-PORT=16666 npm run dev
+FRONTEND_PORT=16667 PORT=6667 npm run dev
 ```
 
 PowerShell：
 
 ```powershell
-$env:PORT = "16666"
+$env:FRONTEND_PORT = "16667"
+$env:PORT = "6667"
 npm run dev
 ```
 
-此时访问 `http://127.0.0.1:16666/`。`PORT` 同时适用于开发与构建后的运行方式。
+此时访问 `http://127.0.0.1:16667/`。两个端口必须不同；端口被占用时启动会明确报错，不自动递增。环境变量同时适用于开发与构建后的运行方式。
 
 ### 构建后运行
 
@@ -116,14 +118,29 @@ npm run build
 npm start
 ```
 
-Node 服务托管 `dist/` 中的前端产物，并提供 API、SQLite 和代码运行资源。运行时需要安装项目依赖，包括本地 Pyodide 文件。
+构建后仍通过 `http://127.0.0.1:16666/` 访问。前端服务托管 `dist/` 并代理后端，后端 API 保持在 6666。运行时需要安装项目依赖，包括本地 Pyodide 文件。
+
+### GitHub Actions 手动打包
+
+仓库提供 **Build deployment package** 工作流，仅支持手动触发，推送、PR 和标签不会自动打包。
+
+将工作流提交到默认分支后，打开 **Actions → Build deployment package → Run workflow**，选择分支并运行。`deploy` 默认开启：构建、数据检查、完整测试和生产包检查通过后，会通过 SSH 上传后端到 `/www/wwwroot/knowforge`，再发布前端到 OSS；取消勾选则仅打包。也可从 **Artifacts** 下载部署包及 SHA-256 校验文件，产物保留 30 天。
+
+部署包包含已构建前端、Node 后端、学习资料及运行说明，不包含个人数据库或 node_modules。手动部署时可解压后运行 `npm ci --omit=dev` 和 `npm start`。自动部署所需 Secrets、Variables、重启命令与 CDN 同源回源规则详见 [服务器部署](docs/服务器部署.md)。
 
 ### 配置
 
 | 环境变量 | 默认值 | 用途 |
 | --- | --- | --- |
-| `PORT` | `6666` | 页面、API 和 HMR 的统一入口端口 |
-| `DB_PATH` | `runtime/study.sqlite` | 个人学习数据库路径 |
+| `FRONTEND_PORT` | `16666` | 浏览器页面、代理入口与 HMR 端口 |
+| `PORT` | `6666` | 后端 API 与运行资源端口 |
+| `DB_DRIVER` | `sqlite` | `mysql` 或 `sqlite`，显式选择存储引擎 |
+| `DB_PATH` | `runtime/study.sqlite` | SQLite 数据库路径，MySQL 模式忽略 |
+| `MYSQL_HOST` / `MYSQL_PORT` | `127.0.0.1` / `3306` | MySQL 地址与端口 |
+| `MYSQL_USER` / `MYSQL_PASSWORD` | — / 空字符串 | MySQL 账号与密码 |
+| `MYSQL_DATABASE` | — | 已存在的 MySQL 数据库名 |
+| `MYSQL_TABLE_PREFIX` | `knowforge_` | 应用表前缀，1–40 个字母、数字或下划线 |
+| `MYSQL_SSL` / `MYSQL_SSL_CA` | `false` / — | 启用证书验证的 TLS；可选 CA 文件绝对路径 |
 
 例如，在 macOS / Linux 下使用独立学习库：
 
@@ -131,11 +148,17 @@ Node 服务托管 `dist/` 中的前端产物，并提供 API、SQLite 和代码�
 DB_PATH=runtime/personal.sqlite npm run dev
 ```
 
-环境变量通过启动终端传入；项目没有内置 `.env` 文件加载器。
+启动入口会加载项目根目录 `.env`，已有进程环境变量优先。可以复制 `.env.example` 为 `.env`，填写数据库信息后运行 `npm run dev` 或 `npm start`。`.env` 已排除 Git 与部署包。
+
+服务器使用已有 MySQL 时，设置 `DB_DRIVER=mysql` 并填写 `MYSQL_*`。应用自动在指定库中创建账号、会话和个人学习表，不创建数据库；账号需要该库的建表、查询、插入、更新、删除权限。连接失败会终止启动，不会悄悄切回 SQLite。配置示例、TLS 和迁移步骤见 [MySQL 部署配置](docs/服务器部署.md#mysql-数据库配置)。
 
 ## 学习数据与备份
 
-进度、笔记、收藏、作答、复习、计划和模拟记录保存在 **`runtime/study.sqlite`**。应用关闭后数据保留，`runtime/` 中的数据库文件已排除在 Git 提交之外。
+进度、笔记、收藏、作答、复习、计划和模拟记录统一保存在所选数据库。MySQL 模式使用 `MYSQL_DATABASE` 中的 `knowforge_*` 表；默认 SQLite 模式使用 **`runtime/study.sqlite`**。应用关闭后数据保留，`runtime/` 中的数据库文件已排除 Git。
+
+公开注册后，每个账号从空白记录开始。升级前的共享记录不会自动归属任何注册用户；旧共享表不再通过学习接口访问。
+
+同一套账号数据库下，用相同账号在不同设备登录可访问自己的进度和已提交记录。切换数据库不会自动复制账号或记录；需要保留某份学习状态时，可先登录原账号导出个人 JSON 备份，在目标库注册并登录账号后导入。
 
 在“资料来源与数据”页面可以导出：
 
@@ -145,7 +168,7 @@ DB_PATH=runtime/personal.sqlite npm run dev
 
 **未提交的代码草稿保存在当前浏览器的 localStorage 中，不包含在个人 JSON 备份里。** 重要草稿请单独另存。直接复制 SQLite 文件前应先停止服务，避免遗漏尚未合并的 WAL 数据。
 
-英文改名沿用现有内容 ID、数据库路径及浏览器草稿键，已有学习记录无需迁移。
+代码草稿按站点来源和账号 ID 隔离，同一浏览器切换账号也不会混用草稿。旧版未分账号的草稿不再自动读取；草稿不在设备间同步。
 
 ## Python 配套项目
 
@@ -180,14 +203,14 @@ python3 examples/python/workbench.py crawl --base http://127.0.0.1:8765
 | --- | --- |
 | 页面与路由 | Vue 3、Vue Router、Vite |
 | 编辑与展示 | CodeMirror 6、Prettier、Marked、DOMPurify、Highlight.js |
-| 服务与存储 | Node.js、Express 5、内置 SQLite、Zod |
+| 服务与存储 | Node.js、Express 5、MySQL / 内置 SQLite、Zod |
 | 代码运行 | Web Worker、Pyodide / CPython |
 | 开发与测试 | nodemon、Node Test Runner、Python 标准库 |
 
 ```text
 knowforge/
 ├── client/                   Vue 页面、组件与浏览器代码运行器
-├── server/                   API、判分、备份、SQLite 与服务入口
+├── server/                   API、判分、备份、MySQL / SQLite 与服务入口
 ├── shared/                   前后端共用的输出比较规则
 ├── data/
 │   ├── content/              可维护的课程、示例、练习与来源
@@ -203,7 +226,7 @@ knowforge/
 └── vite.config.mjs           前端构建与开发配置
 ```
 
-开发时 Vite 作为 Express 中间件运行，HMR 复用同一个 HTTP server。nodemon 仅监听 `server/`、`shared/` 和 `data/catalog.json`；前端改动由 Vite 处理，数据库、构建产物和 Vite 临时文件不会触发后端重启。
+开发时 Vite 作为前端 Express 服务的中间件运行，HMR 使用前端端口；`server/frontend.mjs` 将 API 和 Worker 资源流式代理到后端，并保留浏览器 Host，使写入校验和 Python Worker CSP 保持同源。nodemon 仅监听 `server/`、`shared/` 和 `data/catalog.json`；前端改动由 Vite 处理，数据库、构建产物和 Vite 临时文件不会触发后端重启。
 
 ## 开发与扩展
 
@@ -229,6 +252,8 @@ npm run build
 
 测试涵盖 API 判分、持久化、备份合并、模拟作答、输出比较、课程示例、补全参考解、实验用例和 Python 配套项目。完整测试需要 `python3` 命令指向 Python 3.11+；测试使用独立数据库或临时目录。
 
+MySQL 集成测试单独运行 `npm run test:mysql`，需通过环境变量提供测试库的 `MYSQL_*` 连接信息；每项测试创建并清理随机前缀表。Actions 手动打包时会自动运行隔离 MySQL 测试，不使用生产凭据。
+
 贡献内容时，请同时说明示例适用范围和参考依据，为参考实现提供边界用例，并运行相关检查。UI、Worker 与平台兼容性还需要实际浏览器验证。
 
 ## 文档
@@ -238,10 +263,11 @@ npm run build
 - [新增专题覆盖](docs/新增专题覆盖.md)：Python、爬虫、RESTful API 和 AI 内容清单。
 - [内容覆盖与校正](docs/内容覆盖与校正.md)：原材料映射与技术说法校正。
 - [验收记录](docs/验收记录.md)：自动测试和浏览器检查记录。
+- [服务器部署](docs/服务器部署.md)：手动打包、产物下载、服务器运行与 HTTPS 反向代理。
 
 ## 使用范围与资料说明
 
-KnowForge 面向单人、本机学习，目前没有账号体系、多人数据隔离或云同步。代码在浏览器 Worker 中运行，支持取消和超时，但没有严格内存配额；学习运行器不承担防作弊在线评测职责，也不能直接执行 Vue SFC、DOM 或 Node.js 模块。
+KnowForge 支持公开注册和个人学习记录隔离。账号为 3–32 位字母、数字、下划线或短横线，不区分大小写；密码为 8–128 位。登录会话有效期 7 天，退出会立即注销当前会话。当前没有邮箱验证、自助密码找回或管理员界面，请妥善保管密码。数据库请求在单个 Node 进程内串行处理，部署使用单实例，不启用 PM2 cluster 或多副本。代码在浏览器 Worker 中运行，支持取消和超时，但没有严格内存配额；学习运行器不承担防作弊在线评测职责，也不能直接执行 Vue SFC、DOM 或 Node.js 模块。
 
 Python 运行时随 npm 依赖从本地加载，项目不自动安装第三方 Python 包。课程中的框架、网络、采集和 AI 模型示例按页面标记区分真实语言执行与教学模拟，官方参考链接需要联网访问。
 

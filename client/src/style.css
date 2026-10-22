@@ -5174,3 +5174,16 @@ svg {
     font-size: 11px;
   }
 }
+
+.account-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+@media (max-width: 600px) {
+  .account-name {
+    max-width: 86px;
+  }
+}

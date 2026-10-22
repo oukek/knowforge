@@ -1,10 +1,12 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import { createAuth } from "./auth.mjs";
 import express from "express";
 import { compareOutput } from "../shared/output.mjs";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { createStore } from "./store.mjs";
+import { createConfiguredStore } from "./database.mjs";
 import catalog from "../data/catalog.json" with { type: "json" };
 const qMap = new Map(catalog.questions.map((q) => [q.id, q]));
 const lessonExerciseMap = new Map(
@@ -71,16 +73,29 @@ export function gradeQuestion(q, input) {
     explanation: "开放题按要点自评，没有自动语义评分。",
   };
 }
-export function createApp({
+export async function createApp({
   dbPath,
-  store = createStore(dbPath),
+  driver,
+  mysql,
+  store,
   allowedOrigins = [],
   serveClient = true,
 } = {}) {
+  store ??= await createConfiguredStore({ driver, dbPath, mysql });
+  const accounts = new AsyncLocalStorage();
+  const personal = () => {
+    const value = accounts.getStore();
+    if (!value) throw new Error("Personal data requires authentication");
+    return value;
+  };
   let revision = Date.now() * 1000;
-  const snapshot = () => ({ ...store.state(), revision: ++revision });
+  const snapshot = async () => ({
+    ...(await personal().state()),
+    revision: ++revision,
+  });
   const app = express();
   app.disable("x-powered-by");
+  app.set("trust proxy", "loopback");
   app.use(express.json({ limit: "12mb" }));
   app.use((req, res, next) => {
     res.set("X-Content-Type-Options", "nosniff");
@@ -94,31 +109,82 @@ export function createApp({
           new URL(req.headers.origin).host !== req.headers.host &&
           !allowedOrigins.includes(new URL(req.headers.origin).origin)
         )
-          return res.status(403).json({ error: "仅允许当前本地应用写入" });
+          return res.status(403).json({ error: "仅允许当前站点写入" });
       } catch {
         return res.status(403).json({ error: "无效来源" });
       }
     }
     next();
   });
-  const ok = (res, extra = {}) => res.json({ state: snapshot(), ...extra });
-  app.get("/api/health", (_, res) =>
-    res.json({ ok: true, edition: catalog.edition }),
+  const ok = async (res, extra = {}) =>
+    res.json({ state: await snapshot(), ...extra });
+  const auth = createAuth(app, store);
+  app.get("/api/health", (req, res, next) =>
+    store
+      .session(async () => {
+        await store.get("SELECT 1 AS connected");
+        res.json({
+          ok: true,
+          edition: catalog.edition,
+          database: store.driver,
+        });
+      })
+      .catch(next),
   );
-  app.get("/api/bootstrap", (_, res) =>
+  const api = {};
+  for (const method of ["get", "put", "post"])
+    api[method] = (path, handler) =>
+      app[method](path, (req, res, next) =>
+        store
+          .session(async () => {
+            if (
+              [
+                "/api/export/catalog",
+                "/api/export/handbook",
+                "/api/export/python-demo",
+              ].includes(path)
+            )
+              return handler(req, res, next);
+            const session = await auth.authenticate(req);
+            if (!session) return res.status(401).json({ error: "请先登录" });
+            if (
+              req.headers["x-knowforge-user"] &&
+              req.headers["x-knowforge-user"] !== session.user.id
+            )
+              return res
+                .status(409)
+                .json({
+                  error: "账号已在其他页面切换，请重新登录",
+                  code: "SESSION_CHANGED",
+                });
+            if (
+              !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
+              !auth.csrf(req, res, session)
+            )
+              return;
+            req.user = session.user;
+            return accounts.run(store.forUser(session.user.id), () =>
+              handler(req, res, next),
+            );
+          })
+          .catch(next),
+      );
+  api.get("/api/bootstrap", async (_, res) =>
     res.json({
       catalog,
-      state: snapshot(),
+      database: store.driver,
+      user: _.user,
+      state: await snapshot(),
       serverTime: new Date().toISOString(),
     }),
   );
-  app.get("/api/export/python-demo", (_, res) => {
+  api.get("/api/export/python-demo", async (_, res) => {
     res
       .type("text/x-python")
       .attachment("knowforge-python-workbench.py")
       .send(readFileSync(resolve("examples/python/workbench.py"), "utf8"));
   });
-  app.post("/api/lesson-exercises/:id/attempt", (req, res) => {
+  api.post("/api/lesson-exercises/:id/attempt", async (req, res) => {
     const exercise = lessonExerciseMap.get(req.params.id);
     if (!exercise) return res.status(404).json({ error: "随堂练习不存在" });
     const input = z
@@ -150,7 +216,7 @@ export function createApp({
       feedback = { passed, passedTests, totalTests };
     }
     const now = new Date().toISOString();
-    store.run(
+    await personal().run(
       "INSERT INTO lesson_attempts(exerciseId,lessonId,type,answer,passed,passedTests,totalTests,createdAt) VALUES(?,?,?,?,?,?,?,?)",
       exercise.id,
       exercise.lessonId,
@@ -161,59 +227,58 @@ export function createApp({
       totalTests,
       now,
     );
-    store.touch(now);
-    ok(res, { feedback });
+    await personal().touch(now);
+    await ok(res, { feedback });
   });
-  app.put("/api/progress/:id", (req, res) => {
+  api.put("/api/progress/:id", async (req, res) => {
     if (!lessonIds.has(req.params.id))
       return res.status(404).json({ error: "知识点不存在" });
     const { status } = z
       .object({ status: z.enum(["new", "learning", "done"]) })
       .parse(req.body);
     const now = new Date().toISOString();
-    store.run(
-      "INSERT INTO progress VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,updatedAt=excluded.updatedAt",
-      req.params.id,
-      status,
-      now,
-    );
-    if (status === "done") store.touch(now);
-    ok(res);
+    await personal().upsert("progress", {
+      id: req.params.id,
+      status: status,
+      updatedAt: now,
+    });
+    if (status === "done") await personal().touch(now);
+    await ok(res);
   });
-  app.put("/api/notes/:id", (req, res) => {
+  api.put("/api/notes/:id", async (req, res) => {
     if (!targets.has(req.params.id))
       return res.status(404).json({ error: "目标不存在" });
     const { content } = noteSchema.parse(req.body);
-    store.run(
-      "INSERT INTO notes VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET content=excluded.content,updatedAt=excluded.updatedAt",
-      req.params.id,
-      content,
-      new Date().toISOString(),
-    );
-    ok(res);
+    await personal().upsert("notes", {
+      id: req.params.id,
+      content: content,
+      updatedAt: new Date().toISOString(),
+    });
+    await ok(res);
   });
-  app.put("/api/bookmarks/:id", (req, res) => {
+  api.put("/api/bookmarks/:id", async (req, res) => {
     if (!targets.has(req.params.id))
       return res.status(404).json({ error: "目标不存在" });
     const { active } = z.object({ active: z.boolean() }).parse(req.body);
     if (active)
-      store.run(
-        "INSERT OR IGNORE INTO bookmarks VALUES(?,?)",
-        req.params.id,
-        new Date().toISOString(),
+      await personal().upsert(
+        "bookmarks",
+        { id: req.params.id, createdAt: new Date().toISOString() },
+        { ignore: true },
       );
-    else store.run("DELETE FROM bookmarks WHERE id=?", req.params.id);
-    ok(res);
+    else
+      await personal().run("DELETE FROM bookmarks WHERE id=?", req.params.id);
+    await ok(res);
   });
-  app.post("/api/attempts/:id", (req, res) => {
+  api.post("/api/attempts/:id", async (req, res) => {
     const q = qMap.get(req.params.id);
     if (!q) return res.status(404).json({ error: "题目不存在" });
     const input = attemptSchema.parse(req.body);
     const result = gradeQuestion(q, input);
     const now = new Date().toISOString();
-    store.db.exec("BEGIN");
+    await personal().exec("BEGIN");
     try {
-      store.run(
+      await personal().run(
         "INSERT INTO attempts(questionId,kind,answer,score,passed,createdAt) VALUES(?,?,?,?,?,?)",
         q.id,
         result.kind,
@@ -222,25 +287,25 @@ export function createApp({
         result.passed ? 1 : 0,
         now,
       );
-      store.schedule(q.id, result.rating, !result.passed, now);
-      store.touch(now);
-      store.db.exec("COMMIT");
+      await personal().schedule(q.id, result.rating, !result.passed, now);
+      await personal().touch(now);
+      await personal().exec("COMMIT");
     } catch (e) {
-      store.db.exec("ROLLBACK");
+      await personal().exec("ROLLBACK");
       throw e;
     }
-    ok(res, { result });
+    await ok(res, { result });
   });
-  app.post("/api/reviews/:id", (req, res) => {
+  api.post("/api/reviews/:id", async (req, res) => {
     if (!qMap.has(req.params.id))
       return res.status(404).json({ error: "题目不存在" });
     const { rating: value } = z.object({ rating }).parse(req.body);
     const now = new Date().toISOString();
-    store.schedule(req.params.id, value, value < 2, now);
-    store.touch(now);
-    ok(res);
+    await personal().schedule(req.params.id, value, value < 2, now);
+    await personal().touch(now);
+    await ok(res);
   });
-  app.put("/api/settings", (req, res) => {
+  api.put("/api/settings", async (req, res) => {
     const data = z
       .object({
         dailyMinutes: z.number().int().min(10).max(480),
@@ -257,14 +322,13 @@ export function createApp({
     if (!Number.isFinite(Date.parse(data.startDate)))
       return res.status(400).json({ error: "日期无效" });
     for (const [key, value] of Object.entries(data))
-      store.run(
-        "INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-        key,
-        JSON.stringify(value),
-      );
-    ok(res);
+      await personal().upsert("settings", {
+        key: key,
+        value: JSON.stringify(value),
+      });
+    await ok(res);
   });
-  app.post("/api/exams", (req, res) => {
+  api.post("/api/exams", async (req, res) => {
     const input = z
       .object({
         mode: z.enum(["objective", "interview"]),
@@ -292,13 +356,18 @@ export function createApp({
       status: "active",
       answers: {},
     };
-    store.run("INSERT INTO exams VALUES(?,?)", exam.id, JSON.stringify(exam));
-    ok(res, { exam });
+    await personal().run(
+      "INSERT INTO exams VALUES(?,?)",
+      exam.id,
+      JSON.stringify(exam),
+    );
+    await ok(res, { exam });
   });
-  app.put("/api/exams/:id/draft", (req, res) => {
-    const raw = store.db
-      .prepare("SELECT payload FROM exams WHERE id=?")
-      .get(req.params.id);
+  api.put("/api/exams/:id/draft", async (req, res) => {
+    const raw = await personal().get(
+      "SELECT payload FROM exams WHERE id=?",
+      req.params.id,
+    );
     if (!raw) return res.status(404).json({ error: "试卷不存在" });
     const exam = JSON.parse(raw.payload);
     if (exam.status !== "active")
@@ -309,20 +378,21 @@ export function createApp({
     exam.answers = Object.fromEntries(
       Object.entries(answers).filter(([id]) => exam.questionIds.includes(id)),
     );
-    store.run(
+    await personal().run(
       "UPDATE exams SET payload=? WHERE id=?",
       JSON.stringify(exam),
       exam.id,
     );
-    ok(res, { exam });
+    await ok(res, { exam });
   });
-  app.post("/api/exams/:id/submit", (req, res) => {
-    const raw = store.db
-      .prepare("SELECT payload FROM exams WHERE id=?")
-      .get(req.params.id);
+  api.post("/api/exams/:id/submit", async (req, res) => {
+    const raw = await personal().get(
+      "SELECT payload FROM exams WHERE id=?",
+      req.params.id,
+    );
     if (!raw) return res.status(404).json({ error: "试卷不存在" });
     const exam = JSON.parse(raw.payload);
-    if (exam.status === "completed") return ok(res, { exam });
+    if (exam.status === "completed") return await ok(res, { exam });
     const { answers, selfRatings } = z
       .object({
         answers: z
@@ -366,16 +436,16 @@ export function createApp({
           )
         : null,
     });
-    store.db.exec("BEGIN");
+    await personal().exec("BEGIN");
     try {
-      store.run(
+      await personal().run(
         "UPDATE exams SET payload=? WHERE id=?",
         JSON.stringify(exam),
         exam.id,
       );
       for (const r of results) {
         if (r.kind === "self" && r.selfRating === null) continue;
-        store.run(
+        await personal().run(
           "INSERT INTO attempts(questionId,kind,answer,score,passed,createdAt) VALUES(?,?,?,?,?,?)",
           r.questionId,
           r.kind,
@@ -384,35 +454,35 @@ export function createApp({
           r.passed ? 1 : 0,
           now,
         );
-        store.schedule(
+        await personal().schedule(
           r.questionId,
           r.kind === "self" ? r.selfRating : r.passed ? 2 : 0,
           !r.passed,
           now,
         );
       }
-      store.touch(now);
-      store.db.exec("COMMIT");
+      await personal().touch(now);
+      await personal().exec("COMMIT");
     } catch (e) {
-      store.db.exec("ROLLBACK");
+      await personal().exec("ROLLBACK");
       throw e;
     }
-    ok(res, { exam });
+    await ok(res, { exam });
   });
-  app.get("/api/export/catalog", (_, res) =>
+  api.get("/api/export/catalog", async (_, res) =>
     res.attachment("knowforge-catalog.json").json(catalog),
   );
-  app.get("/api/export/handbook", (_, res) =>
+  api.get("/api/export/handbook", async (_, res) =>
     res.download(resolve("docs/完整学习手册.md"), "knowforge-handbook.md"),
   );
-  app.get("/api/export/backup", (_, res) =>
+  api.get("/api/export/backup", async (_, res) =>
     res.attachment("knowforge-study-backup.json").json({
       schemaVersion: 1,
       exportedAt: new Date().toISOString(),
-      state: store.state(),
+      state: await personal().state(),
     }),
   );
-  app.post("/api/import", (req, res) => {
+  api.post("/api/import", async (req, res) => {
     const backup = backupSchema.parse(req.body);
     const s = backup.state;
     for (const id of Object.keys(s.progress))
@@ -435,47 +505,45 @@ export function createApp({
           .status(400)
           .json({ error: "备份包含未知或不匹配的随堂练习" });
     }
-    store.db.exec("BEGIN");
+    await personal().exec("BEGIN");
     try {
       for (const [id, p] of Object.entries(s.progress))
-        store.run(
-          "INSERT INTO progress VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,updatedAt=excluded.updatedAt",
-          id,
-          p.status,
-          p.updatedAt,
-        );
+        await personal().upsert("progress", {
+          id: id,
+          status: p.status,
+          updatedAt: p.updatedAt,
+        });
       for (const [id, n] of Object.entries(s.notes))
-        store.run(
-          "INSERT INTO notes VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET content=excluded.content,updatedAt=excluded.updatedAt",
-          id,
-          n.content,
-          n.updatedAt,
-        );
+        await personal().upsert("notes", {
+          id: id,
+          content: n.content,
+          updatedAt: n.updatedAt,
+        });
       for (const id of s.bookmarks)
-        store.run(
-          "INSERT OR IGNORE INTO bookmarks VALUES(?,?)",
-          id,
-          new Date().toISOString(),
+        await personal().upsert(
+          "bookmarks",
+          { id: id, createdAt: new Date().toISOString() },
+          { ignore: true },
         );
       for (const r of s.reviews)
-        store.run(
-          "INSERT INTO reviews VALUES(?,?,?,?,?,?,?) ON CONFLICT(questionId) DO UPDATE SET dueAt=excluded.dueAt,intervalDays=excluded.intervalDays,streak=excluded.streak,lastRating=excluded.lastRating,wrong=excluded.wrong,updatedAt=excluded.updatedAt",
-          r.questionId,
-          r.dueAt,
-          r.intervalDays,
-          r.streak,
-          r.lastRating,
-          r.wrong ? 1 : 0,
-          r.updatedAt,
-        );
+        await personal().upsert("reviews", {
+          questionId: r.questionId,
+          dueAt: r.dueAt,
+          intervalDays: r.intervalDays,
+          streak: r.streak,
+          lastRating: r.lastRating,
+          wrong: r.wrong ? 1 : 0,
+          updatedAt: r.updatedAt,
+        });
       for (const a of s.attempts) {
-        const exists = store.db
-          .prepare(
-            "SELECT id FROM attempts WHERE questionId=? AND createdAt=? AND kind=?",
-          )
-          .get(a.questionId, a.createdAt, a.kind);
+        const exists = await personal().get(
+          "SELECT id FROM attempts WHERE questionId=? AND createdAt=? AND kind=?",
+          a.questionId,
+          a.createdAt,
+          a.kind,
+        );
         if (!exists)
-          store.run(
+          await personal().run(
             "INSERT INTO attempts(questionId,kind,answer,score,passed,createdAt) VALUES(?,?,?,?,?,?)",
             a.questionId,
             a.kind,
@@ -486,13 +554,14 @@ export function createApp({
           );
       }
       for (const attempt of s.exerciseAttempts ?? []) {
-        const exists = store.db
-          .prepare(
-            "SELECT id FROM lesson_attempts WHERE exerciseId=? AND createdAt=? AND answer=?",
-          )
-          .get(attempt.exerciseId, attempt.createdAt, attempt.answer);
+        const matches = await personal().all(
+          "SELECT answer FROM lesson_attempts WHERE exerciseId=? AND createdAt=?",
+          attempt.exerciseId,
+          attempt.createdAt,
+        );
+        const exists = matches.some((row) => row.answer === attempt.answer);
         if (!exists)
-          store.run(
+          await personal().run(
             "INSERT INTO lesson_attempts(exerciseId,lessonId,type,answer,passed,passedTests,totalTests,createdAt) VALUES(?,?,?,?,?,?,?,?)",
             attempt.exerciseId,
             attempt.lessonId,
@@ -505,32 +574,31 @@ export function createApp({
           );
       }
       for (const [key, value] of Object.entries(s.settings))
-        store.run(
-          "INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-          key,
-          JSON.stringify(value),
-        );
+        await personal().upsert("settings", {
+          key: key,
+          value: JSON.stringify(value),
+        });
       for (const a of s.activity)
-        store.run(
-          "INSERT INTO activity VALUES(?,?) ON CONFLICT(day) DO UPDATE SET actions=MAX(actions,excluded.actions)",
-          a.day,
-          a.actions,
+        await personal().upsert(
+          "activity",
+          { day: a.day, actions: a.actions },
+          { max: ["actions"] },
         );
       for (const exam of s.exams) {
         if (exam.questionIds.every((id) => qMap.has(id)))
-          store.run(
-            "INSERT OR IGNORE INTO exams VALUES(?,?)",
-            exam.id,
-            JSON.stringify(exam),
+          await personal().upsert(
+            "exams",
+            { id: exam.id, payload: JSON.stringify(exam) },
+            { ignore: true },
           );
       }
-      store.db.exec("COMMIT");
-      ok(res, {
+      await personal().exec("COMMIT");
+      await ok(res, {
         message:
           "备份已合并，现有数据保留；同 ID 进度、笔记与复习状态采用导入值。",
       });
     } catch (e) {
-      store.db.exec("ROLLBACK");
+      await personal().exec("ROLLBACK");
       throw e;
     }
   });
@@ -541,7 +609,7 @@ export function createApp({
       index: false,
     }),
   );
-  app.get("/python-runner.js", (req, res) => {
+  app.get("/python-runner.js", async (req, res) => {
     const resources = new URL(
       "/python-runtime/",
       `${req.protocol}://${req.get("host")}`,
@@ -554,7 +622,7 @@ export function createApp({
       )
       .send(readFileSync(resolve("client/public/python-runner.js"), "utf8"));
   });
-  app.get("/runner.js", (_, res) => {
+  app.get("/runner.js", async (_, res) => {
     res.set(
       "Content-Security-Policy",
       "default-src 'none'; script-src 'unsafe-eval'; connect-src 'none'; worker-src 'none'",
@@ -570,7 +638,9 @@ export function createApp({
       res.sendFile(resolve("dist/index.html"));
     });
   }
-  app.use("/api", (_, res) => res.status(404).json({ error: "接口不存在" }));
+  app.use("/api", async (_, res) =>
+    res.status(404).json({ error: "接口不存在" }),
+  );
   app.use((err, req, res, next) => {
     if (res.headersSent) return next(err);
     if (err instanceof z.ZodError)

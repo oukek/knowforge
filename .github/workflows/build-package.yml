@@ -1,0 +1,200 @@
+name: Build deployment package
+run-name: Package KnowForge · ${{ github.ref_name }}
+
+# Manual runs only. No push, pull_request, tag, or scheduled triggers.
+on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Upload frontend to OSS and backend to SSH (disable for package only)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Build, test and package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-only
+          MYSQL_DATABASE: knowforge_ci
+          MYSQL_USER: knowforge_ci
+          MYSQL_PASSWORD: ci-test-only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    outputs:
+      artifact_name: knowforge-deploy-${{ github.run_number }}-${{ github.run_attempt }}
+      archive_name: ${{ steps.package.outputs.archive_name }}
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Set up Python for integration tests
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend and learning data
+        run: npm run build
+
+      - name: Validate learning data
+        run: npm run check:data
+
+      - name: Run tests
+        run: npm test
+
+      - name: Test MySQL storage and API integration
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: "3306"
+          MYSQL_DATABASE: knowforge_ci
+          MYSQL_USER: knowforge_ci
+          MYSQL_PASSWORD: ci-test-only
+        run: npm run test:mysql
+
+      - name: Test deployment upload and data preservation
+        run: python3 -m unittest discover -s tests -p 'test_deploy.py' -v
+
+      - name: Package frontend and backend
+        id: package
+        run: npm run package:deploy
+
+      - name: Verify production package
+        env:
+          DEPLOY_ARCHIVE: ${{ steps.package.outputs.archive_path }}
+        run: node scripts/check-deploy.mjs
+
+      - name: Upload deployment package
+        uses: actions/upload-artifact@v6
+        with:
+          name: knowforge-deploy-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.package.outputs.archive_path }}
+            ${{ steps.package.outputs.checksum_path }}
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Write download instructions
+        env:
+          PACKAGE_FILE: ${{ steps.package.outputs.archive_name }}
+        run: |
+          {
+            echo '## KnowForge deployment package'
+            echo
+            echo "Built commit: $GITHUB_SHA"
+            echo
+            echo "Download **knowforge-deploy-$GITHUB_RUN_NUMBER-$GITHUB_RUN_ATTEMPT** from this run's Artifacts."
+            echo
+            echo "The artifact contains \`$PACKAGE_FILE\` and its SHA-256 checksum."
+            echo
+            echo 'Server: Node.js 24, then `npm ci --omit=dev` and `npm start` in the extracted knowforge directory.'
+            echo
+            echo 'Frontend: 127.0.0.1:16666. Backend: 127.0.0.1:6666. See docs/服务器部署.md inside the package.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy OSS frontend and SSH backend
+    needs: package
+    if: ${{ inputs.deploy }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    concurrency:
+      group: knowforge-production-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Checkout deployment scripts
+        uses: actions/checkout@v6
+
+      - name: Validate deployment configuration
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_BUCKET: ${{ vars.OSS_BUCKET }}
+          OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT }}
+          OSS_REGION: ${{ vars.OSS_REGION }}
+        run: |
+          for key in SSH_HOST SSH_USERNAME SSH_PASSWORD OSS_ACCESS_KEY_ID OSS_ACCESS_KEY_SECRET OSS_BUCKET OSS_ENDPOINT OSS_REGION; do
+            if [ -z "${!key}" ]; then
+              echo "::error::Missing deployment configuration: $key. See docs/服务器部署.md"
+              exit 1
+            fi
+          done
+
+      - name: Download tested package
+        uses: actions/download-artifact@v6
+        with:
+          name: ${{ needs.package.outputs.artifact_name }}
+          path: ${{ runner.temp }}/knowforge-artifact
+
+      - name: Verify and extract package
+        env:
+          ARCHIVE_NAME: ${{ needs.package.outputs.archive_name }}
+        run: |
+          cd "$RUNNER_TEMP/knowforge-artifact"
+          sha256sum -c "$ARCHIVE_NAME.sha256"
+          mkdir -p "$RUNNER_TEMP/knowforge-upload"
+          tar -xzf "$ARCHIVE_NAME" -C "$RUNNER_TEMP/knowforge-upload"
+
+      - name: Install deployment tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends sshpass
+          python3 -m venv "$RUNNER_TEMP/oss-sdk"
+          "$RUNNER_TEMP/oss-sdk/bin/pip" install 'oss2==2.19.1'
+
+      - name: Upload backend to SSH server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT || '22' }}
+          SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+          SSH_RESTART_COMMAND: ${{ vars.SSH_RESTART_COMMAND }}
+          DEPLOY_ARCHIVE: ${{ runner.temp }}/knowforge-artifact/${{ needs.package.outputs.archive_name }}
+          DEPLOY_UPLOAD_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+        run: bash scripts/deploy-ssh.sh
+
+      - name: Upload frontend to OSS (publish index last)
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
+          OSS_BUCKET: ${{ vars.OSS_BUCKET }}
+          OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT }}
+          OSS_REGION: ${{ vars.OSS_REGION }}
+          OSS_PREFIX: ${{ vars.OSS_PREFIX }}
+        run: '"$RUNNER_TEMP/oss-sdk/bin/python" scripts/deploy-oss.py "$RUNNER_TEMP/knowforge-upload/knowforge/dist"'
+
+      - name: Write deployment summary
+        run: |
+          {
+            echo '## Deployment completed'
+            echo '- Frontend uploaded to OSS; existing hashed assets are retained and index.html is uploaded last.'
+            echo '- Backend files deployed directly to /www/wwwroot/knowforge.'
+            echo '- Existing /www/wwwroot/knowforge/runtime data is preserved.'
+            echo '- Service restart runs only when SSH_RESTART_COMMAND is configured.'
+            echo '- Configure CDN dynamic origin routes as documented in docs/服务器部署.md.'
+          } >> "$GITHUB_STEP_SUMMARY"

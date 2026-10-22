@@ -5,22 +5,32 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp, gradeQuestion } from "../server/app.mjs";
 import { scheduleReview, createStore } from "../server/store.mjs";
+import { mysqlFixture } from "./helpers/mysql.mjs";
 const catalog = JSON.parse(readFileSync("data/catalog.json", "utf8"));
 async function fixture(t, options = {}) {
-  const built = createApp({ dbPath: ":memory:", ...options });
+  const mysql = process.env.TEST_MYSQL === "1" ? await mysqlFixture() : null;
+  const built = await createApp({
+    dbPath: ":memory:",
+    ...(mysql ? { store: mysql.store } : {}),
+    ...options,
+  });
   const server = await new Promise((r) => {
     const s = built.app.listen(0, "127.0.0.1", () => r(s));
   });
-  t.after(
-    () =>
-      new Promise((r) =>
-        server.close(() => {
-          built.store.close();
-          r();
-        }),
-      ),
-  );
+  t.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    if (mysql) await mysql.cleanup();
+    else await built.store.close();
+  });
   const base = "http://127.0.0.1:" + server.address().port;
+  const registered = await fetch(base + "/api/auth/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: "tester", password: "test-password-123" }),
+  });
+  assert.equal(registered.status, 201);
+  const cookie = registered.headers.get("set-cookie").split(";")[0];
+  const auth = await registered.json();
   return {
     base,
     ...built,
@@ -28,6 +38,8 @@ async function fixture(t, options = {}) {
       const res = await fetch(base + "/api" + path, {
         method,
         headers: {
+          Cookie: cookie,
+          "X-CSRF-Token": auth.csrfToken,
           ...(body ? { "Content-Type": "application/json" } : {}),
           ...headers,
         },
@@ -286,10 +298,21 @@ test("模拟组卷、草稿恢复、交卷判分和重复提交幂等", async (t
   );
   r = await api("/exams/" + exam.id + "/draft", "PUT", { answers });
   assert.deepEqual(r.data.exam.answers, answers);
-  r = await api("/exams/" + exam.id + "/submit", "POST", {
-    answers,
-    selfRatings: {},
-  });
+  const submissions = await Promise.all(
+    Array.from({ length: 3 }, () =>
+      api("/exams/" + exam.id + "/submit", "POST", {
+        answers,
+        selfRatings: {},
+      }),
+    ),
+  );
+  assert(
+    submissions.every(
+      (result) =>
+        result.status === 200 && result.data.state.attempts.length === 5,
+    ),
+  );
+  r = submissions[0];
   assert.equal(r.data.exam.objectiveScore, 100);
   assert.equal(r.data.state.attempts.length, 5);
   const again = await api("/exams/" + exam.id + "/submit", "POST", {
@@ -337,7 +360,7 @@ test("备份导入合并、作答去重与非法备份拒绝", async (t) => {
     400,
   );
 });
-test("SQLite 关闭再打开后内容保留", () => {
+test("SQLite 关闭再打开后内容保留", async () => {
   const dir = mkdtempSync(join(tmpdir(), "wxg-store-")),
     path = join(dir, "state.sqlite");
   try {
@@ -350,7 +373,7 @@ test("SQLite 关闭再打开后内容保留", () => {
     );
     s.close();
     s = createStore(path);
-    assert.equal(s.state().notes.lesson.content, "持久化");
+    assert.equal((await s.state()).notes.lesson.content, "持久化");
     s.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });

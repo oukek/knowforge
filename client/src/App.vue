@@ -1,8 +1,9 @@
 <script setup>
 import { onMounted, onUnmounted, watch } from "vue";
 import { useRoute } from "vue-router";
-import { store, init, dueReviews } from "./store";
+import { store, init, dueReviews, signOut } from "./store";
 import Icon from "./components/Icon.vue";
+import AuthScreen from "./components/AuthScreen.vue";
 import SearchDialog from "./components/SearchDialog.vue";
 const route = useRoute();
 const nav = [
@@ -34,7 +35,8 @@ watch(
 );
 </script>
 <template>
-  <div class="app-layout">
+  <AuthScreen v-if="!store.user && !store.loading && !store.error" />
+  <div v-else class="app-layout">
     <a class="skip-link" href="#main-content">跳到主要内容</a>
     <div
       v-if="store.sidebarOpen"
@@ -53,7 +55,7 @@ watch(
           ><small>知行实验室</small>
         </div></RouterLink
       >
-      <div class="workspace-label">我的学习工作台 <span>LOCAL</span></div>
+      <div class="workspace-label">我的学习工作台 <span>PERSONAL</span></div>
       <nav aria-label="主要导航">
         <RouterLink
           v-for="[path, icon, label] in nav"
@@ -82,7 +84,8 @@ watch(
           ><Icon name="Database" :size="18" />资料来源与数据</RouterLink
         >
         <div class="local-status">
-          <span class="status-dot"></span>本地数据 · SQLite 持久化<span
+          <span class="status-dot"></span>学习数据 ·
+          {{ store.database === "mysql" ? "MySQL" : "SQLite" }} 持久化<span
             >v2.0</span
           >
         </div>
@@ -109,7 +112,10 @@ watch(
             <Icon name="Search" :size="17" /><span>搜索知识与题目</span
             ><kbd>⌘ K</kbd></button
           ><span class="top-date">{{ today }}</span
-          ><span class="avatar" aria-label="本地学习者">研</span>
+          ><span class="account-name">{{ store.user?.username }}</span>
+          <button v-if="store.user" class="btn small" @click="signOut">
+            退出登录
+          </button>
         </div>
       </header>
       <main id="main-content" class="main-content">
@@ -124,7 +130,7 @@ watch(
           <p class="muted">在项目目录执行 npm run dev，然后重试。</p>
           <button class="btn primary" @click="init">重新连接</button>
         </div>
-        <RouterView v-else />
+        <RouterView v-else :key="store.user?.id" />
       </main>
       <footer class="app-footer">
         <span>学会解释，也学会验证。</span

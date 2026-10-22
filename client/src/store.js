@@ -1,6 +1,9 @@
 import { reactive, computed } from "vue";
 export const store = reactive({
+  user: null,
+  csrfToken: "",
   catalog: null,
+  database: "sqlite",
   state: null,
   loading: true,
   error: "",
@@ -10,15 +13,25 @@ export const store = reactive({
   now: Date.now(),
 });
 let toastTimer;
+let sessionGeneration = 0;
 export function toast(message) {
   store.toast = message;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (store.toast = ""), 3500);
 }
 export async function request(path, method = "GET", body) {
+  const userId = store.user?.id;
   const response = await fetch("/api" + path, {
     method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
+    headers: {
+      ...(body ? { "Content-Type": "application/json" } : {}),
+      ...(store.csrfToken && method !== "GET"
+        ? { "X-CSRF-Token": store.csrfToken }
+        : {}),
+      ...(store.user && !path.startsWith("/auth/")
+        ? { "X-KnowForge-User": store.user.id }
+        : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
   let data;
@@ -27,25 +40,77 @@ export async function request(path, method = "GET", body) {
   } catch {
     throw new Error("服务响应异常，请确认 Node 服务已启动");
   }
-  if (!response.ok) throw new Error(data.error || "请求失败");
+  if (!response.ok) {
+    if (
+      userId === store.user?.id &&
+      ((response.status === 401 && !path.startsWith("/auth/")) ||
+        data.code === "SESSION_CHANGED")
+    )
+      clearSession();
+    const error = new Error(data.error || "请求失败");
+    error.status = response.status;
+    error.code = data.code;
+    throw error;
+  }
   return data;
 }
+function clearSession() {
+  sessionGeneration++;
+  store.loading = false;
+  store.user = null;
+  store.csrfToken = "";
+  store.catalog = null;
+  store.state = null;
+  store.searchOpen = false;
+  store.sidebarOpen = false;
+}
+export async function signIn(mode, credentials) {
+  const data = await request("/auth/" + mode, "POST", credentials);
+  store.user = data.user;
+  store.csrfToken = data.csrfToken;
+  await init();
+  if (store.error) throw new Error(store.error);
+}
+export async function signOut() {
+  const userId = store.user?.id;
+  try {
+    await request("/auth/logout", "POST", {});
+    if (store.user?.id !== userId) return;
+    clearSession();
+    store.error = "";
+  } catch (error) {
+    toast(error.message);
+  }
+}
 export async function init() {
+  const generation = ++sessionGeneration;
   store.loading = true;
   store.error = "";
   try {
+    const auth = await request("/auth/me");
+    if (generation !== sessionGeneration) return;
+    if (!auth.user) {
+      clearSession();
+      return;
+    }
+    store.user = auth.user;
+    store.csrfToken = auth.csrfToken;
     const data = await request("/bootstrap");
+    if (generation !== sessionGeneration) return;
     store.catalog = data.catalog;
+    store.database = data.database || "sqlite";
     store.state = data.state;
   } catch (e) {
-    store.error = e.message;
+    if (generation === sessionGeneration) store.error = e.message;
   } finally {
-    store.loading = false;
+    if (generation === sessionGeneration) store.loading = false;
   }
 }
 export async function mutate(path, method = "POST", body) {
+  const userId = store.user?.id;
   try {
     const data = await request(path, method, body);
+    if (userId !== store.user?.id) return null;
     if (
       data.state &&
       (data.state.revision || 0) >= (store.state?.revision || 0)
@@ -114,14 +179,17 @@ export async function bookmark(id) {
 }
 export function safeStorageGet(key) {
   try {
-    return localStorage.getItem(key);
+    return store.user
+      ? localStorage.getItem(`knowforge:${store.user.id}:${key}`)
+      : null;
   } catch {
     return null;
   }
 }
 export function safeStorageSet(key, value) {
   try {
-    localStorage.setItem(key, value);
+    if (store.user)
+      localStorage.setItem(`knowforge:${store.user.id}:${key}`, value);
   } catch {
     toast("浏览器草稿保存失败，请及时复制代码");
   }
