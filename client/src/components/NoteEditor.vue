@@ -1,4 +1,5 @@
 <script setup>
+import AppField from "./AppField.vue";
 import { ref, watch } from "vue";
 import { store, mutate, toast } from "../store";
 import Icon from "./Icon.vue";
@@ -34,14 +35,15 @@ async function save() {
         dirty ? "有未保存修改" : "已保存到当前账号"
       }}</span>
     </div>
-    <textarea
+    <AppField
+      multiline
       v-model="content"
       @input="dirty = true"
       maxlength="30000"
       rows="5"
       aria-label="学习笔记"
       placeholder="记录你自己的理解、项目关联和容易混淆的边界…"
-    ></textarea>
+    ></AppField>
     <div class="row end">
       <button class="btn small" :disabled="saving || !dirty" @click="save">
         {{ saving ? "保存中…" : "保存笔记" }}

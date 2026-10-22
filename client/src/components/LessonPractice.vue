@@ -1,4 +1,6 @@
 <script setup>
+import AppDisclosure from "./AppDisclosure.vue";
+import AppField from "./AppField.vue";
 import { ref, computed, watch, onBeforeUnmount, nextTick } from "vue";
 import { store, safeStorageGet, safeStorageSet, mutate } from "../store";
 import { useCodeRunner } from "../composables/useCodeRunner";
@@ -290,10 +292,10 @@ defineExpose({ openExercises, openExample });
           API</span
         >
       </p>
-      <details class="example-explanation">
-        <summary>这段代码在说明什么？</summary>
+      <AppDisclosure class="example-explanation">
+        <template #title>这段代码在说明什么？</template>
         <p>{{ example.explanation }}</p>
-      </details>
+      </AppDisclosure>
     </div>
     <div
       v-else-if="tab === 'output'"
@@ -312,7 +314,8 @@ defineExpose({ openExercises, openExample });
         class="field-label"
         :for="'output-answer-' + lesson.id"
         >你预测的输出</label
-      ><textarea
+      ><AppField
+        multiline
         :id="'output-answer-' + lesson.id"
         v-model="answer"
         :rows="Math.max(3, Math.min(9, example.expectedLogs.length + 1))"
@@ -320,7 +323,7 @@ defineExpose({ openExercises, openExample });
         class="output-answer"
         spellcheck="false"
         placeholder="第一条输出&#10;第二条输出&#10;…"
-      ></textarea>
+      ></AppField>
       <div class="section-line output-submit">
         <span class="muted tiny">{{
           lastOutput
@@ -380,10 +383,10 @@ defineExpose({ openExercises, openExample });
       <div class="lesson-example-caption">
         <h3>补上关键的一步</h3>
         <p>{{ fill.prompt }}</p>
-        <details class="fill-hint">
-          <summary>给我一点提示</summary>
+        <AppDisclosure class="fill-hint">
+          <template #title>给我一点提示</template>
           <p>{{ fill.hint }}</p>
-        </details>
+        </AppDisclosure>
       </div>
       <div class="lesson-editor-shell">
         <div class="workbench-toolbar">
@@ -433,11 +436,11 @@ defineExpose({ openExercises, openExample });
       <p class="workbench-save-hint" role="status">
         {{ saveStatus || "代码草稿自动保存；运行后按题目用例验证。" }}
       </p>
-      <details class="example-explanation">
-        <summary>查看参考补全与解释</summary>
+      <AppDisclosure class="example-explanation">
+        <template #title>查看参考补全与解释</template>
         <CodeBlock :language="language" :code="fill.solution" />
         <p>{{ fill.explanation }}</p>
-      </details>
+      </AppDisclosure>
     </div>
   </section>
 </template>

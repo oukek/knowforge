@@ -262,7 +262,10 @@ const recent = computed(() =>
               v-for="(d, i) in week"
               :key="i"
               class="activity-day"
-              :title="d.count + ' 次学习动作'"
+              :aria-label="
+                (d.today ? '今天' : d.day) + '：' + d.count + ' 次学习动作'
+              "
+              role="img"
             >
               <span class="activity-number">{{ d.count || "" }}</span>
               <div class="activity-track">

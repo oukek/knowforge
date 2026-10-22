@@ -1,17 +1,18 @@
 <script setup>
+import AppFileUpload from "../components/AppFileUpload.vue";
 import { apiUrl } from "../api-config.js";
 import { ref } from "vue";
 import { store, mutate, toast } from "../store";
 import Icon from "../components/Icon.vue";
-const fileInput = ref(null),
-  importing = ref(false),
+const importing = ref(false),
   pending = ref(null),
   pendingName = ref(""),
   error = ref("");
-async function readBackup(e) {
-  const file = e.target.files[0];
+async function readBackup(file) {
   if (!file) return;
   error.value = "";
+  pending.value = null;
+  pendingName.value = "";
   try {
     if (file.size > 12 * 1024 * 1024) throw new Error("备份超过 12MB");
     const parsed = JSON.parse(await file.text());
@@ -22,7 +23,6 @@ async function readBackup(e) {
   } catch (err) {
     error.value = err.message;
   }
-  e.target.value = "";
 }
 async function importBackup() {
   importing.value = true;
@@ -86,14 +86,10 @@ async function importBackup() {
           的进度、笔记和复习状态使用备份值，作答按题目与时间去重。
         </p>
       </div>
-      <button class="btn" @click="fileInput.click()">
-        <Icon name="Upload" :size="17" />选择备份文件</button
-      ><input
-        class="sr-only"
-        ref="fileInput"
-        type="file"
-        accept="application/json,.json"
-        @change="readBackup"
+      <AppFileUpload
+        :disabled="importing"
+        @select="readBackup"
+        @error="error = $event"
       />
       <p v-if="error" class="error-text">{{ error }}</p>
       <div v-if="pending" class="import-preview">

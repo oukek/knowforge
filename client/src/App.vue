@@ -1,4 +1,5 @@
 <script setup>
+import AppTooltip from "./components/AppTooltip.vue";
 import { onUnmounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { store, init, dueReviews, signOut } from "./store";
@@ -47,6 +48,7 @@ watch(
 );
 </script>
 <template>
+  <AppTooltip />
   <main
     v-if="!store.user && (store.loading || store.error)"
     class="session-screen"

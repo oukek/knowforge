@@ -1,4 +1,5 @@
 <script setup>
+import AppField from "../components/AppField.vue";
 import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
 import {
@@ -164,7 +165,7 @@ function next() {
     <template v-else
       ><div class="filter-bar">
         <div class="input-search">
-          <Icon name="Search" :size="18" /><input
+          <Icon name="Search" :size="18" /><AppField
             v-model="query"
             aria-label="搜索复习内容"
             placeholder="搜索当前列表…"

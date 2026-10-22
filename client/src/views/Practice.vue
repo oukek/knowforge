@@ -1,4 +1,7 @@
 <script setup>
+import AppChoice from "../components/AppChoice.vue";
+import AppField from "../components/AppField.vue";
+import AppSelect from "../components/AppSelect.vue";
 import { ref, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { store, modules, questions, typeLabel, moduleFor } from "../store";
@@ -82,24 +85,29 @@ function random() {
     </div>
     <div class="filter-bar">
       <div class="input-search">
-        <Icon name="Search" :size="18" /><input
+        <Icon name="Search" :size="18" /><AppField
           v-model="query"
           aria-label="搜索面试题"
           placeholder="搜索题目或关键词…"
         />
       </div>
-      <select v-model="moduleId" aria-label="筛选题目专题">
-        <option value="">全部专题</option>
-        <option v-for="m in modules" :value="m.id" :key="m.id">
-          {{ m.title }}
-        </option></select
-      ><select v-model="priority" aria-label="筛选题目优先级">
-        <option value="">全部优先级</option>
-        <option>P0</option>
-        <option>P1</option>
-        <option>P2</option></select
-      ><label class="check-label"
-        ><input type="checkbox" v-model="onlyNew" />只看未练</label
+      <AppSelect
+        v-model="moduleId"
+        label="筛选题目专题"
+        :options="[
+          { value: '', label: '全部专题' },
+          ...modules.map((m) => ({ value: m.id, label: m.title })),
+        ]"
+      />
+      <AppSelect
+        v-model="priority"
+        label="筛选题目优先级"
+        :options="[
+          { value: '', label: '全部优先级' },
+          ...['P0', 'P1', 'P2'].map((value) => ({ value, label: value })),
+        ]"
+      /><AppChoice class="check-label" type="checkbox" v-model="onlyNew"
+        >只看未练</AppChoice
       >
     </div>
     <div class="table-summary">

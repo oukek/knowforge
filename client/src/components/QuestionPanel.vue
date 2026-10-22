@@ -1,4 +1,6 @@
 <script setup>
+import AppChoice from "./AppChoice.vue";
+import AppField from "./AppField.vue";
 import { ref, watch, computed } from "vue";
 import {
   store,
@@ -76,7 +78,7 @@ async function submit(selfRating) {
     <template v-if="q.type === 'choice'"
       ><fieldset class="options">
         <legend class="sr-only">选择一个答案</legend>
-        <label
+        <AppChoice
           v-for="(option, i) in q.options"
           :key="i"
           class="option"
@@ -85,20 +87,18 @@ async function submit(selfRating) {
             correct: result && i === q.correct,
             incorrect: result && selected === i && i !== q.correct,
           }"
-          ><input
-            type="radio"
-            :name="q.id"
-            :value="i"
-            v-model="selected"
-            :disabled="!!result" /><span class="option-letter">{{
-            String.fromCharCode(65 + i)
-          }}</span
+          type="radio"
+          :name="q.id"
+          :value="i"
+          v-model="selected"
+          :disabled="!!result"
+          ><span class="option-letter">{{ String.fromCharCode(65 + i) }}</span
           ><span>{{ option }}</span
           ><Icon
             v-if="result && i === q.correct"
             name="CheckCircle2"
             :size="18"
-        /></label>
+        /></AppChoice>
       </fieldset>
       <button
         v-if="!result"
@@ -111,13 +111,14 @@ async function submit(selfRating) {
     ></template>
     <template v-else
       ><label class="field-label" for="own-answer">先独立回答，再对照要点</label
-      ><textarea
+      ><AppField
+        multiline
         id="own-answer"
         v-model="written"
         rows="7"
         maxlength="30000"
         placeholder="用你自己的语言说明结论、机制、方案与边界。可以先口述再记录要点。"
-      ></textarea
+      ></AppField
       ><button v-if="!revealed" class="btn primary" @click="revealed = true">
         <Icon name="Eye" :size="17" />展开参考答案
       </button></template
@@ -152,10 +153,13 @@ async function submit(selfRating) {
       <template v-if="q.type !== 'choice'"
         ><h4>对照评分要点</h4>
         <div class="rubric">
-          <label v-for="(item, i) in q.rubric" :key="i"
-            ><input type="checkbox" v-model="checked" :value="i" /><span>{{
-              item
-            }}</span></label
+          <AppChoice
+            v-for="(item, i) in q.rubric"
+            :key="i"
+            type="checkbox"
+            v-model="checked"
+            :value="i"
+            ><span>{{ item }}</span></AppChoice
           >
         </div>
         <p class="muted tiny">

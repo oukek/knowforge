@@ -1,4 +1,5 @@
 <script setup>
+import AppSelect from "../components/AppSelect.vue";
 import { ref, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -135,15 +136,12 @@ const passed = computed(
     <div class="section-line">
       <RouterLink to="/labs" class="back-link"
         ><Icon name="ArrowLeft" :size="16" />全部手写实验</RouterLink
-      ><select
-        :value="lab.id"
-        @change="router.push('/labs/' + $event.target.value)"
-        aria-label="切换代码实验"
-      >
-        <option v-for="l in labs" :key="l.id" :value="l.id">
-          {{ l.title }}
-        </option>
-      </select>
+      ><AppSelect
+        :model-value="lab.id"
+        label="切换代码实验"
+        :options="labs.map((l) => ({ value: l.id, label: l.title }))"
+        @change="router.push('/labs/' + $event)"
+      />
     </div>
     <div class="lab-title">
       <div>

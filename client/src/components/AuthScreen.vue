@@ -1,4 +1,5 @@
 <script setup>
+import AppField from "./AppField.vue";
 import { ref } from "vue";
 import { signIn } from "../store";
 import Icon from "./Icon.vue";
@@ -17,6 +18,14 @@ function switchMode(value) {
 async function submit() {
   if (busy.value) return;
   error.value = "";
+  if (!/^[A-Za-z0-9_-]{3,32}$/.test(username.value)) {
+    error.value = "账号需为 3–32 位字母、数字、_ 或 -";
+    return;
+  }
+  if (password.value.length < 8 || password.value.length > 128) {
+    error.value = "密码长度需为 8–128 位";
+    return;
+  }
   if (mode.value === "register" && password.value !== confirmation.value) {
     error.value = "两次输入的密码不一致";
     return;
@@ -60,7 +69,7 @@ async function submit() {
       <small>KnowForge · 知行实验室</small>
     </section>
     <section class="auth-panel" aria-label="账号登录与注册">
-      <form class="auth-card" @submit.prevent="submit">
+      <form class="auth-card" novalidate @submit.prevent="submit">
         <div class="auth-tabs" role="group" aria-label="选择登录或注册">
           <button
             type="button"
@@ -89,7 +98,7 @@ async function submit() {
           }}
         </p>
         <label for="auth-username">账号</label
-        ><input
+        ><AppField
           id="auth-username"
           v-model="username"
           name="username"
@@ -105,7 +114,7 @@ async function submit() {
           aria-describedby="username-help"
         /><small id="username-help" class="muted">账号不区分大小写。</small>
         <label for="auth-password">密码</label
-        ><input
+        ><AppField
           id="auth-password"
           v-model="password"
           name="password"
@@ -119,7 +128,7 @@ async function submit() {
         />
         <template v-if="mode === 'register'"
           ><label for="auth-confirmation">确认密码</label
-          ><input
+          ><AppField
             id="auth-confirmation"
             v-model="confirmation"
             name="confirmation"

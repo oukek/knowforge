@@ -1,4 +1,6 @@
 <script setup>
+import AppField from "../components/AppField.vue";
+import AppSelect from "../components/AppSelect.vue";
 import { apiUrl } from "../api-config.js";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -100,23 +102,32 @@ watch(
     </div>
     <div class="filter-bar">
       <div class="input-search">
-        <Icon name="Search" :size="18" /><input
+        <Icon name="Search" :size="18" /><AppField
           v-model="query"
           aria-label="搜索知识点"
           placeholder="搜索概念、关键词…"
         />
       </div>
-      <select v-model="priority" aria-label="筛选优先级">
-        <option value="">全部优先级</option>
-        <option value="P0">P0 · 优先掌握</option>
-        <option value="P1">P1 · 系统巩固</option>
-        <option value="P2">P2 · 按需拓展</option></select
-      ><select v-model="status" aria-label="筛选学习状态">
-        <option value="">全部状态</option>
-        <option value="new">尚未学习</option>
-        <option value="learning">学习中</option>
-        <option value="done">已完成</option></select
-      ><span class="muted tiny">{{ filtered.length }} 篇</span>
+      <AppSelect
+        v-model="priority"
+        label="筛选优先级"
+        :options="[
+          { value: '', label: '全部优先级' },
+          { value: 'P0', label: 'P0 · 优先掌握' },
+          { value: 'P1', label: 'P1 · 系统巩固' },
+          { value: 'P2', label: 'P2 · 按需拓展' },
+        ]"
+      />
+      <AppSelect
+        v-model="status"
+        label="筛选学习状态"
+        :options="[
+          { value: '', label: '全部状态' },
+          { value: 'new', label: '尚未学习' },
+          { value: 'learning', label: '学习中' },
+          { value: 'done', label: '已完成' },
+        ]"
+      /><span class="muted tiny">{{ filtered.length }} 篇</span>
     </div>
     <div v-if="filtered.length" class="lesson-grid">
       <RouterLink

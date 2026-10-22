@@ -1,4 +1,8 @@
 <script setup>
+import AppDisclosure from "../components/AppDisclosure.vue";
+import AppChoice from "../components/AppChoice.vue";
+import AppField from "../components/AppField.vue";
+import AppSelect from "../components/AppSelect.vue";
 import { ref, computed, watch, onBeforeUnmount } from "vue";
 import {
   store,
@@ -201,33 +205,39 @@ const objectiveCount = computed(
             不选时从全部专题抽取；单选模式下部分专题题量有限。
           </p>
           <div class="module-choices">
-            <label
+            <AppChoice
               v-for="m in modules"
               :key="m.id"
               :class="{ selected: selectedModules.includes(m.id) }"
-              ><input
-                type="checkbox"
-                v-model="selectedModules"
-                :value="m.id"
-              /><Icon :name="m.icon" :size="16" />{{ m.title }}</label
+              type="checkbox"
+              v-model="selectedModules"
+              :value="m.id"
+              ><Icon :name="m.icon" :size="16" />{{ m.title }}</AppChoice
             >
           </div>
         </section>
         <aside class="setup-aside">
           <h3>练习配置</h3>
           <label class="field-label" for="exam-count">题目数量</label
-          ><select id="exam-count" v-model="count">
-            <option :value="5">5 道</option>
-            <option :value="10">10 道</option>
-            <option :value="20">20 道</option>
-            <option :value="30">30 道</option></select
-          ><label class="field-label" for="exam-minutes">限时</label
-          ><select id="exam-minutes" v-model="minutes">
-            <option :value="5">5 分钟</option>
-            <option :value="15">15 分钟</option>
-            <option :value="30">30 分钟</option>
-            <option :value="60">60 分钟</option>
-          </select>
+          ><AppSelect
+            id="exam-count"
+            v-model="count"
+            label="题目数量"
+            :options="
+              [5, 10, 20, 30].map((value) => ({ value, label: `${value} 道` }))
+            "
+          /><label class="field-label" for="exam-minutes">限时</label
+          ><AppSelect
+            id="exam-minutes"
+            v-model="minutes"
+            label="限时"
+            :options="
+              [5, 15, 30, 60].map((value) => ({
+                value,
+                label: `${value} 分钟`,
+              }))
+            "
+          />
           <p class="muted tiny">
             范围内题量不足时使用现有题目，至少需要 3
             道。时间到自动交卷；刷新后可以恢复已保存草稿。
@@ -292,23 +302,23 @@ const objectiveCount = computed(
           <h2>{{ current.prompt }}</h2>
           <fieldset v-if="current.type === 'choice'" class="options">
             <legend class="sr-only">选择答案</legend>
-            <label
+            <AppChoice
               v-for="(option, i) in current.options"
               :key="i"
               class="option"
               :class="{ selected: answers[current.id] === i }"
-              ><input
-                type="radio"
-                :name="current.id"
-                :value="i"
-                v-model="answers[current.id]"
-              /><span class="option-letter">{{
+              type="radio"
+              :name="current.id"
+              :value="i"
+              v-model="answers[current.id]"
+              ><span class="option-letter">{{
                 String.fromCharCode(65 + i)
               }}</span
-              ><span>{{ option }}</span></label
+              ><span>{{ option }}</span></AppChoice
             >
           </fieldset>
-          <textarea
+          <AppField
+            multiline
             v-else
             :key="current.id"
             v-model="answers[current.id]"
@@ -316,7 +326,7 @@ const objectiveCount = computed(
             maxlength="30000"
             aria-label="本题回答"
             placeholder="写出你的结论、机制、方案和边界…"
-          ></textarea>
+          ></AppField>
           <div class="section-line exam-navigation">
             <button class="btn" :disabled="index === 0" @click="index--">
               <Icon name="ArrowLeft" :size="16" />上一题</button
@@ -394,12 +404,12 @@ const objectiveCount = computed(
         </div>
       </div>
       <div class="report-questions">
-        <details
+        <AppDisclosure
           v-for="(q, i) in examQuestions"
           :key="q.id"
           class="report-item"
         >
-          <summary>
+          <template #title>
             <span class="question-number">{{ i + 1 }}</span
             ><strong>{{ q.prompt }}</strong
             ><span
@@ -411,9 +421,8 @@ const objectiveCount = computed(
               selfRated[q.id] === undefined
                 ? "待自评"
                 : ratingLabels[selfRated[q.id]]
-            }}</span
-            ><Icon name="ChevronDown" :size="16" />
-          </summary>
+            }}</span>
+          </template>
           <div class="report-body">
             <h4>你的回答</h4>
             <p class="written-answer">
@@ -452,7 +461,7 @@ const objectiveCount = computed(
               >复习关联知识点<Icon name="ArrowUpRight" :size="16"
             /></RouterLink>
           </div>
-        </details></div
+        </AppDisclosure></div
     ></template>
   </div>
 </template>

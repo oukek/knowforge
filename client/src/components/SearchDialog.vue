@@ -1,4 +1,5 @@
 <script setup>
+import AppField from "./AppField.vue";
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { store, lessons, questions, typeLabel } from "../store";
@@ -96,7 +97,7 @@ onUnmounted(() => window.removeEventListener("keydown", key));
         aria-label="全局搜索"
       >
         <div class="search-dialog-input">
-          <Icon name="Search" /><input
+          <Icon name="Search" /><AppField
             ref="input"
             v-model="query"
             placeholder="搜索知识点、题目与参考回答…"

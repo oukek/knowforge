@@ -1,4 +1,6 @@
 <script setup>
+import AppDatePicker from "../components/AppDatePicker.vue";
+import AppSelect from "../components/AppSelect.vue";
 import { ref, computed } from "vue";
 import {
   store,
@@ -91,39 +93,52 @@ async function save() {
     <section class="plan-settings">
       <div>
         <label class="field-label" for="plan-track">学习主线</label
-        ><select id="plan-track" v-model="trackId" @change="selected = 0">
-          <option value="all">全部专题</option>
-          <option
-            v-for="track in store.catalog.tracks"
-            :key="track.id"
-            :value="track.id"
-          >
-            {{ track.title }}
-          </option>
-        </select>
+        ><AppSelect
+          id="plan-track"
+          v-model="trackId"
+          label="学习主线"
+          :options="[
+            { value: 'all', label: '全部专题' },
+            ...store.catalog.tracks.map((track) => ({
+              value: track.id,
+              label: track.title,
+            })),
+          ]"
+          @change="selected = 0"
+        />
       </div>
       <div>
         <label class="field-label" for="daily-time">每日可用时间</label
-        ><select id="daily-time" v-model="dailyMinutes">
-          <option :value="30">30 分钟</option>
-          <option :value="45">45 分钟</option>
-          <option :value="60">60 分钟</option>
-          <option :value="90">90 分钟</option>
-          <option :value="120">120 分钟</option>
-        </select>
+        ><AppSelect
+          id="daily-time"
+          v-model="dailyMinutes"
+          label="每日可用时间"
+          :options="
+            [30, 45, 60, 90, 120].map((value) => ({
+              value,
+              label: `${value} 分钟`,
+            }))
+          "
+        />
       </div>
       <div>
         <label class="field-label" for="plan-days">计划周期</label
-        ><select id="plan-days" v-model="planDays" @change="selected = 0">
-          <option :value="7">7 天 · 聚焦复习</option>
-          <option :value="14">14 天</option>
-          <option :value="21">21 天</option>
-          <option :value="30">30 天</option>
-        </select>
+        ><AppSelect
+          id="plan-days"
+          v-model="planDays"
+          label="计划周期"
+          :options="
+            [7, 14, 21, 30].map((value) => ({
+              value,
+              label: value === 7 ? '7 天 · 聚焦复习' : `${value} 天`,
+            }))
+          "
+          @change="selected = 0"
+        />
       </div>
       <div>
         <label class="field-label" for="start-date">开始日期</label
-        ><input type="date" id="start-date" v-model="startDate" />
+        ><AppDatePicker id="start-date" v-model="startDate" label="开始日期" />
       </div>
       <button class="btn primary" @click="save" :disabled="busy || !startDate">
         {{ busy ? "保存中…" : "保存计划" }}
