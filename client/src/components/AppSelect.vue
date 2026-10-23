@@ -12,7 +12,7 @@ import Icon from "./Icon.vue";
 
 defineOptions({ inheritAttrs: false });
 const props = defineProps({
-  modelValue: { type: [String, Number], default: "" },
+  modelValue: { type: [String, Number, Boolean], default: "" },
   options: { type: Array, required: true },
   label: { type: String, required: true },
   disabled: Boolean,

@@ -10,9 +10,9 @@ import { createServer } from "node:http";
 const port = Number(process.env.PORT || 6666);
 const frontendPort = Number(process.env.FRONTEND_PORT || 16666);
 const development = process.argv.includes("--dev");
-let app, store;
+let app, store, ai;
 try {
-  ({ app, store } = await createApp({
+  ({ app, store, ai } = await createApp({
     dbPath: process.env.DB_PATH,
     driver: process.env.DB_DRIVER || "sqlite",
     serveClient: false,
@@ -39,6 +39,7 @@ async function shutdown(code = 0) {
       (httpServer) => new Promise((done) => httpServer.close(done)),
     ),
   );
+  await ai?.shutdown();
   await store.close();
   process.exit(code);
 }

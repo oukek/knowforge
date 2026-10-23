@@ -2,6 +2,7 @@ import { PRODUCTION_FRONTEND_ORIGIN } from "../shared/deployment.mjs";
 import { runnerFrame } from "./runner-frame.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createAuth } from "./auth.mjs";
+import { installAi } from "./ai/routes.mjs";
 import express from "express";
 import { compareOutput } from "../shared/output.mjs";
 import { readFileSync, existsSync } from "node:fs";
@@ -85,6 +86,7 @@ export async function createApp({
   resourcePaths = {},
   publicApiOrigin,
   secureCookies,
+  aiOptions,
 } = {}) {
   const resources = {
     runner: resolve("client/public/runner.js"),
@@ -108,7 +110,6 @@ export async function createApp({
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", "loopback");
-  app.use(express.json({ limit: "12mb" }));
   const trustedOrigins = new Set([
     PRODUCTION_FRONTEND_ORIGIN,
     ...allowedOrigins,
@@ -169,6 +170,8 @@ export async function createApp({
     }
     next();
   });
+  app.use(["/api/ai", "/api/admin/ai"], express.json({ limit: "24kb" }));
+  app.use(express.json({ limit: "12mb" }));
   app.get("/runner-frame", (req, res) => {
     const frame = runnerFrame([
       ...trustedOrigins,
@@ -186,6 +189,10 @@ export async function createApp({
   const ok = async (res, extra = {}) =>
     res.json({ state: await snapshot(), ...extra });
   const auth = createAuth(app, store, { secureCookies });
+  const ai = await installAi(app, store, auth, catalog, aiOptions);
+  const resolveQuestion = (id, userId) => ai.question(userId, id, store);
+  const validTarget = async (id, userId) =>
+    targets.has(id) || !!(await resolveQuestion(id, userId));
   app.get("/api/health", (req, res, next) =>
     store
       .session(async () => {
@@ -240,6 +247,7 @@ export async function createApp({
       database: store.driver,
       user: _.user,
       state: await snapshot(),
+      generatedQuestions: await ai.repo.generatedListRaw(_.user.id),
       serverTime: new Date().toISOString(),
     }),
   );
@@ -311,7 +319,7 @@ export async function createApp({
     await ok(res);
   });
   api.put("/api/notes/:id", async (req, res) => {
-    if (!targets.has(req.params.id))
+    if (!(await validTarget(req.params.id, req.user.id)))
       return res.status(404).json({ error: "目标不存在" });
     const { content } = noteSchema.parse(req.body);
     await personal().upsert("notes", {
@@ -322,7 +330,7 @@ export async function createApp({
     await ok(res);
   });
   api.put("/api/bookmarks/:id", async (req, res) => {
-    if (!targets.has(req.params.id))
+    if (!(await validTarget(req.params.id, req.user.id)))
       return res.status(404).json({ error: "目标不存在" });
     const { active } = z.object({ active: z.boolean() }).parse(req.body);
     if (active)
@@ -336,7 +344,7 @@ export async function createApp({
     await ok(res);
   });
   api.post("/api/attempts/:id", async (req, res) => {
-    const q = qMap.get(req.params.id);
+    const q = await resolveQuestion(req.params.id, req.user.id);
     if (!q) return res.status(404).json({ error: "题目不存在" });
     const input = attemptSchema.parse(req.body);
     const result = gradeQuestion(q, input);
@@ -362,7 +370,7 @@ export async function createApp({
     await ok(res, { result });
   });
   api.post("/api/reviews/:id", async (req, res) => {
-    if (!qMap.has(req.params.id))
+    if (!(await resolveQuestion(req.params.id, req.user.id)))
       return res.status(404).json({ error: "题目不存在" });
     const { rating: value } = z.object({ rating }).parse(req.body);
     const now = new Date().toISOString();
@@ -559,10 +567,10 @@ export async function createApp({
       if (!lessonIds.has(id))
         return res.status(400).json({ error: "备份包含未知知识点进度" });
     for (const id of [...Object.keys(s.notes), ...s.bookmarks])
-      if (!targets.has(id))
+      if (!(await validTarget(id, req.user.id)))
         return res.status(400).json({ error: "备份包含未知内容 ID" });
     for (const r of [...s.reviews, ...s.attempts])
-      if (!qMap.has(r.questionId))
+      if (!(await resolveQuestion(r.questionId, req.user.id)))
         return res.status(400).json({ error: "备份包含未知题目" });
     for (const attempt of s.exerciseAttempts ?? []) {
       const exercise = lessonExerciseMap.get(attempt.exerciseId);
@@ -748,13 +756,18 @@ export async function createApp({
         details: err.issues.map((x) => `${x.path.join(".")}: ${x.message}`),
       });
     if (err.type === "entity.too.large")
-      return res.status(413).json({ error: "文件超过 12MB 限制" });
+      return res.status(413).json({
+        error:
+          req.path.startsWith("/api/ai") || req.path.startsWith("/api/admin/ai")
+            ? "AI 请求体超过 24KB 限制"
+            : "文件超过 12MB 限制",
+      });
     if (err instanceof SyntaxError && "body" in err)
       return res.status(400).json({ error: "JSON 格式不正确" });
     console.error(err.message);
     res.status(500).json({ error: "保存失败，请检查服务端状态后重试" });
   });
-  return { app, store };
+  return { app, store, ai };
 }
 const stamp = z.string().datetime();
 const backupSchema = z.object({
@@ -789,7 +802,7 @@ const backupSchema = z.object({
       .array(
         z.object({
           questionId: z.string(),
-          kind: z.enum(["objective", "self", "coding"]),
+          kind: z.enum(["objective", "self", "coding", "ai"]),
           answer: z.union([z.string().max(30000), z.number(), z.null()]),
           score: z.number().min(0).max(100).nullable(),
           passed: z.boolean(),

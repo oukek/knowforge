@@ -4,6 +4,7 @@ export const store = reactive({
   user: null,
   csrfToken: "",
   catalog: null,
+  generatedQuestions: [],
   database: "sqlite",
   state: null,
   loading: true,
@@ -64,6 +65,7 @@ function clearSession() {
   store.user = null;
   store.csrfToken = "";
   store.catalog = null;
+  store.generatedQuestions = [];
   store.state = null;
   store.searchOpen = false;
   store.sidebarOpen = false;
@@ -102,6 +104,7 @@ export async function init() {
     const data = await request("/bootstrap");
     if (generation !== sessionGeneration) return;
     store.catalog = data.catalog;
+    store.generatedQuestions = data.generatedQuestions || [];
     store.database = data.database || "sqlite";
     store.state = data.state;
   } catch (e) {
@@ -138,7 +141,10 @@ export async function mutate(path, method = "POST", body) {
   }
 }
 export const lessons = computed(() => store.catalog?.lessons || []);
-export const questions = computed(() => store.catalog?.questions || []);
+export const questions = computed(() => [
+  ...(store.catalog?.questions || []),
+  ...store.generatedQuestions,
+]);
 export const modules = computed(() => store.catalog?.modules || []);
 export const doneCount = computed(
   () =>

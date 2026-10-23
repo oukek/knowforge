@@ -22,6 +22,7 @@ import CodeBlock from "../components/CodeBlock.vue";
 import NoteEditor from "../components/NoteEditor.vue";
 import LessonPractice from "../components/LessonPractice.vue";
 import AiGlossary from "../components/AiGlossary.vue";
+import AiActions from "../components/AiActions.vue";
 const practicePanel = ref(null);
 const route = useRoute(),
   router = useRouter();
@@ -377,6 +378,7 @@ watch(
           来源状态与核对范围见“资料来源与数据”。平台规则按目标版本复核。
         </p>
       </section>
+      <AiActions :key="lesson.id" :lesson="lesson" />
       <NoteEditor :target-id="lesson.id" />
       <div class="article-complete">
         <div>

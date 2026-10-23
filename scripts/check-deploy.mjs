@@ -134,6 +134,50 @@ try {
   assert.equal(bootstrap.catalog.curriculum.aiFoundationLessons, 24);
   assert.equal(bootstrap.catalog.curriculum.publicInterviewQuestions, 60);
   assert.equal(bootstrap.catalog.glossary.length, 108);
+  const aiStatus = await (
+    await fetch(base + "/api/ai/status", { headers: { Cookie: cookie } })
+  ).json();
+  assert.equal(aiStatus.account.balance, 0);
+  assert.equal(
+    (
+      await fetch(base + "/api/admin/ai/config", {
+        headers: { Cookie: cookie },
+      })
+    ).status,
+    403,
+  );
+  const cliEnv = {
+    ...process.env,
+    DB_DRIVER: mysqlCheck ? "mysql" : "sqlite",
+    DB_PATH: join(stage, "smoke.sqlite"),
+    MYSQL_TABLE_PREFIX: mysqlPrefix,
+  };
+  execFileSync(
+    process.execPath,
+    ["server/admin.mjs", "promote", "smokecheck"],
+    { cwd, env: cliEnv, timeout: 10000 },
+  );
+  assert.equal(
+    (
+      await fetch(base + "/api/admin/ai/config", {
+        headers: { Cookie: cookie },
+      })
+    ).status,
+    200,
+  );
+  execFileSync(process.execPath, ["server/admin.mjs", "demote", "smokecheck"], {
+    cwd,
+    env: cliEnv,
+    timeout: 10000,
+  });
+  assert.equal(
+    (
+      await fetch(base + "/api/admin/ai/config", {
+        headers: { Cookie: cookie },
+      })
+    ).status,
+    403,
+  );
   const pythonManifest = await (
     await fetch(`${base}/python-runtime/manifest.json`)
   ).json();

@@ -15,6 +15,7 @@ import Icon from "./Icon.vue";
 import Markdown from "./Markdown.vue";
 import NoteEditor from "./NoteEditor.vue";
 import InterviewContext from "./InterviewContext.vue";
+import AiActions from "./AiActions.vue";
 const props = defineProps({ question: Object, reviewMode: Boolean });
 const emit = defineEmits(["graded"]);
 const selected = ref(null),
@@ -80,6 +81,9 @@ async function submit(selfRating) {
       v-if="q.origin?.kind === 'public-report-adapted'"
       :question="q"
     />
+    <p v-if="q.provenance === 'ai-generated'" class="tiny muted">
+      个人 AI 生成题 · 请结合关联资料复核答案与评分标准。
+    </p>
     <template v-if="q.type === 'choice'"
       ><fieldset class="options">
         <legend class="sr-only">选择一个答案</legend>
@@ -196,6 +200,7 @@ async function submit(selfRating) {
         }}
       </div>
     </div>
+    <AiActions :question="q" :answer="written" />
     <div class="question-footer">
       <RouterLink :to="'/learn/' + q.lessonId" class="text-link"
         ><Icon name="BookOpen" :size="16" />回到关联知识点</RouterLink

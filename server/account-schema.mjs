@@ -1,3 +1,4 @@
+import { aiTables, aiSchema } from "./ai/schema.mjs";
 // Separate tables leave old shared records inaccessible to public accounts.
 export const accountTables = [
   "auth_users",
@@ -11,6 +12,7 @@ export const accountTables = [
   "user_settings",
   "user_lesson_attempts",
   "user_activity",
+  ...aiTables,
 ];
 
 export function accountSchema(driver, prefix = "") {
@@ -35,12 +37,17 @@ export function accountSchema(driver, prefix = "") {
     user_lesson_attempts: `id ${auto},userId ${uid} NOT NULL,exerciseId ${text} NOT NULL,lessonId ${text} NOT NULL,type ${text} NOT NULL,answer ${long} NOT NULL,passed INT NOT NULL,passedTests INT NOT NULL,totalTests INT NOT NULL,createdAt ${stamp} NOT NULL`,
     user_activity: `userId ${uid} NOT NULL,day ${mysql ? "VARCHAR(10)" : "TEXT"} NOT NULL,actions INT NOT NULL,PRIMARY KEY(userId,day)`,
   };
-  return Object.entries(definitions).map(([name, columns]) => {
-    const index =
-      mysql &&
-      ["user_attempts", "user_lesson_attempts", "auth_sessions"].includes(name)
-        ? ",INDEX(userId)"
-        : "";
-    return `CREATE TABLE IF NOT EXISTS \`${prefix}${name}\` (${columns}${index})${mysql ? " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin" : ""}`;
-  });
+  return [
+    ...Object.entries(definitions).map(([name, columns]) => {
+      const index =
+        mysql &&
+        ["user_attempts", "user_lesson_attempts", "auth_sessions"].includes(
+          name,
+        )
+          ? ",INDEX(userId)"
+          : "";
+      return `CREATE TABLE IF NOT EXISTS \`${prefix}${name}\` (${columns}${index})${mysql ? " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin" : ""}`;
+    }),
+    ...aiSchema(driver, prefix),
+  ];
 }

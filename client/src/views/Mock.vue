@@ -101,6 +101,7 @@ const availableCount = computed(
     questions.value.filter(
       (q) =>
         q.type !== "coding" &&
+        q.provenance !== "ai-generated" &&
         (questionPool.value === "all" || q.pool === questionPool.value) &&
         (mode.value !== "objective" || q.type === "choice") &&
         (!selectedModules.value.length ||
@@ -171,6 +172,10 @@ const objectiveCount = computed(
           <p>
             先独立作答，再逐题复盘。模拟记录帮助发现短板，不预测真实招聘结果。
           </p>
+          <RouterLink to="/ai?tab=interview" class="text-link"
+            ><Icon name="Sparkles" :size="16" />由 AI 面试官提问与追问
+            →</RouterLink
+          >
         </div>
       </div>
       <div v-if="activeExams.length" class="resume-banner">

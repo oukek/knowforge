@@ -4,7 +4,14 @@ import AppField from "../components/AppField.vue";
 import AppSelect from "../components/AppSelect.vue";
 import { ref, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { store, modules, questions, typeLabel, moduleFor } from "../store";
+import {
+  store,
+  modules,
+  questions,
+  typeLabel,
+  moduleFor,
+  request,
+} from "../store";
 import Icon from "../components/Icon.vue";
 import QuestionPanel from "../components/QuestionPanel.vue";
 import { matchesQuestionSource } from "../../../shared/question-filters.mjs";
@@ -66,6 +73,29 @@ const pageRows = computed(() =>
 const pages = computed(() => Math.ceil(filtered.value.length / size));
 const current = computed(() =>
   questions.value.find((x) => x.id === route.params.id),
+);
+watch(
+  () => route.params.id,
+  async (id) => {
+    const userId = store.user?.id;
+    if (
+      typeof id !== "string" ||
+      !id.startsWith("ai-") ||
+      questions.value.some((q) => q.id === id)
+    )
+      return;
+    try {
+      const { question } = await request(
+        "/ai/questions/" + encodeURIComponent(id),
+      );
+      if (
+        store.user?.id === userId &&
+        !store.generatedQuestions.some((q) => q.id === id)
+      )
+        store.generatedQuestions.push(question);
+    } catch {}
+  },
+  { immediate: true },
 );
 watch(
   current,
@@ -170,6 +200,7 @@ function random() {
           { value: '', label: '全部来源' },
           { value: 'editorial', label: '原创专题题' },
           { value: 'public', label: '公开面经考点改编' },
+          { value: 'ai', label: '我的 AI 生成题' },
         ]"
       />
       <AppSelect
@@ -206,6 +237,9 @@ function random() {
           <div class="row wrap">
             <span v-if="q.company" class="badge subtle"
               >{{ q.company }} · 考点改编</span
+            >
+            <span v-if="q.provenance === 'ai-generated'" class="badge subtle"
+              >AI 生成</span
             >
             <span
               class="tiny"

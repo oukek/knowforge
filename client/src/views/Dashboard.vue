@@ -316,7 +316,13 @@ const recent = computed(() =>
           :class="r.passed ? 'green-text' : 'amber-text'"
           :size="18" /><span>{{ r.question?.prompt }}</span
         ><small>{{
-          r.kind === "self" ? "开放题自评" : r.passed ? "已答对" : "待巩固"
+          r.kind === "self"
+            ? "开放题自评"
+            : r.kind === "ai"
+              ? "AI 评阅 " + r.score + " 分"
+              : r.passed
+                ? "已答对"
+                : "待巩固"
         }}</small
         ><Icon name="ChevronRight" :size="16"
       /></RouterLink>

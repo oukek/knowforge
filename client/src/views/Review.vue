@@ -93,6 +93,7 @@ const rows = computed(() => {
       ...a,
       id: a.id,
       ...target(a.questionId),
+      kind: a.kind,
     }));
   if (tab.value === "exercises")
     r = (store.state.exerciseAttempts ?? []).map((attempt) => {
@@ -202,11 +203,13 @@ function next() {
               <span class="badge subtle">{{
                 r.kind === "objective"
                   ? "单选"
-                  : r.kind === "self"
-                    ? "开放题自评"
-                    : r.kind === "coding"
-                      ? "代码实验"
-                      : r.kind
+                  : r.kind === "ai"
+                    ? "AI 评阅"
+                    : r.kind === "self"
+                      ? "开放题自评"
+                      : r.kind === "coding"
+                        ? "代码实验"
+                        : r.kind
               }}</span
               ><span class="tiny muted">{{
                 moduleFor(r.moduleId)?.title
@@ -225,9 +228,11 @@ function next() {
               {{
                 r.kind === "self"
                   ? "按要点自评"
-                  : r.passed
-                    ? "答对 / 通过"
-                    : "待巩固"
+                  : r.kind === "ai"
+                    ? "AI 评阅 " + r.score + " 分"
+                    : r.passed
+                      ? "答对 / 通过"
+                      : "待巩固"
               }}
             </p>
           </div>

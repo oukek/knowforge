@@ -6,6 +6,7 @@ import { store, init, dueReviews, signOut } from "./store";
 import Icon from "./components/Icon.vue";
 import { afterLoginPath, loginLocation } from "./auth-routing.js";
 import SearchDialog from "./components/SearchDialog.vue";
+import "./ai.js";
 const route = useRoute();
 const router = useRouter();
 const nav = [
@@ -14,6 +15,7 @@ const nav = [
   ["/practice", "ListChecks", "面试题库"],
   ["/labs", "SquareTerminal", "手写实验室"],
   ["/mock", "Timer", "模拟面试"],
+  ["/ai", "Sparkles", "AI 学习与历史"],
   ["/review", "RotateCcw", "复习与收藏"],
   ["/plan", "CalendarDays", "学习计划"],
 ];
@@ -109,6 +111,12 @@ watch(
         /></RouterLink>
       </div>
       <div class="sidebar-bottom">
+        <RouterLink
+          v-if="store.user?.role === 'admin'"
+          :to="{ name: 'admin' }"
+          :class="{ active: route.name === 'admin' }"
+          ><Icon name="Server" :size="18" />管理后台</RouterLink
+        >
         <RouterLink to="/sources" :class="{ active: active('/sources') }"
           ><Icon name="Database" :size="18" />资料来源与数据</RouterLink
         >

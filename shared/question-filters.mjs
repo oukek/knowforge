@@ -9,7 +9,9 @@ export function matchesQuestionSource(
       (origin === "public"
         ? publicReport
         : origin === "editorial"
-          ? !publicReport
-          : false))
+          ? !publicReport && question.provenance !== "ai-generated"
+          : origin === "ai"
+            ? question.provenance === "ai-generated"
+            : false))
   );
 }

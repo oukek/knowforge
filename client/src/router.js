@@ -10,6 +10,17 @@ const router = createRouter({
   },
   routes: [
     {
+      path: "/ai",
+      component: () => import("./views/AiWorkspace.vue"),
+      meta: { title: "AI 学习与历史" },
+    },
+    {
+      path: "/admin",
+      name: "admin",
+      component: () => import("./views/Admin.vue"),
+      meta: { title: "管理后台", admin: true },
+    },
+    {
       path: "/login",
       name: "login",
       component: () => import("./components/AuthScreen.vue"),
@@ -66,6 +77,7 @@ router.beforeEach(async (to) => {
   await ensureInitialized();
   if (store.error) return true;
   if (!store.user && to.name !== "login") return loginLocation(to.fullPath);
+  if (store.user && to.meta.admin && store.user.role !== "admin") return "/";
   if (store.user && to.name === "login")
     return afterLoginPath(to.query.redirect);
 });

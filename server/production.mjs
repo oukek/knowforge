@@ -13,7 +13,7 @@ try {
 
 const port = Number(process.env.PORT || 6666);
 const gatewayPort = Number(process.env.FRONTEND_PORT || 16666);
-let store;
+let store, ai;
 const servers = [];
 let stopping = false;
 async function shutdown(code = 0) {
@@ -24,6 +24,7 @@ async function shutdown(code = 0) {
   await Promise.all(
     servers.map((server) => new Promise((done) => server.close(done))),
   );
+  await ai?.shutdown();
   await store?.close();
   process.exit(code);
 }
@@ -57,6 +58,7 @@ try {
     },
   });
   store = built.store;
+  ai = built.ai;
   await listen(built.app, port);
   // Keep existing Nginx upstreams working; this gateway serves API/resources only.
   await listen(

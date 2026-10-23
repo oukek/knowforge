@@ -72,9 +72,12 @@ for (const name of runtimeNames) includePackage("", name);
 rmSync(output, { recursive: true, force: true });
 mkdirSync(join(output, "server"), { recursive: true });
 const compiled = await build({
-  entryPoints: ["server/production.mjs"],
+  entryPoints: {
+    index: "server/production.mjs",
+    admin: "server/admin-cli.mjs",
+  },
   outdir: join(output, "server"),
-  entryNames: "index",
+  entryNames: "[name]",
   chunkNames: "chunks/[name]-[hash]",
   outExtension: { ".js": ".mjs" },
   splitting: true,
@@ -154,6 +157,7 @@ writeFileSync(
       version: pkg.version,
       builtAt: new Date().toISOString(),
       entry: "server/index.mjs",
+      adminEntry: "server/admin.mjs",
       frontend: "oss",
       sourceLockSha256: createHash("sha256")
         .update(readFileSync("package-lock.json"))
@@ -164,5 +168,5 @@ writeFileSync(
   ) + "\n",
 );
 console.log(
-  `Backend built: ${output} (one service entry, ${runtimeNames.length} direct runtime dependencies, ${Object.keys(packages).length - 1} locked packages)`,
+  `Backend built: ${output} (service + admin CLI, ${runtimeNames.length} direct runtime dependencies, ${Object.keys(packages).length - 1} locked packages)`,
 );

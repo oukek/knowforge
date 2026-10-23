@@ -52,7 +52,11 @@ async function verifyPassword(password, encoded) {
       : Buffer.alloc(64);
   return timingSafeEqual(actual, expected) && !!hash;
 }
-const publicUser = (user) => ({ id: user.id, username: user.username });
+const publicUser = (user) => ({
+  id: user.id,
+  username: user.username,
+  role: user.role || "user",
+});
 
 export function createAuth(app, store, { secureCookies } = {}) {
   const limits = new Map();
@@ -100,7 +104,11 @@ export function createAuth(app, store, { secureCookies } = {}) {
       "SELECT id,username FROM auth_users WHERE id=?",
       session.userId,
     );
-    return user ? { user, session } : null;
+    if (!user) return null;
+    user.role =
+      (await store.get("SELECT role FROM auth_roles WHERE userId=?", user.id))
+        ?.role || "user";
+    return { user, session };
   }
   function csrf(req, res, auth) {
     const supplied = req.headers["x-csrf-token"];
@@ -169,6 +177,14 @@ export function createAuth(app, store, { secureCookies } = {}) {
       } else if (!(await verifyPassword(password, user?.passwordHash))) {
         return res.status(401).json({ error: "账号或密码错误" });
       }
+      if (action === "login")
+        user.role =
+          (
+            await store.get(
+              "SELECT role FROM auth_roles WHERE userId=?",
+              user.id,
+            )
+          )?.role || "user";
       await store.exec("BEGIN");
       let issued;
       try {
