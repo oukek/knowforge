@@ -2,7 +2,14 @@ import { PRODUCTION_API_ORIGIN } from "../shared/deployment.mjs";
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
 import { createServer } from "node:net";
-import { mkdtempSync, rmSync, readdirSync, readFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  rmSync,
+  readdirSync,
+  readFileSync,
+  mkdirSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { once } from "node:events";
@@ -74,15 +81,14 @@ try {
     stdio: "inherit",
     timeout: 300000,
   });
-  const frontendPort = await freePort();
-  let backendPort = await freePort();
-  while (backendPort === frontendPort) backendPort = await freePort();
+  const backendPort = await freePort();
   child = spawn(process.execPath, ["server/index.mjs"], {
     cwd,
     env: {
       ...process.env,
       NODE_ENV: "production",
-      FRONTEND_PORT: String(frontendPort),
+      // Same port would make the former gateway fail with EADDRINUSE.
+      FRONTEND_PORT: String(backendPort),
       PORT: String(backendPort),
       DB_DRIVER: mysqlCheck ? "mysql" : "sqlite",
       MYSQL_TABLE_PREFIX: mysqlPrefix,
@@ -93,7 +99,7 @@ try {
   exited = once(child, "exit");
   child.stdout.on("data", (chunk) => (output += chunk));
   child.stderr.on("data", (chunk) => (output += chunk));
-  const base = `http://127.0.0.1:${frontendPort}`;
+  const base = `http://127.0.0.1:${backendPort}`;
   let ready = false;
   for (let i = 0; i < 100; i++) {
     if (child.exitCode !== null) throw new Error(output);
@@ -111,7 +117,7 @@ try {
     assert.equal(
       (await fetch(base + path)).status,
       404,
-      "Backend gateway must not host frontend pages",
+      "Backend must not host frontend pages",
     );
   assert.equal((await fetch(`${base}/api/bootstrap`)).status, 401);
   const registration = await fetch(`${base}/api/auth/register`, {
@@ -175,6 +181,70 @@ try {
       timeout: 10000,
     },
   );
+  if (!mysqlCheck) {
+    const bins = join(stage, "pm2-bin");
+    mkdirSync(bins);
+    writeFileSync(
+      join(bins, "pm2"),
+      "#!" +
+        process.execPath +
+        "\nprocess.stdout.write(" +
+        JSON.stringify(
+          JSON.stringify([
+            {
+              name: "smoke-app",
+              pm_id: 7,
+              pm2_env: {
+                pm_cwd: cwd,
+                DB_DRIVER: "sqlite",
+                DB_PATH: join(stage, "smoke.sqlite"),
+              },
+            },
+          ]),
+        ) +
+        ");\n",
+      { mode: 0o755 },
+    );
+    const pm2Env = {
+      ...cliEnv,
+      PATH: bins + ":" + process.env.PATH,
+      DB_DRIVER: "mysql",
+      MYSQL_USER: "wrong-terminal-user",
+      MYSQL_DATABASE: "wrong-terminal-db",
+    };
+    execFileSync(
+      process.execPath,
+      [
+        "server/admin.mjs",
+        "promote",
+        "--id",
+        registeredUser.publicId,
+        "--pm2",
+        "smoke-app",
+      ],
+      { cwd, env: pm2Env, timeout: 10000 },
+    );
+    assert.equal(
+      (
+        await fetch(base + "/api/admin/ai/config", {
+          headers: { Cookie: cookie },
+        })
+      ).status,
+      200,
+    );
+    execFileSync(
+      process.execPath,
+      [
+        "server/admin.mjs",
+        "demote",
+        "--id",
+        registeredUser.publicId,
+        "--pm2",
+        "7",
+      ],
+      { cwd, env: pm2Env, timeout: 10000 },
+    );
+  }
   assert.equal(
     (
       await fetch(base + "/api/admin/ai/config", {

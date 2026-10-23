@@ -1,17 +1,37 @@
 import { loadEnvFile } from "node:process";
 import { createConfiguredStore } from "./database.mjs";
-import { parseAdminCommand, changeAdminRole } from "./admin-command.mjs";
-try {
-  loadEnvFile();
-} catch (error) {
-  if (error.code !== "ENOENT") throw error;
-}
+import { changeAdminRole } from "./admin-command.mjs";
+import {
+  parseAdminInvocation,
+  readPm2Database,
+  databaseContext,
+  applyDatabaseEnvironment,
+} from "./admin-environment.mjs";
 let store;
 try {
-  const selector = parseAdminCommand(process.argv.slice(2));
+  const { selector, pm2 } = parseAdminInvocation(process.argv.slice(2));
+  let context;
+  if (pm2 !== undefined) {
+    context = await readPm2Database(pm2);
+    console.log(
+      "已选择 PM2 进程 " +
+        context.processName +
+        "（pm_id " +
+        context.pmId +
+        "）的数据库配置",
+    );
+  } else {
+    try {
+      loadEnvFile();
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    context = databaseContext(process.env, process.cwd());
+  }
+  applyDatabaseEnvironment(context.env);
   store = await createConfiguredStore({
-    driver: process.env.DB_DRIVER || "sqlite",
-    dbPath: process.env.DB_PATH,
+    driver: context.driver,
+    dbPath: context.dbPath,
   });
   const user = await changeAdminRole(store, selector);
   console.log(

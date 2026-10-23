@@ -3,7 +3,6 @@ import { loadEnvFile } from "node:process";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
 import { createApp } from "./app.mjs";
-import { createFrontend } from "./frontend.mjs";
 
 try {
   loadEnvFile();
@@ -12,7 +11,6 @@ try {
 }
 
 const port = Number(process.env.PORT || 6666);
-const gatewayPort = Number(process.env.FRONTEND_PORT || 16666);
 let store, ai;
 const servers = [];
 let stopping = false;
@@ -60,15 +58,8 @@ try {
   store = built.store;
   ai = built.ai;
   await listen(built.app, port);
-  // Keep existing Nginx upstreams working; this gateway serves API/resources only.
-  await listen(
-    createFrontend({ backendPort: port, serveClient: false }),
-    gatewayPort,
-  );
   console.log(`KnowForge API: http://127.0.0.1:${port}/api`);
-  console.log(
-    `KnowForge API gateway: http://127.0.0.1:${gatewayPort} (frontend hosted on OSS)`,
-  );
+  console.log(`KnowForge 数据库: ${store.driver}`);
 } catch (error) {
   console.error(`KnowForge 启动失败: ${error.message}`);
   await shutdown(1);

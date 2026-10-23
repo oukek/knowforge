@@ -136,3 +136,55 @@ test("后端退出时前端代理返回 502", async (t) => {
   assert.equal(response.status, 502);
   assert.equal((await response.json()).error, "后端暂不可用，请稍后重试");
 });
+
+test("源码生产入口仅监听 API，忽略 FRONTEND_PORT；本地开发代理保留", async (t) => {
+  const { spawn } = await import("node:child_process");
+  const { createServer } = await import("node:net");
+  const { once } = await import("node:events");
+  const reserve = createServer();
+  await new Promise((r) => reserve.listen(0, "127.0.0.1", r));
+  const port = reserve.address().port;
+  await new Promise((r) => reserve.close(r));
+  const child = spawn(process.execPath, ["server/index.mjs"], {
+    env: {
+      ...process.env,
+      DB_DRIVER: "sqlite",
+      DB_PATH: ":memory:",
+      PORT: String(port),
+      FRONTEND_PORT: String(port),
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let logs = "";
+  child.stdout.on("data", (part) => (logs += part));
+  child.stderr.on("data", (part) => (logs += part));
+  const exited = once(child, "exit");
+  t.after(async () => {
+    if (child.exitCode === null) {
+      child.kill("SIGTERM");
+      const timer = setTimeout(() => child.kill("SIGKILL"), 5000);
+      await exited;
+      clearTimeout(timer);
+    }
+  });
+  let ready = false;
+  for (let i = 0; i < 80; i++) {
+    if (child.exitCode !== null) throw Error(logs);
+    try {
+      ready = (
+        await fetch("http://127.0.0.1:" + port + "/api/health", {
+          signal: AbortSignal.timeout(500),
+        })
+      ).ok;
+    } catch {}
+    if (ready) break;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  assert(ready, logs);
+  assert.equal(
+    (await fetch("http://127.0.0.1:" + port + "/login")).status,
+    404,
+  );
+  assert(!logs.includes("前端:"));
+  assert(!logs.includes("gateway"));
+});

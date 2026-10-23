@@ -10,6 +10,7 @@ import { createServer } from "node:http";
 const port = Number(process.env.PORT || 6666);
 const frontendPort = Number(process.env.FRONTEND_PORT || 16666);
 const development = process.argv.includes("--dev");
+const withFrontend = development || process.argv.includes("--preview");
 let app, store, ai;
 try {
   ({ app, store, ai } = await createApp({
@@ -22,11 +23,13 @@ try {
   process.exit(1);
 }
 const server = createServer(app);
-const frontend = createFrontend({
-  backendPort: port,
-  serveClient: !development,
-});
-const frontendServer = createServer(frontend);
+const frontend = withFrontend
+  ? createFrontend({
+      backendPort: port,
+      serveClient: !development,
+    })
+  : null;
+const frontendServer = frontend ? createServer(frontend) : null;
 let vite;
 let stopping = false;
 async function shutdown(code = 0) {
@@ -35,9 +38,9 @@ async function shutdown(code = 0) {
   setTimeout(() => process.exit(1), 5000).unref();
   await vite?.close();
   await Promise.all(
-    [frontendServer, server].map(
-      (httpServer) => new Promise((done) => httpServer.close(done)),
-    ),
+    [frontendServer, server]
+      .filter(Boolean)
+      .map((httpServer) => new Promise((done) => httpServer.close(done))),
   );
   await ai?.shutdown();
   await store.close();
@@ -66,8 +69,10 @@ try {
     frontend.use(vite.middlewares);
   }
   await listen(server, port);
-  await listen(frontendServer, frontendPort);
-  console.log(`KnowForge 前端: http://127.0.0.1:${frontendPort}`);
+  if (frontendServer) {
+    await listen(frontendServer, frontendPort);
+    console.log(`KnowForge 前端: http://127.0.0.1:${frontendPort}`);
+  }
   console.log(`KnowForge 后端 API: http://127.0.0.1:${port}/api`);
   console.log(`KnowForge 数据库: ${store.driver}`);
 } catch (error) {

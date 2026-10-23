@@ -122,7 +122,7 @@ jobs:
             echo
             echo 'Server: Node.js 24, then `npm ci --omit=dev` and `npm start` in the extracted knowforge directory.'
             echo
-            echo 'API: 127.0.0.1:6666. API gateway: 127.0.0.1:16666. Frontend is deployed separately to OSS.'
+            echo 'API and runner resources: 127.0.0.1:6666 only. Point Nginx to this port. Frontend is deployed separately to OSS.'
           } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:

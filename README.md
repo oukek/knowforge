@@ -151,16 +151,16 @@ $env:PORT = "6667"
 npm run dev
 ```
 
-此时访问 `http://127.0.0.1:16667/`。两个端口必须不同；端口被占用时启动会明确报错，不自动递增。环境变量同时适用于开发与构建后的运行方式。
+此时访问 `http://127.0.0.1:16667/`。两个端口必须不同；端口被占用时启动会明确报错，不自动递增。FRONTEND_PORT 仅用于本地开发及预览；生产后端只使用 PORT。
 
-### 构建后运行
+### 构建后本地预览
 
 ```bash
 npm run build
-npm start
+npm run preview
 ```
 
-构建后仍通过 `http://127.0.0.1:16666/` 访问。前端服务托管 `dist/` 并代理后端，后端 API 保持在 6666。运行时需要安装项目依赖，包括本地 Pyodide 文件。
+本地预览通过 `http://127.0.0.1:16666/` 访问，托管 `dist/` 并代理 6666 的后端。`npm start` 用于仅启动 API 的模式，生产默认只监听 `127.0.0.1:6666`，前端由 OSS 提供。运行时需要项目依赖，包括本地 Pyodide 文件。
 
 ### GitHub Actions 手动部署
 
@@ -171,11 +171,11 @@ npm start
 | **Deploy frontend (OSS)** | `.github/workflows/deploy-frontend.yml` | 构建前端，上传 OSS |
 | **Deploy backend (SSH)** | `.github/workflows/build-package.yml` | 编译独立 backend-dist 产物，更新 `/www/wwwroot/knowforge` 并按配置重启 |
 
-两者直接复用仓库已配置的 Secrets 和 Variables，名称保持不变，不需要创建 GitHub Environment，也不需要按工作流重复填写。前端仅使用 `OSS_*` 配置，后端仅使用 `SSH_*` 配置；MySQL 仍读取服务器现有 `.env`。
+两者直接复用仓库已配置的 Secrets 和 Variables，名称保持不变，不需要创建 GitHub Environment，也不需要按工作流重复填写。前端仅使用 `OSS_*` 配置，后端仅使用 `SSH_*` 配置；数据库使用服务器进程的环境变量，可直接配置在 PM2，也可使用可选的 `.env`。
 
 将工作流提交到默认分支后，在 **Actions** 中选择对应名称，点击 **Run workflow**、选择分支并运行。`deploy` 默认开启；取消勾选则前端只构建、后端只生成部署包。两条工作流互不触发，可以单独运行。修改接口、知识数据或 Worker 时需要部署后端；两端都有改动时，对同一个 commit 先部署后端，再部署前端。
 
-构建产物在对应运行的 **Artifacts** 中保留 30 天。后端独立运行包可手动解压后运行 `npm ci --omit=dev` 和 `npm start`。包中只有编译后的 API 服务、题库、实验及下载资源和后端专用依赖清单，不包含前端 dist、原始源码树或整个 docs；原有 .env、服务入口和 16666 API 网关保持兼容。
+构建产物在对应运行的 **Artifacts** 中保留 30 天。后端独立运行包可手动解压后运行 `npm ci --omit=dev` 和 `npm start`。包中只有编译后的 API 服务、题库、实验及下载资源和后端专用依赖清单，不包含前端 dist、原始源码树或整个 docs；保留可选 .env 和既有服务入口。生产已移除 16666 网关，Nginx 必须回源 `http://127.0.0.1:6666`。
 
 本地执行 `npm run build:backend` 可检查 `backend-dist/`；执行 `npm run package:deploy` 构建并生成后端压缩包。服务器运行的是编译产物，不执行构建。配置项、重启命令与正式域名配置详见 [服务器部署](docs/服务器部署.md)。
 
@@ -185,7 +185,7 @@ npm start
 
 | 环境变量 | 默认值 | 用途 |
 | --- | --- | --- |
-| `FRONTEND_PORT` | `16666` | 浏览器页面、代理入口与 HMR 端口 |
+| `FRONTEND_PORT` | `16666` | 仅本地 dev / preview 的页面、代理与 HMR 端口，生产不监听 |
 | `PORT` | `6666` | 后端 API 与运行资源端口 |
 | `DB_DRIVER` | `sqlite` | `mysql` 或 `sqlite`，显式选择存储引擎 |
 | `DB_PATH` | `runtime/study.sqlite` | SQLite 数据库路径，MySQL 模式忽略 |
@@ -201,7 +201,7 @@ npm start
 DB_PATH=runtime/personal.sqlite npm run dev
 ```
 
-启动入口会加载项目根目录 `.env`，已有进程环境变量优先。可以复制 `.env.example` 为 `.env`，填写数据库信息后运行 `npm run dev` 或 `npm start`。`.env` 已排除 Git 与部署包。
+启动入口读取进程环境变量，支持 PM2 面板或 ecosystem 配置；项目根目录 `.env` 为可选补充，已有进程环境变量优先。可以复制 `.env.example` 为 `.env`，填写数据库信息后运行 `npm run dev` 或 `npm start`。`.env` 已排除 Git 与部署包。
 
 服务器使用已有 MySQL 时，设置 `DB_DRIVER=mysql` 并填写 `MYSQL_*`。应用自动在指定库中创建账号、会话和个人学习表，不创建数据库；账号需要该库的建表、查询、插入、更新、删除权限。连接失败会终止启动，不会悄悄切回 SQLite。配置示例、TLS 和迁移步骤见 [MySQL 部署配置](docs/服务器部署.md#mysql-数据库配置)。
 
@@ -213,7 +213,7 @@ AI 由管理员统一配置，用户无需填写 Key，也无需打开个人 AI 
 
 首次启用步骤：
 
-1. 在服务器生成一次 32 字节加密密钥，将结果写入 `.env` 的 `AI_ENCRYPTION_KEY`，重启后端。密钥只放服务器，保持稳定并单独备份。
+1. 在服务器生成一次 32 字节加密密钥，将结果配置为 PM2 环境变量 `AI_ENCRYPTION_KEY`（或写入可选 `.env`），重启后端。密钥只放服务器，保持稳定并单独备份。
 
    ```bash
    node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
@@ -227,6 +227,14 @@ AI 由管理员统一配置，用户无需填写 Key，也无需打开个人 AI 
    # 服务器编译产物目录 /www/wwwroot/knowforge
    node server/admin.mjs promote --id 12345678
    ```
+
+   使用 PM2 配置数据库且没有 `.env` 时，终端命令不会自动继承应用环境。先用 `pm2 list` 找到进程名或 pm_id，再执行：
+
+   ```bash
+   node server/admin.mjs promote --id 12345678 --pm2 knowforge
+   ```
+
+   将 `knowforge` 替换为真实 PM2 进程名或数字 ID，并使用相同的系统用户和 `PM2_HOME`。命令只读取该进程的数据库配置，不输出凭据、不重启应用。缺少数据库配置或指定 SQLite 文件不存在时会停止，不会误建空库。
 
    `demote --id 12345678` 可撤销管理员身份，`--id` 也兼容内部 UUID。原登录账号方式继续支持，可明确写 `promote --username 登录账号`；8 位纯数字的登录账号需使用 `--username`，避免与用户 ID 混淆。公开注册不能指定角色；管理员身份从后端校验，刷新页面生效。
 

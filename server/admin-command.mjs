@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { ensureProfile } from "./account-profile.mjs";
 
 export const adminUsage =
-  "用法：node server/admin.mjs promote|demote --id 8位用户ID\n兼容：promote|demote --username 登录账号；--id 也支持内部 UUID";
+  "用法：node server/admin.mjs promote|demote --id 8位用户ID [--pm2 进程名或pm_id]\n兼容：promote|demote --username 登录账号；--id 也支持内部 UUID";
 export function parseAdminCommand(args) {
   const [command, ...rest] = args;
   if (!["promote", "demote"].includes(command)) throw Error(adminUsage);
@@ -52,7 +52,7 @@ export async function changeAdminRole(store, selector) {
       throw Error(
         "未找到该" +
           (type === "id" ? "用户 ID" : "登录账号") +
-          "。请从网站个人中心复制；同时确认当前目录 .env 的数据库与网站一致。",
+          "。请从网站个人中心复制；同时确认命令使用的数据库与网站一致（PM2 部署可添加 --pm2 进程名）。",
       );
     await store.exec("BEGIN");
     try {
