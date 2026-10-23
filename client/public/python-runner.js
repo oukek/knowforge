@@ -1,6 +1,11 @@
 // Pyodide 运行在独立 Worker；资源来自本地 node_modules，不依赖外部 CDN。
 let runtime;
-async function initializePython() {
+async function initializePython(reloadRuntime = false) {
+  self.postMessage({
+    type: "status",
+    stage: "manifest",
+    text: "正在获取 Python 资源清单…",
+  });
   const manifestResponse = await fetch("/python-runtime/manifest.json", {
     cache: "no-store",
   });
@@ -26,6 +31,17 @@ async function initializePython() {
     "python_stdlib.zip",
     "pyodide-lock.json",
   ];
+  self.postMessage({
+    type: "status",
+    stage: "download",
+    text: `资源清单已确认，准备加载 Python ${manifest.version}`,
+    resources: files.map((name) => ({
+      name,
+      loaded: 0,
+      total: 0,
+      status: "pending",
+    })),
+  });
   // Warm versioned HTTP caches first, with progress and explicit HTTP errors.
   await Promise.all(
     files.map(async (name) => {
@@ -36,9 +52,20 @@ async function initializePython() {
         timeout = setTimeout(() => controller.abort(), 60000);
       };
       reset();
+      let bytes = 0,
+        total = 0;
+      const report = (status, text, log = true) =>
+        self.postMessage({
+          type: "status",
+          stage: "download",
+          text,
+          log,
+          resource: { name, loaded: bytes, total, status },
+        });
+      report("loading", `正在读取 ${name}`);
       try {
         const response = await fetch(manifest.base + name, {
-          cache: "force-cache",
+          cache: reloadRuntime ? "reload" : "force-cache",
           signal: controller.signal,
         });
         if (!response.ok) throw new Error(`${name} HTTP ${response.status}`);
@@ -51,8 +78,10 @@ async function initializePython() {
           throw new Error(
             `${name} MIME 错误，应为 application/wasm；检查 Nginx/CDN 回源`,
           );
-        let bytes = 0,
-          reported = 0;
+        // Encoded Content-Length describes compressed bytes; read() yields decoded bytes.
+        if (!response.headers.get("content-encoding"))
+          total = Number(response.headers.get("content-length")) || 0;
+        let reported = 0;
         if (response.body) {
           const reader = response.body.getReader();
           while (true) {
@@ -61,18 +90,20 @@ async function initializePython() {
             bytes += value.byteLength;
             reset();
             if (performance.now() - reported > 500) {
-              self.postMessage({
-                type: "status",
-                text: `Python ${manifest.version} · ${name} 已读取 ${(bytes / 1048576).toFixed(1)} MB`,
-              });
+              report(
+                "loading",
+                `${name} 已读取 ${(bytes / 1048576).toFixed(1)} MB`,
+                false,
+              );
               reported = performance.now();
             }
           }
-        } else await response.arrayBuffer();
+        } else bytes = (await response.arrayBuffer()).byteLength;
+        report("ready", `${name} 已就绪 · ${(bytes / 1048576).toFixed(2)} MB`);
       } catch (error) {
-        throw new Error(
-          `${name} 下载失败：${error.name === "AbortError" ? "60 秒无网络进展" : error.message}`,
-        );
+        const message = `${name} 下载失败：${error.name === "AbortError" ? "60 秒无网络进展" : error.message}`;
+        report("failed", message);
+        throw new Error(message);
       } finally {
         clearTimeout(timeout);
       }
@@ -80,6 +111,7 @@ async function initializePython() {
   );
   self.postMessage({
     type: "status",
+    stage: "initialize",
     text: `Python ${manifest.version} · 编译 WebAssembly 与初始化标准库…`,
   });
   importScripts(manifest.base + "pyodide.js");
@@ -101,9 +133,13 @@ self.onmessage = async ({ data }) => {
     self.postMessage({ type: "console", entry });
   }
   try {
-    self.postMessage({ type: "status", text: "正在加载本地 Python 运行环境…" });
+    self.postMessage({
+      type: "status",
+      stage: "connect",
+      text: "Python 运行服务已连接",
+    });
     if (!runtime) {
-      runtime = await initializePython();
+      runtime = await initializePython(data.reloadRuntime === true);
     }
     runtime.setStdout({ batched: (text) => output("log", text) });
     runtime.setStderr({ batched: (text) => output("error", text) });

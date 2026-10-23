@@ -1,0 +1,1881 @@
+[
+  {
+    "id": "report-byte-paged-file",
+    "company": "字节跳动",
+    "lessonId": "ai-tools-primer",
+    "type": "scenario",
+    "prompt": "代码 Agent 读取一万行文件，每次最多返回两千行，工具响应应如何让模型判断是否继续读取？",
+    "answer": "返回文件标识和版本、半开行范围、实际内容、是否截断及下一游标，明确这是局部视图。不存在、空文件、无权限和读取失败使用不同内部状态，不能都返回空字符串。模型可以申请下一段，但宿主限制总读取量、时间和路径权限。\n\n文件在两次读取间变化时拒绝混合版本并要求重新定位；对超大行、符号链接和重复游标做测试。验收不仅看工具有返回，还看后续回答是否基于完整必要范围，不能把首段当整个文件。",
+    "rubric": [
+      "范围与截断",
+      "来源版本",
+      "错误与权限",
+      "预算与并发变更"
+    ],
+    "followUps": [
+      "文件改动后游标还能复用吗？",
+      "怎样避免模型反复读取同一段？"
+    ],
+    "keywords": [
+      "字节跳动",
+      "工具分页契约",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-byte-sep"
+      ],
+      "topic": "工具分页契约",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-byte-runtime-duties",
+    "company": "字节跳动",
+    "lessonId": "ai-agent-primer",
+    "type": "scenario",
+    "prompt": "面试官要求把你的 Coding Agent 拆为“模型决定”和“宿主执行”，你会如何划分并验证安全边界？",
+    "answer": "模型可以提出检索、补丁和验证计划，宿主负责身份、工具白名单、路径和参数校验、预算与真实进程执行。测试、退出码、diff 与业务验收决定结果，模型说完成只是候选结论。\n\n每个行动记录调用身份、输入版本、结果和停止原因。构造未知工具、越界路径、补丁上下文过期与测试失败样本，证明执行层会拒绝或返回可诊断观察。原型没实现的能力应如实说明，不能把提示里的安全要求算作已上线的沙箱。",
+    "rubric": [
+      "决策执行分层",
+      "强制权限",
+      "事实验证",
+      "异常测试"
+    ],
+    "followUps": [
+      "只限制命令字符串够吗？",
+      "如果工具已执行但响应丢失怎么办？"
+    ],
+    "keywords": [
+      "字节跳动",
+      "Harness 责任",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-byte-sep"
+      ],
+      "topic": "Harness 责任",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-byte-ai-review",
+    "company": "字节跳动",
+    "lessonId": "ai-application-anatomy",
+    "type": "scenario",
+    "prompt": "AI 生成补丁后构建通过，你的 Review 还会检查什么，怎样证明不是只会让模型自评？",
+    "answer": "先对照需求逐条检查行为变化，再看 diff 范围、鉴权与数据边界、异常路径、兼容性和依赖影响。构建通过只覆盖语法与部分类型，不说明业务正确。针对真实风险执行有意义的测试，必要时用反例、并发和资源测量。\n\n保留基线已有失败，区分新失败和环境未就绪；检查测试是否只是复写实现。若使用模型审查，将其视为辅助意见，关键结论需代码、运行证据或人工核验，不能用两轮自评代替验证。",
+    "rubric": [
+      "需求与 diff",
+      "业务风险",
+      "独立运行证据",
+      "已有失败归属"
+    ],
+    "followUps": [
+      "测试通过但需求理解错了如何发现？",
+      "如何衡量生成代码对返工的影响？"
+    ],
+    "keywords": [
+      "字节跳动",
+      "代码审查",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-byte-sep"
+      ],
+      "topic": "代码审查",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-byte-hybrid-score",
+    "company": "字节跳动",
+    "lessonId": "llm-hybrid",
+    "type": "scenario",
+    "prompt": "你的知识库同时返回 BM25 分数和向量余弦分数，为什么不直接相加，怎样公平比较融合方案？",
+    "answer": "两类分数的尺度、分布和语义不同，直接相加会让一侧数值范围主导。可以从按排名融合的 RRF 等基线开始，或在验证集上校准分数与权重，不能把算法名称当收益证明。\n\n固定语料、问题、权限、候选量和最终上下文预算，比较关键词、向量、融合、融合加重排。按编号、语义改写、日期和无答案切片测覆盖、排序、支持率、时延与成本；同时保留具体坏例和版本。",
+    "rubric": [
+      "分数尺度",
+      "融合基线",
+      "固定变量消融",
+      "切片与最终支持"
+    ],
+    "followUps": [
+      "RRF 的常数怎样影响头部排名？",
+      "融合覆盖高但答案变差怎么办？"
+    ],
+    "keywords": [
+      "字节跳动",
+      "混合检索",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-byte-sep"
+      ],
+      "topic": "混合检索",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-byte-synthetic-eval",
+    "company": "字节跳动",
+    "lessonId": "agent-eval-experiments",
+    "type": "scenario",
+    "prompt": "Agent 评估集大多由模型生成，怎样判断它覆盖真实用户问题且没有自问自答的偏差？",
+    "answer": "合成样本可补齐边界，但先按真实任务和风险建立分层，再抽样人工核验问题、黄金证据和评分标准。检查近重复、模板偏差、实体泄漏以及生成器和裁判共享错误，保留未参与提示调优的持出集。\n\n加入真实流量坏例、无答案、工具失败和越权样本，分别测最终结果与轨迹。报告来源比例、样本量、切片和评分器一致性；不能让同一模型生成问题、答案并给自己满分后宣布可靠。",
+    "rubric": [
+      "真实分层",
+      "人工核验",
+      "泄漏与共同错误",
+      "持出轨迹评估"
+    ],
+    "followUps": [
+      "模型裁判有长度偏差怎么办？",
+      "某个高风险切片样本太少如何处理？"
+    ],
+    "keywords": [
+      "字节跳动",
+      "评估集",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-byte-sep"
+      ],
+      "topic": "评估集",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-byte-tool-storage",
+    "company": "字节跳动",
+    "lessonId": "llm-context-engineering",
+    "type": "scenario",
+    "prompt": "十轮工具调用每轮返回大量日志，你会把什么存数据库、什么放当前上下文、什么只留来源指针？",
+    "answer": "任务目标、运行状态、操作身份、必要证据版本和审批决定要可持久恢复；敏感全文和庞大调试日志按用途与保留策略另存，不默认塞进每轮上下文。当前输入只保留决策所需字段、摘要、来源和未决事项，并明确截断。\n\n恢复时从权威业务记录查已发生副作用，不依赖摘要推测。对压缩前后检查同一目标、权限、确认和幂等不变量；记录选择原因，才能区分存储遗漏与模型误用。",
+    "rubric": [
+      "状态与证据持久化",
+      "上下文选择",
+      "敏感数据保留",
+      "压缩与恢复不变量"
+    ],
+    "followUps": [
+      "为什么不能把全部日志都长期保存？",
+      "摘要与业务账本冲突时相信谁？"
+    ],
+    "keywords": [
+      "字节跳动",
+      "存储策略",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-byte-sep"
+      ],
+      "topic": "存储策略",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-tencent-label-routing",
+    "company": "腾讯",
+    "lessonId": "ai-embedding-primer",
+    "type": "scenario",
+    "prompt": "自然语言描述要映射到业务标签，向量检索总把相近但互斥的类别混在一起，你如何改进并验收？",
+    "answer": "先检查标签定义与互斥条件，用业务范围、实体字段和类别层次缩小候选，再在相同空间做匹配或重排。相似度只提供候选相关性，不直接证明标签正确；低依据或多义输入应询问、拒识或交人工。\n\n建立口语、错别字、近义互斥、无匹配和长尾标签集，报告标签准确、槽位、拒识和误触发工具。固定标签版本与样本，做分组前后对照，避免只展示几条成功例。",
+    "rubric": [
+      "标签边界",
+      "候选范围",
+      "不确定分支",
+      "独立切片"
+    ],
+    "followUps": [
+      "如何处理新标签上线？",
+      "相似度阈值能跨模型复用吗？"
+    ],
+    "keywords": [
+      "腾讯",
+      "标签映射",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-tencent-oct"
+      ],
+      "topic": "标签映射",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-tencent-metric-denominator",
+    "company": "腾讯",
+    "lessonId": "ai-evaluation-primer",
+    "type": "scenario",
+    "prompt": "简历写 Agent 准确率 95%，面试官追问分母、评分者和中间步骤，你应该怎样给出可信口径？",
+    "answer": "先说明评价对象和数据来源：完整任务还是单次回答，拒答、工具失败是否计入，黄金标准由谁确认。将结构、事实支持、工具选择、参数、授权和最终业务成功分开，开放题说明人工或模型裁判及一致性验证。\n\n提供样本量、切片、版本与误差，不用一个平均数覆盖所有任务。若未测某指标就说明未测及补测方法，不能临场编数字；失败成本与风险违规同样纳入发布判据。",
+    "rubric": [
+      "对象与分母",
+      "评分标准",
+      "轨迹与业务",
+      "样本版本与未知项"
+    ],
+    "followUps": [
+      "同一题跑十次算十个独立任务吗？",
+      "拒答率高会如何影响 95%？"
+    ],
+    "keywords": [
+      "腾讯",
+      "评估口径",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-tencent-oct"
+      ],
+      "topic": "评估口径",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-tencent-plan-latency",
+    "company": "腾讯",
+    "lessonId": "ai-workflow-patterns",
+    "type": "scenario",
+    "prompt": "你把 ReAct 改为 Plan-and-Execute 后声称延迟下降，怎样证明收益来自编排而非换了模型或减少了任务难度？",
+    "answer": "固定任务、模型、工具快照和预算，用配对运行分解规划、决策、工具、排队与重规划耗时。比较成功率、模型轮次、关键路径、费用和失败类型，不能只看首 token 或单个最快请求。\n\n计划模式可能减少决策调用，也可能因计划失效增加重跑。加入新事实改变路径、工具超时与长任务样本，说明适用范围；若路径完全固定，还应比较普通工作流基线。",
+    "rubric": [
+      "固定条件",
+      "分阶段计时",
+      "质量成本护栏",
+      "固定流程基线"
+    ],
+    "followUps": [
+      "计划中途过期如何处理？",
+      "并行工具耗时能直接相加吗？"
+    ],
+    "keywords": [
+      "腾讯",
+      "Plan 与 ReAct",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-tencent-oct"
+      ],
+      "topic": "Plan 与 ReAct",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-tencent-fixed-space",
+    "company": "腾讯",
+    "lessonId": "ai-agent-primer",
+    "type": "scenario",
+    "prompt": "问题和动作空间都很固定，为什么还要用自主 Agent？如果继续使用，你会限定哪部分自由度？",
+    "answer": "先判断动态决策是否必要。固定步骤和强约束用显式工作流与函数更易验证，模型可只承担意图解析或解释。若确有未知信息驱动分支，将动态选择局限在明确候选工具和预算内，外层认证、审批与提交保持确定性。\n\n与规则或单次模型基线比较成功、延迟、维护和人工成本，只有可测收益才保留 Agent。说明异常与需要用户输入的停止分支，不能为了技术展示扩大自主权。",
+    "rubric": [
+      "必要性",
+      "确定性外壳",
+      "可测基线",
+      "停止边界"
+    ],
+    "followUps": [
+      "什么需求变化会使 Agent 更合适？",
+      "增加第二个 Agent 如何证明价值？"
+    ],
+    "keywords": [
+      "腾讯",
+      "固定工作流",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-tencent-oct"
+      ],
+      "topic": "固定工作流",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-tencent-skill-interface",
+    "company": "腾讯",
+    "lessonId": "ai-protocol-frameworks",
+    "type": "scenario",
+    "prompt": "把 REST 接口说明写成 Skill 文档，让模型照着调用，与注册工具或 MCP 的差异体现在哪里？",
+    "answer": "Skill 说明如何完成任务，工具 schema 描述可调用能力与参数，MCP 处理选定版本的连接与互操作，REST 承载实际业务接口。文档可以指导选择，但执行器仍需解析、授权、调用关联和错误处理，不能直接信任生成的任意 URL。\n\n先按真实互通需求选层，固定 SDK 和协议版本；没有多客户端需求时直接工具适配也可能足够。测试错参数、无权限、恶意说明和不兼容响应，明确框架与协议都不代替业务权限。",
+    "rubric": [
+      "职责分层",
+      "真实互通需求",
+      "版本",
+      "执行授权"
+    ],
+    "followUps": [
+      "工具有几百个如何选定义？",
+      "协议发现到的能力是否都能执行？"
+    ],
+    "keywords": [
+      "腾讯",
+      "Skill 与 MCP",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-tencent-oct"
+      ],
+      "topic": "Skill 与 MCP",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-tencent-ip-port",
+    "company": "腾讯",
+    "lessonId": "js-number-bigint",
+    "type": "scenario",
+    "prompt": "要把 IPv4 与 16 位端口打包为整数并能无损还原，JavaScript 中如何选类型、校验和编写边界测试？",
+    "answer": "先明确编码为高 32 位 IPv4、低 16 位端口，总共使用 48 位；IPv6 不在此契约。若统一以 uint64 接口交换或后续扩位，使用 BigInt 并以十进制字符串传 JSON。不要用 JS 位运算符处理整个值，它们对 Number 按 32 位运算；48 位整数本身仍在安全整数范围内，要区分这两个问题。\n\n逐段校验 IPv4 四个十进制整数 0–255，端口为 0–65535 整数，再移位或乘法编码。测试 0、最大值、非法段、负数、端口溢出及 encode/decode 往返。题目原文仅给编码主题，具体布局与严格输入格式是本题新增约定。",
+    "rubric": [
+      "48 位布局",
+      "32 位运算与安全整数区分",
+      "BigInt 交换",
+      "校验与往返"
+    ],
+    "followUps": [
+      "为什么 48 位可安全表示却仍可能被位运算截断？",
+      "如何支持 IPv6？"
+    ],
+    "keywords": [
+      "腾讯",
+      "IPv4 与端口编码",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-tencent-oct"
+      ],
+      "topic": "IPv4 与端口编码",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-alibaba-code-navigation",
+    "company": "阿里巴巴",
+    "lessonId": "ai-tools-primer",
+    "type": "scenario",
+    "prompt": "代码库很大时，Agent 应先把整个仓库向量化，还是先按文件和符号定位？怎样证明检索到的代码仍是当前事实？",
+    "answer": "先读仓库约定、构建和目录，按文件名、符号、关键词及调用关系逐步收敛；语义索引可补充模糊定位，不能代替当前文件读取。索引带仓库、基线 commit 和内容版本，命中后在受限工作区重新读必要范围。\n\n修改或索引滞后时标记失效，不把旧片段直接用于补丁。对重命名、同名符号、跨模块调用和新增未索引文件测试，记录查找成功与上下文成本，而非只看向量命中。",
+    "rubric": [
+      "分层定位",
+      "版本与当前读取",
+      "失效策略",
+      "反例评测"
+    ],
+    "followUps": [
+      "符号查找和语义检索各适合什么？",
+      "新增文件未进入索引怎么办？"
+    ],
+    "keywords": [
+      "阿里巴巴",
+      "代码定位与修改",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-alibaba-aug"
+      ],
+      "topic": "代码定位与修改",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-alibaba-patch-conflict",
+    "company": "阿里巴巴",
+    "lessonId": "agent-sandbox-capabilities",
+    "type": "scenario",
+    "prompt": "Agent 准备应用补丁时发现文件已被开发者修改，怎样保护现有工作又继续推进？",
+    "answer": "记录任务基线与已有改动，补丁携带预期上下文或内容版本。应用时校验匹配，不匹配就返回冲突并重新读取，不能强行覆盖或整仓库重置。需要隔离时采用独立分支或 worktree，并明确共享仓库对象不等于同一检出目录。\n\n只整理本任务 diff，相关测试与人工变更共同保留；回退限定本次改动范围。验收检查用户未提交内容、并发变更、重试和部分补丁失败，提交、推送和合并是独立授权动作。",
+    "rubric": [
+      "基线与已有改动",
+      "条件补丁",
+      "隔离与有限回退",
+      "独立授权"
+    ],
+    "followUps": [
+      "两个任务改同一函数怎么协调？",
+      "测试失败时能否回滚所有文件？"
+    ],
+    "keywords": [
+      "阿里巴巴",
+      "版本与工作区",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-alibaba-aug"
+      ],
+      "topic": "版本与工作区",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-alibaba-truncated-code",
+    "company": "阿里巴巴",
+    "lessonId": "ai-knowledge-indexing",
+    "type": "scenario",
+    "prompt": "RAG 命中了函数中间几行，缺少签名和异常分支，Agent 应如何补上下文而不把整个仓库塞进提示？",
+    "answer": "片段保存路径、符号、范围和版本，按结构获取完整函数、必要调用点及类型，再按预算选择。分块时保留代码边界或提供邻块/父节点扩展，明确内容是否截断。不能把局部片段当成完整行为。\n\n在固定代码任务集比较窗口分块与结构补读，记录定位、修改正确率和输入成本。加入长函数、生成代码、跨文件约定与重命名；检索后始终以当前文件核验，防旧索引误导。",
+    "rubric": [
+      "结构与来源",
+      "按需扩展",
+      "预算",
+      "当前版本验证"
+    ],
+    "followUps": [
+      "如何避免邻块无限扩张？",
+      "表格和代码分块有什么不同？"
+    ],
+    "keywords": [
+      "阿里巴巴",
+      "索引完整性",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-alibaba-aug"
+      ],
+      "topic": "索引完整性",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-alibaba-submit-evidence",
+    "company": "阿里巴巴",
+    "lessonId": "ai-application-anatomy",
+    "type": "scenario",
+    "prompt": "代码 Agent 返回“已提交”，你需要哪些证据区分写文件、暂存、提交、推送和合并？",
+    "answer": "将这些动作建成独立状态：工作区 diff、暂存区内容、commit ID、远端引用/PR 状态和合并结果。每步读取命令结果与退出码，钩子失败或网络不确定要如实报告，不能从模型文字推断。\n\n仅在已授权范围执行后续动作，保留用户无关变更；重试前查询真实 Git 状态避免重复或误覆盖。交付包含需求验证、测试结果和剩余问题，commit 存在也不代表功能正确或已经上线。",
+    "rubric": [
+      "状态证据",
+      "退出码与不确定性",
+      "范围授权",
+      "功能验证"
+    ],
+    "followUps": [
+      "推送超时如何判断是否成功？",
+      "提交钩子失败应如何处理？"
+    ],
+    "keywords": [
+      "阿里巴巴",
+      "工具执行结果",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-alibaba-aug"
+      ],
+      "topic": "工具执行结果",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-alibaba-harness-budget",
+    "company": "阿里巴巴",
+    "lessonId": "agent-tool-scheduler",
+    "type": "scenario",
+    "prompt": "小需求在 Code Agent 中被拆成很多轮且反复读写，Harness 可以怎样限制并验证任务收敛？",
+    "answer": "先把需求变成可检查完成条件，再限制总时间、轮数、工具读取量、并发和费用；对重复行动、重复错误和计划无进展设置诊断与停止。预算包含排队与重试，不能每次调用都重置。\n\n宿主记录输入版本、行动与验证结果，必要时请求缺失信息或转人工，停止时保留已完成产物与未决项。用工具持续失败、需求歧义和上下文膨胀测试，不能只在提示里要求高效。",
+    "rubric": [
+      "验收条件",
+      "统一预算",
+      "无进展",
+      "可恢复停止"
+    ],
+    "followUps": [
+      "达到预算后该给用户什么？",
+      "子任务怎样共享总费用限额？"
+    ],
+    "keywords": [
+      "阿里巴巴",
+      "Harness",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-alibaba-aug"
+      ],
+      "topic": "Harness",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-alibaba-peft-experiment",
+    "company": "阿里巴巴",
+    "lessonId": "llm-adaptation-data",
+    "type": "scenario",
+    "prompt": "面试官质疑你的 PEFT 方法提升其实来自更多数据或更大模型，你如何重新设计公平实验？",
+    "answer": "固定基座、数据切分、模板、训练预算和评估脚本，先逐个变量做对照，再在需要时研究交互。记录 rank、目标模块、学习率与随机种子，进行重复或任务配对比较，不能跨不同测试集比较单个最优点。\n\n同时报告质量、训练资源、推理代价和通用回归，持出实体与时间防泄漏。若预算不完全可比，明确限制并给成本归一化分析，避免把基座或数据差异归因给方法。",
+    "rubric": [
+      "控制混杂",
+      "重复与持出",
+      "完整代价",
+      "限制透明"
+    ],
+    "followUps": [
+      "如何同时比较等计算与等数据预算？",
+      "测试集被反复用于调参会怎样？"
+    ],
+    "keywords": [
+      "阿里巴巴",
+      "阿里 PEFT 公平实验",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-onlyar-autumn"
+      ],
+      "topic": "阿里 PEFT 公平实验",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-kuaishou-generated-code",
+    "company": "快手",
+    "lessonId": "fde-discovery",
+    "type": "scenario",
+    "prompt": "团队用 AI 生成代码行数证明研发提效，你会怎样设计能反映真实收益的指标？",
+    "answer": "代码行数只是活动量，可能包含删除、重写和低质量膨胀。定义从需求到合格交付的完整时间、人工审查、返工、缺陷与维护成本，明确生成、采纳、修改后保留等统计口径。\n\n固定任务难度和团队样本，比较同类需求或受控灰度，记录 AI 使用率与最终收益而非推断因果。加入安全和线上故障护栏，不能靠增加代码量刷分；同时说明指标采集的隐私和盲区。",
+    "rubric": [
+      "活动量与价值",
+      "完整人力成本",
+      "可比任务",
+      "质量护栏"
+    ],
+    "followUps": [
+      "接受率为什么也不等于生产提效？",
+      "如何避免任务选择偏差？"
+    ],
+    "keywords": [
+      "快手",
+      "AI 效能口径",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-kuaishou-sep"
+      ],
+      "topic": "AI 效能口径",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-kuaishou-session-isolation",
+    "company": "快手",
+    "lessonId": "ai-stream-consistency",
+    "type": "scenario",
+    "prompt": "Data Agent 多个会话共享一个消息池，出现 A 用户看到 B 任务结果，应该怎样重构身份和状态？",
+    "answer": "按认证租户、用户、会话与运行代次隔离状态和事件，后端写入与订阅都检查归属，不能仅在前端按到达顺序筛选。事件携带稳定身份和序号，旧运行结果不得覆盖新运行；缓存与队列键同样包含必要作用域。\n\n测试并行会话、相同业务 ID、重连、标签页切换与注销，校验数据库、缓冲和 UI 三层。修复后审计可能泄漏范围，不能把串数据当成普通渲染闪烁。",
+    "rubric": [
+      "多层身份",
+      "订阅授权",
+      "运行版本",
+      "并发安全验收"
+    ],
+    "followUps": [
+      "仅增加 conversation_id 为什么可能仍不够？",
+      "退出登录后的迟到事件怎么办？"
+    ],
+    "keywords": [
+      "快手",
+      "会话隔离",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-kuaishou-sep"
+      ],
+      "topic": "会话隔离",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-kuaishou-buffer",
+    "company": "快手",
+    "lessonId": "node-stream-pressure",
+    "type": "scenario",
+    "prompt": "Agent 持续输出而手机消费很慢，事件缓冲越来越大，你会怎样设内存上界并支持恢复？",
+    "answer": "限制每任务和每连接缓冲、事件大小与保留窗口，向上游传播背压或降低非关键输出频率。持久任务日志与连接缓冲分开，游标过期时提供带一致边界的快照，而非无限缓存。\n\n取消与断开应清理无用订阅，但不能误删仍需恢复的任务事实。模拟慢消费者、重连和长任务，观测队列、RSS、丢弃与恢复率；用明确 gap/expired 状态替代静默丢字。",
+    "rubric": [
+      "有界队列",
+      "背压",
+      "日志快照",
+      "慢消费者实验"
+    ],
+    "followUps": [
+      "可以丢弃哪些事件？",
+      "快照与增量怎样避免重字？"
+    ],
+    "keywords": [
+      "快手",
+      "事件缓冲",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-kuaishou-sep"
+      ],
+      "topic": "事件缓冲",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-kuaishou-index-eval",
+    "company": "快手",
+    "lessonId": "llm-rag-diagnostics",
+    "type": "scenario",
+    "prompt": "你实现了 Codebase Index，怎样证明它比直接关键词搜索更有价值，而不只展示能搜到一个函数？",
+    "answer": "建立包含同名符号、跨模块依赖、自然语言需求、重命名和新增代码的任务集，标注必要位置与最终修改验收。对照关键词、符号索引、语义以及组合方案，固定仓库版本和上下文预算。\n\n分开测定位覆盖、排序、当前版本有效性、最终任务成功、时延和维护成本。索引查询分数上升不一定改善修改质量；保留坏例与消融，说明哪些任务简单搜索更合适。",
+    "rubric": [
+      "代表性任务",
+      "固定基线",
+      "阶段与最终指标",
+      "维护与坏例"
+    ],
+    "followUps": [
+      "索引更新延迟怎样计入质量？",
+      "黄金位置不唯一怎么标注？"
+    ],
+    "keywords": [
+      "快手",
+      "Codebase Index",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-kuaishou-sep"
+      ],
+      "topic": "Codebase Index",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-kuaishou-fullstack",
+    "company": "快手",
+    "lessonId": "ai-application-anatomy",
+    "type": "scenario",
+    "prompt": "前端背景转 AI 全栈，面试中怎样用一个项目证明后端与交付能力，而不是只展示聊天界面？",
+    "answer": "沿用户任务讲清认证和资源授权、接口契约、数据建模、队列与并发、持久状态、幂等、取消、监控和部署回滚。用一个真实故障展示如何从 UI 追到 API、任务与业务记录，以及如何验证修复。\n\n明确自己实现的范围、原型与生产差别，给出实际运行证据与未测限制。无需假装训练过基座模型，但应解释所用模型、事实与工具边界，证明能对端到端结果负责。",
+    "rubric": [
+      "后端关键契约",
+      "跨层排障",
+      "真实责任范围",
+      "交付证据"
+    ],
+    "followUps": [
+      "同账号跨设备进度如何一致？",
+      "高并发下哪个资源先成为瓶颈？"
+    ],
+    "keywords": [
+      "快手",
+      "全栈交付",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-kuaishou-sep"
+      ],
+      "topic": "全栈交付",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-kuaishou-ai-diff",
+    "company": "快手",
+    "lessonId": "agent-eval-experiments",
+    "type": "scenario",
+    "prompt": "比较人工实现和 AI 生成实现时，怎样避免仅按文本 diff 大小判断质量？",
+    "answer": "文本差异反映修改范围，不能直接证明行为正确。先定义相同输入输出和边界契约，执行功能、异常、权限与性能测试，再审查实现复杂度、依赖和可维护性。保留原需求和验收人，避免不同任务难度混比较。\n\n统计完整审核与返工成本、缺陷和交付时间，固定工具与环境版本。模型审查可帮助发现线索，但关键证据来自运行与专业 review；不要把更长代码或更小 diff 自动当好。",
+    "rubric": [
+      "行为契约",
+      "风险验证",
+      "可比任务",
+      "人工与返工成本"
+    ],
+    "followUps": [
+      "如果两种实现输出一致但资源相差很大？",
+      "怎样检测测试只覆盖了常见路径？"
+    ],
+    "keywords": [
+      "快手",
+      "代码生成度量",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-kuaishou-sep"
+      ],
+      "topic": "代码生成度量",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-meituan-ai-coding",
+    "company": "美团",
+    "lessonId": "ai-application-anatomy",
+    "type": "scenario",
+    "prompt": "现场只给一段需求和空项目，要求用 AI 实现，你会怎样组织半小时内可检查的交付？",
+    "answer": "先用短时间确认输入输出、边界、最小范围和验收方式，再建立可运行骨架与少量关键样本。逐步完成主链、异常和风险校验，每步运行验证并看 diff，避免先生成大量代码再一起调试。\n\n时间不足时交付可运行核心、验证结果和明确未完成项，不让模型声称全完成。原帖只提到 AI Coding，没有完整题面；本题的时限与空项目是练习新增约束，不当作原考试细节。",
+    "rubric": [
+      "需求契约",
+      "小步可运行",
+      "验证与 diff",
+      "范围透明"
+    ],
+    "followUps": [
+      "依赖安装失败如何调整？",
+      "如何判断需求已经覆盖？"
+    ],
+    "keywords": [
+      "美团",
+      "AI Coding",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-meituan-sep"
+      ],
+      "topic": "AI Coding",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-meituan-update-logs",
+    "company": "美团",
+    "lessonId": "py-unit-of-work",
+    "type": "scenario",
+    "prompt": "MySQL 执行一次 UPDATE，你如何区分 redo、undo 和 binlog 的职责，并解释提交成功但响应丢失？",
+    "answer": "redo 与崩溃恢复相关，undo 支持回滚及一致性读，binlog 记录服务层变更事件并用于复制等流程；不是三个可互换的日志。具体持久与提交协调依版本和配置，不能只用“写了日志”保证任何断电条件都不丢。\n\n客户端超时不说明事务未提交。接口用稳定业务操作身份、唯一约束与结果记录，重试先查询事实。面试应把数据库事务边界和 HTTP 响应分开，并通过提交后响应前失败测试验证。",
+    "rubric": [
+      "日志职责",
+      "版本配置",
+      "提交与响应分离",
+      "业务幂等"
+    ],
+    "followUps": [
+      "undo 为什么还与 MVCC 有关？",
+      "事务成功后通知失败怎么处理？"
+    ],
+    "keywords": [
+      "美团",
+      "MySQL 更新日志",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-meituan-sep"
+      ],
+      "topic": "MySQL 更新日志",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    },
+    "technicalSourceIds": [
+      "mysql-redo",
+      "mysql-undo",
+      "mysql-binlog",
+      "sql-transaction"
+    ]
+  },
+  {
+    "id": "report-meituan-redis-expire",
+    "company": "美团",
+    "lessonId": "node-queue-leases",
+    "type": "scenario",
+    "prompt": "Redis 过期删除与内存淘汰是什么关系，为什么不能把带 TTL 的 key 当可靠业务任务账本？",
+    "answer": "过期围绕到期时间清理，淘汰围绕内存压力按策略选择 key，两者触发与语义不同。TTL 不保证某个毫秒时刻立刻物理删除，内存策略也可能影响尚未到期数据，具体依配置。\n\n关键任务和已完成操作应有持久业务事实，缓存可用于加速或辅助协调，不能以 key 还在/不在推断唯一真相。设计故障、重启、淘汰和时间边界测试，区分缓存未命中与业务不存在。",
+    "rubric": [
+      "触发语义",
+      "配置边界",
+      "持久事实",
+      "故障测试"
+    ],
+    "followUps": [
+      "为什么缓存锁不能代替数据库唯一约束？",
+      "任务租约到期与完成提交如何防竞态？"
+    ],
+    "keywords": [
+      "美团",
+      "Redis 淘汰与过期",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-meituan-sep"
+      ],
+      "topic": "Redis 淘汰与过期",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    },
+    "technicalSourceIds": [
+      "redis-eviction",
+      "redis-expire"
+    ]
+  },
+  {
+    "id": "report-meituan-cache-rebuild",
+    "company": "美团",
+    "lessonId": "rest-idempotency",
+    "type": "scenario",
+    "prompt": "热门缓存同时过期，大量请求回源数据库，如何限制重建压力又避免跨用户复用答案？",
+    "answer": "按业务键做受限 single-flight 或重建协调，设置并发和排队预算，结合合理 TTL 抖动、预热或过期可用策略，具体取决于新鲜度要求。所有请求仍有总 deadline，不能把锁等待变成无限队列。\n\n答案缓存键包含租户、权限与事实版本，读取时核验当前可见性。缓存不可用时有降级和容量限制，不能为提高命中率合并私有数据；用热点、撤权和回源失败联合压测。",
+    "rubric": [
+      "重建准入",
+      "新鲜度取舍",
+      "身份版本隔离",
+      "联合压测"
+    ],
+    "followUps": [
+      "锁持有者宕机怎么办？",
+      "过期可用数据可以用于哪些动作？"
+    ],
+    "keywords": [
+      "美团",
+      "Redis 淘汰与过期",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-meituan-sep"
+      ],
+      "topic": "Redis 淘汰与过期",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-meituan-project-selection",
+    "company": "美团",
+    "lessonId": "ai-model-selection",
+    "type": "scenario",
+    "prompt": "面试官不追 API 用法，而问你的 AI 项目为什么这样选模型、数据库和部署方式，怎样回答有证据？",
+    "answer": "先说明任务、数据范围、并发、隐私与错误代价，再列候选基线和明确比较结果。模型看任务质量、长度、工具契约、时延与成本；数据库看事实结构、一致性和查询；部署看容量、运维与回滚。\n\n引用实际采集口径和坏例，不套流行技术清单。未做对照的部分说明是假设与后续验证方案，原型与上线指标分开；最终关联完整用户流程和审核返工成本。",
+    "rubric": [
+      "任务约束",
+      "分层选型",
+      "真实对照",
+      "假设与收益"
+    ],
+    "followUps": [
+      "如果使用量增长十倍要先改哪里？",
+      "何时自部署比托管更合适？"
+    ],
+    "keywords": [
+      "美团",
+      "项目架构与选型",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-meituan-sep"
+      ],
+      "topic": "项目架构与选型",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-meituan-transaction-sideeffect",
+    "company": "美团",
+    "lessonId": "fullstack-idempotent-outbox",
+    "type": "scenario",
+    "prompt": "AI 工作流更新数据库后要通知用户，数据库已提交但发信失败，怎样恢复而不重复更新业务？",
+    "answer": "把业务记录与待通知事件在同一数据库事务写入 Outbox，独立发布器重试通知并按事件 ID 去重。提交业务操作有稳定幂等键和请求摘要，通知失败不能触发整个业务重新执行。\n\n发信成功但标记前宕机仍可能重投，接收或渠道也需去重/查询。测试提交前、提交后响应前、发布后标记前三个窗口，区分事务原子性和跨系统至少一次投递。原面经仅提供更新与项目主题，本情境为原创扩展。",
+    "rubric": [
+      "事务 Outbox",
+      "操作与通知分离",
+      "重复窗口",
+      "跨系统边界"
+    ],
+    "followUps": [
+      "渠道不支持幂等时怎么降低重复？",
+      "用户取消后未发送通知如何处理？"
+    ],
+    "keywords": [
+      "美团",
+      "MySQL 更新日志",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-meituan-sep"
+      ],
+      "topic": "MySQL 更新日志",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    },
+    "technicalSourceIds": [
+      "mysql-redo",
+      "mysql-undo",
+      "mysql-binlog",
+      "sql-transaction"
+    ]
+  },
+  {
+    "id": "report-baidu-code-agent-flow",
+    "company": "百度",
+    "lessonId": "ai-agent-primer",
+    "type": "scenario",
+    "prompt": "给出一个 Code Agent 的“定位→修改→验证”闭环，说明每一步产物与失败如何影响下一步，而非只说让模型写代码。",
+    "answer": "先把需求变成验收条件和工作区约束，读取仓库约定、结构和相关符号。定位返回当前文件与版本，修改返回受条件保护的补丁，验证返回命令、退出状态和断言结果。模型根据观察修正候选方案，宿主限制预算、路径和执行能力。\n\n缺信息时询问，测试失败就定位，不把长思考文本当进度。交付 diff、证据和未决项，不能凭模型说完成就提交生产；用未知工具、过期补丁、依赖缺失和循环失败测试闭环。",
+    "rubric": [
+      "步骤产物",
+      "当前事实",
+      "宿主约束",
+      "可诊断停止"
+    ],
+    "followUps": [
+      "代码库索引过期如何处理？",
+      "能否把全部 shell 权限直接给模型？"
+    ],
+    "keywords": [
+      "百度",
+      "百度 Code Agent 与记忆",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-onlyar-autumn"
+      ],
+      "topic": "百度 Code Agent 与记忆",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-baidu-memory-evaluation",
+    "company": "百度",
+    "lessonId": "agent-memory-lifecycle",
+    "type": "scenario",
+    "prompt": "面试官要你比较最近 N 轮、摘要和长期记忆，怎样设计实验而不是凭感觉选一种？",
+    "answer": "先定义任务所需信息：当前目标、已确认事实、未决问题和已执行动作。分别构建最近 N 轮、摘要及来源检索组合，固定模型、任务和输入预算，测试跨轮指代、纠正、目标变化、过期与撤回。\n\n评价任务成功、关键状态保留、错误记忆影响、成本和延迟。业务凭据独立查权威系统；摘要和长期事实带来源、版本与作用域。没有足够标注时报告不确定性，不以压缩率代替记忆质量。",
+    "rubric": [
+      "任务不变量",
+      "固定预算对照",
+      "生命周期",
+      "质量与代价"
+    ],
+    "followUps": [
+      "模型猜测能否直接写入长期记忆？",
+      "相同偏好冲突如何处理？"
+    ],
+    "keywords": [
+      "百度",
+      "百度 Code Agent 与记忆",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-onlyar-autumn"
+      ],
+      "topic": "百度 Code Agent 与记忆",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-baidu-grpo-basics",
+    "company": "百度",
+    "lessonId": "ai-training-stages",
+    "type": "scenario",
+    "prompt": "你在简历写了 GRPO，怎样解释它与 SFT、奖励设计和工具调用轮数约束的关系？",
+    "answer": "SFT 学习期望输出示例；GRPO 类在线偏好/强化学习方法会对同一输入生成多条候选，利用组内奖励相对关系估计优化信号，并按具体目标约束与参考策略的偏离。奖励是训练信号，不能把“答得长”当任务正确。\n\n工具轮数限制应同时在宿主运行时强制执行，不能只期待训练后模型自觉少调用。报告任务成功、违规、奖励作弊、成本与持出回归，说明所用实现的采样、归一化和 KL 配置，不把所有变体当完全一致。",
+    "rubric": [
+      "训练目标区别",
+      "组内相对信号",
+      "奖励与作弊",
+      "运行时硬限制"
+    ],
+    "followUps": [
+      "奖励提升但真实成功下降怎么查？",
+      "为什么训练约束不能替代权限？"
+    ],
+    "keywords": [
+      "百度",
+      "百度 Code Agent 与记忆",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-onlyar-autumn"
+      ],
+      "topic": "百度 Code Agent 与记忆",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-baidu-middle-context",
+    "company": "百度",
+    "lessonId": "llm-context-engineering",
+    "type": "scenario",
+    "prompt": "长上下文中的关键信息放在中间时任务效果下降，怎样设计定位与压缩实验？",
+    "answer": "固定总长度、事实内容和任务，将必要证据放在开头、中间和结尾，区分位置影响、检索漏失与预算截断。保留实际输入版本，测关键事实覆盖、最终正确和延迟，不能只看窗口是否接受。\n\n再对比结构化任务状态、按需检索和摘要，控制预算并验证确认、操作凭据和未知项不丢。摘要减少 token 但若失去关键否定条件仍不合格。用真实长任务和反例检查，不把某种位置策略当所有模型通用定律。",
+    "rubric": [
+      "位置受控实验",
+      "实际输入",
+      "压缩不变量",
+      "模型任务边界"
+    ],
+    "followUps": [
+      "如何处理工具输出把证据挤出去？",
+      "增大窗口为什么未必解决？"
+    ],
+    "keywords": [
+      "百度",
+      "百度 Code Agent 与记忆",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-onlyar-autumn"
+      ],
+      "topic": "百度 Code Agent 与记忆",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-baidu-inference-oom",
+    "company": "百度",
+    "lessonId": "llm-attention-kv",
+    "type": "scenario",
+    "prompt": "推理服务长任务 OOM，如何从参数、KV、批次和并发拆分，而不直接换更大显卡？",
+    "answer": "先记录输入/输出长度分布、活动会话、批次与各阶段峰值，分拆权重常驻、KV、工作区和碎片。用真实 KV 头数、层数、dtype 粗估，再与测量比较；查取消和异常路径是否释放。\n\n按瓶颈调整准入、上下文预算、输出上限、缓存策略或部署分片，同时固定质量集和延迟护栏。offload 与量化可能用传输或质量换内存，不应只报告能启动。",
+    "rubric": [
+      "分项资源",
+      "长度并发",
+      "释放诊断",
+      "质量时延护栏"
+    ],
+    "followUps": [
+      "权重量化为何未必解决 KV OOM？",
+      "吞吐提高时单请求时延会怎样？"
+    ],
+    "keywords": [
+      "百度",
+      "模型训练基础",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-onlyar-autumn"
+      ],
+      "topic": "模型训练基础",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-baidu-agent-product-limits",
+    "company": "百度",
+    "lessonId": "fde-discovery",
+    "type": "scenario",
+    "prompt": "Code Agent 受欢迎但仍有明显痛点，怎样把使用感受转成可实施的改进和验收？",
+    "answer": "选择可观测问题，例如定位错文件、上下文缺失、重复修复、权限过大或验证不足，复现完整任务并保留轨迹。先明确受影响用户与失败成本，再提出最小改动和可比基线，而非增加更多角色或模型名称。\n\n用真实任务配对比较成功、返工、人工介入和成本，加入风险护栏；没实现的方案说明是计划，不能当经历讲。产品价值必须落到端到端完成与可运营性。",
+    "rubric": [
+      "具体坏例",
+      "用户价值",
+      "最小对照",
+      "真实实施边界"
+    ],
+    "followUps": [
+      "如果只提高模型分数但用户不采纳？",
+      "如何把失败案例回流评估集？"
+    ],
+    "keywords": [
+      "百度",
+      "百度 Code Agent 与记忆",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-onlyar-autumn"
+      ],
+      "topic": "百度 Code Agent 与记忆",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-pdd-activation-relu",
+    "company": "拼多多",
+    "lessonId": "ai-training-inference",
+    "type": "scenario",
+    "prompt": "面试问常用激活函数，怎样解释 ReLU、Sigmoid 的非线性与梯度差异，并避免只背公式？",
+    "answer": "先说明非线性使多层网络能表达超出线性组合的映射。ReLU=max(0,x)，正区间导数为 1、负区间为 0，零点按实现约定；Sigmoid 输出在零到一，极端输入易饱和导致梯度变小。\n\n选择取决于层的用途和数值条件，不是 ReLU 永远优于其他函数。用小输入和数值实验解释饱和、失活与输出层概率，再区分激活函数和损失。此题是原帖激活函数考点的扩展，不声称原面试追问了全部细节。",
+    "rubric": [
+      "非线性必要性",
+      "函数与梯度",
+      "用途条件",
+      "数值反例"
+    ],
+    "followUps": [
+      "为什么纯线性多层仍等价于线性映射？",
+      "零点不可导怎样处理？"
+    ],
+    "keywords": [
+      "拼多多",
+      "拼多多激活函数",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-onlyar-autumn"
+      ],
+      "topic": "拼多多激活函数",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-pdd-sigmoid-overflow",
+    "company": "拼多多",
+    "lessonId": "ai-training-inference",
+    "type": "scenario",
+    "prompt": "手写 Sigmoid 时大负数触发 exp 溢出，你怎样改写且验证，不只是 catch 后返回零？",
+    "answer": "利用等价形式分支：x>=0 时 1/(1+exp(-x))，x<0 时 exp(x)/(1+exp(x))，避免对大正指数直接求值。保留极端情况下接近零或一的合理行为，检查 NaN/无限输入的契约。\n\n测试 0、正负对称、单调和极端值；训练损失计算也需使用稳定的 log-sum-exp 等表达，不能靠概率裁剪掩盖所有数值问题。零到一的输出仍需模型训练与校准才能赋予业务概率含义。",
+    "rubric": [
+      "等价稳定分支",
+      "输入契约",
+      "性质测试",
+      "概率与校准"
+    ],
+    "followUps": [
+      "为什么稳定 Sigmoid 不等于稳定 BCE？",
+      "浮点舍入会怎样影响极端概率？"
+    ],
+    "keywords": [
+      "拼多多",
+      "拼多多激活函数",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-onlyar-autumn"
+      ],
+      "topic": "拼多多激活函数",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-pdd-dead-neuron",
+    "company": "拼多多",
+    "lessonId": "ai-training-inference",
+    "type": "scenario",
+    "prompt": "训练时一部分 ReLU 单元长期输出零，怎样判断是正常稀疏还是训练问题？",
+    "answer": "统计各层激活与梯度分布，在代表性样本上观察是否始终不活跃，关联初始化、学习率、输入归一化和偏置。负区间梯度为零可能导致某些单元难以恢复，但一次零输出不等于失活。\n\n控制变量比较调整学习率、初始化或其他激活形式的影响，同时看验证任务而不只看激活非零率。记录硬件精度和训练版本，避免用一种症状直接推出唯一原因。",
+    "rubric": [
+      "长期统计",
+      "梯度与超参",
+      "受控对照",
+      "验证质量"
+    ],
+    "followUps": [
+      "输入分布漂移会造成什么？",
+      "改为其他激活后一定更好吗？"
+    ],
+    "keywords": [
+      "拼多多",
+      "拼多多激活函数",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-onlyar-autumn"
+      ],
+      "topic": "拼多多激活函数",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-pdd-softmax-translation",
+    "company": "拼多多",
+    "lessonId": "llm-decoding-sampling",
+    "type": "scenario",
+    "prompt": "计算 softmax 时为何先减最大 logit？加同一常数会改变类别分布吗？",
+    "answer": "softmax 对所有 logits 同加常数具有平移不变性，分子分母中的相同指数因子抵消。减最大值使最大的指数为 1，降低溢出风险，不改变理想数学分布；极小项仍可能下溢，需要接受浮点边界。\n\n测试大偏移、相等分数、归一和与非法空输入。它描述局部类别/候选分布，不等于事实正确或任务置信度。若后续计算交叉熵，还要用稳定形式避免 log(0)。",
+    "rubric": [
+      "平移不变",
+      "溢出边界",
+      "性质测试",
+      "分布语义"
+    ],
+    "followUps": [
+      "温度缩放与加常数有什么差别？",
+      "为什么取最大概率不能保证事实正确？"
+    ],
+    "keywords": [
+      "拼多多",
+      "拼多多激活函数",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-onlyar-autumn"
+      ],
+      "topic": "拼多多激活函数",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-pdd-output-objective",
+    "company": "拼多多",
+    "lessonId": "ai-evaluation-primer",
+    "type": "scenario",
+    "prompt": "二分类输出用 Sigmoid，多分类输出用 softmax，这是否已经确定该用什么损失和指标？",
+    "answer": "输出形式、训练目标和评估指标是相关但不同的选择。二分类可配二元交叉熵，多类互斥可配多类交叉熵；多标签不是简单互斥多分类，标签和任务定义应先明确。Accuracy、P/R/F1 与损失评价不同对象。\n\n检查标签编码、类不平衡、采样与阈值，用持出集报告业务误报漏报和校准。不能因为输出落在零到一就直接对用户声称是真实正确率。",
+    "rubric": [
+      "任务标签",
+      "输出与损失",
+      "指标与阈值",
+      "独立校准"
+    ],
+    "followUps": [
+      "多标签任务为什么不是单个 softmax？",
+      "训练 loss 降低但 Recall 下降怎么查？"
+    ],
+    "keywords": [
+      "拼多多",
+      "拼多多激活函数",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-onlyar-autumn"
+      ],
+      "topic": "拼多多激活函数",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-pdd-gradient-check",
+    "company": "拼多多",
+    "lessonId": "ai-training-inference",
+    "type": "scenario",
+    "prompt": "你改了一个激活或损失的梯度实现，如何用小规模实验检查，而不等整次训练崩溃？",
+    "answer": "选可手算的小输入，比较解析梯度与有限差分近似，控制步长和数值精度，避开不可导点或明确次梯度约定。检查符号、平均因子、维度广播和 batch 归约，不能只验证前向值。\n\n加入极端值、零输入和不同 batch 大小，再跑小数据过拟合 sanity check 与持出回归。有限差分也有截断和舍入误差，误差容差需解释，不能声称一次匹配就证明所有情况。",
+    "rubric": [
+      "手算与差分",
+      "归约维度",
+      "数值边界",
+      "小训练与回归"
+    ],
+    "followUps": [
+      "步长太小为何反而误差变大？",
+      "ReLU 零点怎么做梯度检查？"
+    ],
+    "keywords": [
+      "拼多多",
+      "拼多多激活函数",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-onlyar-autumn"
+      ],
+      "topic": "拼多多激活函数",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-xhs-coreference",
+    "company": "小红书",
+    "lessonId": "ai-rag-primer",
+    "type": "scenario",
+    "prompt": "知识问答第二轮只问“那它去年呢”，怎样做指代消解和检索改写，又不把模型猜测当用户事实？",
+    "answer": "从已确认上下文提取指代实体、时间与问题类型，生成可核验的独立查询，并保留原问题和改写依据。实体有多个候选或年份范围不明确时询问，不直接选最相似的对象。\n\n检索仍受当前权限和版本约束，改写不能扩大数据范围。建立多实体、纠正、跨轮跳题与无指代对象样本，对比原查询和改写后的证据覆盖及答案支持，避免改写提升召回却改变用户意图。",
+    "rubric": [
+      "确认实体",
+      "歧义分支",
+      "改写不扩权",
+      "意图与证据双评估"
+    ],
+    "followUps": [
+      "用户上一轮纠正实体后怎么办？",
+      "摘要丢掉时间条件会怎样？"
+    ],
+    "keywords": [
+      "小红书",
+      "多轮指代消解",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-xhs-sep"
+      ],
+      "topic": "多轮指代消解",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-xhs-recent-summary",
+    "company": "小红书",
+    "lessonId": "llm-context-engineering",
+    "type": "scenario",
+    "prompt": "最近 N 轮加 Summary 的方案为什么仍会漏关键信息，你会如何定义压缩验收？",
+    "answer": "最近轮数不保证保留长期目标，摘要可能省略否定、确认和操作身份。把目标、已确认条件、未决项和业务凭据引用作为独立状态，摘要只承担可损压缩，来源可回查。\n\n比较压缩前后下一步问题与行为，确保同样拒绝未授权或重复提交，固定预算测任务成功与成本；对目标变更、冲突和撤回单列切片。不能只用缩短比例和摘要读起来流畅验收。",
+    "rubric": [
+      "状态与摘要分层",
+      "关键不变量",
+      "行为对照",
+      "生命周期切片"
+    ],
+    "followUps": [
+      "原生不透明压缩项能否手改？",
+      "相互冲突的历史应怎样保留？"
+    ],
+    "keywords": [
+      "小红书",
+      "最近 N 轮加摘要",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-xhs-sep"
+      ],
+      "topic": "最近 N 轮加摘要",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-xhs-skill-selection",
+    "company": "小红书",
+    "lessonId": "ai-protocol-frameworks",
+    "type": "scenario",
+    "prompt": "Skill 增加到几百个，如何让模型选中正确技能并避免把所有说明都塞满窗口？",
+    "answer": "按任务与权限先筛可见技能，使用清晰职责和索引检索少量候选，必要时分层加载详细说明。选择质量用标签、混淆案例和最终任务评估，不能靠名字或长描述自证正确。\n\n外部技能说明仍是不可信输入，实际工具权限和预算由宿主限制。版本化技能与依赖，处理空候选、冲突和过期说明，并比较全量加载、候选检索和固定路由的费用与质量。",
+    "rubric": [
+      "权限候选",
+      "渐进装配",
+      "选择评估",
+      "执行安全与版本"
+    ],
+    "followUps": [
+      "检索没召回正确 Skill 怎么兜底？",
+      "Skill 描述互相矛盾怎么办？"
+    ],
+    "keywords": [
+      "小红书",
+      "Skill 选择",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-xhs-sep"
+      ],
+      "topic": "Skill 选择",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-xhs-graph-cycles",
+    "company": "小红书",
+    "lessonId": "langgraph-state",
+    "type": "scenario",
+    "prompt": "有人把所有 LangGraph 流程都叫 DAG；若需要检查失败后回到修正节点，怎样解释图与循环的约束？",
+    "answer": "有向图不必无环，LangGraph 等运行时可以按条件组织循环；是否允许循环取决于图和运行配置，不能把 DAG 当所有图的定义。修正循环需要明确状态更新、成功条件、最大轮数、时间和无进展检测。\n\n并行分支使用可解释 reducer，持久恢复不等于外部副作用去重。用重复错误、状态冲突、恢复重跑和达到预算测试，证明有收敛路径。公开面经可能有术语简写，答案应按技术事实校正而非照抄。",
+    "rubric": [
+      "图与 DAG",
+      "循环收敛",
+      "状态 reducer",
+      "恢复副作用边界"
+    ],
+    "followUps": [
+      "什么时候应该强制无环？",
+      "并行更新同字段怎么处理？"
+    ],
+    "keywords": [
+      "小红书",
+      "图状态与流程",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-xhs-sep"
+      ],
+      "topic": "图状态与流程",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-xhs-production-guards",
+    "company": "小红书",
+    "lessonId": "agent-human-review",
+    "type": "scenario",
+    "prompt": "生产 Agent 遇到幻觉与错误工具调用，应只改 Prompt，还是在状态图中增加校验节点？",
+    "answer": "先定位错误来源，提示可减少某些误解，但结构、资源授权、版本和金额等规则应在执行层确定性检查。图节点可以组织校验与人工介入，真实业务服务仍是最后边界；拒绝与修正路径要保留明确状态。\n\n评估最终事实、工具选择参数、越权和重复副作用，不能用平均成功抵消风险。对同一坏例逐层消融，说明哪些改善来自提示、数据或规则，避免盲目加节点。",
+    "rubric": [
+      "故障分层",
+      "规则强制",
+      "组织与业务边界",
+      "风险评估"
+    ],
+    "followUps": [
+      "Guardrail 与 ACL 能互相替代吗？",
+      "用户确认后资源变化怎么办？"
+    ],
+    "keywords": [
+      "小红书",
+      "生产 Agent 约束",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-xhs-sep"
+      ],
+      "topic": "生产 Agent 约束",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-xhs-reasoning-output",
+    "company": "小红书",
+    "lessonId": "ai-training-stages",
+    "type": "scenario",
+    "prompt": "训练时使用推导示例，但上线只显示简洁答案，能否承诺准确率完全不下降，应该怎样比较？",
+    "answer": "展示格式、训练监督与模型内部计算不是同一轴。可以研究答案与推导的多任务或蒸馏方案，但不能只靠隐藏输出或改提示就承诺质量不变。固定基座、数据、预算和持出集，比较最终正确、难题切片、输出长度与时延。\n\n推导文本也可能错误或事后合理化，审计应以证据、工具和验证记录为主。说明方案是假设、是否实际训练，以及统计不确定性；不要把未验证的公开帖子解释写成通用保证。",
+    "rubric": [
+      "三层区分",
+      "公平对照",
+      "推导不等于证据",
+      "不确定性"
+    ],
+    "followUps": [
+      "短答案减少的是展示长度还是总计算？",
+      "如何验证蒸馏数据没有泄漏？"
+    ],
+    "keywords": [
+      "小红书",
+      "多轮指代消解",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-xhs-sep"
+      ],
+      "topic": "推导监督与输出",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-ant-chunk-rerank",
+    "company": "蚂蚁集团",
+    "lessonId": "ai-knowledge-indexing",
+    "type": "scenario",
+    "prompt": "面试连续追问分块、Embedding 和 rerank，你会如何用同一条失败样本解释各阶段职责？",
+    "answer": "从黄金证据出发，检查解析文本是否保留条件，分块是否完整，再看候选是否召回、重排后位置及最终上下文是否留下。召回缺失不能靠 rerank 找回，生成错误也不能只改向量参数。\n\n固定语料、权限与预算，逐层注入正确结果做消融，记录版本和坏例。分别报告检索覆盖、排序、答案支持及成本延迟，避免把所有收益归给某个框架。",
+    "rubric": [
+      "分阶段职责",
+      "黄金证据",
+      "受控消融",
+      "多维指标"
+    ],
+    "followUps": [
+      "候选变多为什么答案可能变差？",
+      "怎样评价没有标准答案的查询？"
+    ],
+    "keywords": [
+      "蚂蚁集团",
+      "分块与 Embedding 选型",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-ant-edited"
+      ],
+      "topic": "分块与 Embedding 选型",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-ant-embedding-choice",
+    "company": "蚂蚁集团",
+    "lessonId": "ai-model-selection",
+    "type": "scenario",
+    "prompt": "换一个更大维度的 Embedding 模型是否必然改善企业知识库，怎样设计选型？",
+    "answer": "维度不是质量保证，先核对语言、领域、长度、query/document 约定和部署边界。固定标注查询与语料，重建兼容索引，在相同过滤和候选预算下比较关键词、不同 embedding 及融合。\n\n按专有名词、编号、否定、多证据和无答案切片看召回与支持，同时测内存、索引更新、延迟和费用。记录模型与规范化版本，不能把不同空间混用后再归因模型差。",
+    "rubric": [
+      "任务与输入约定",
+      "空间一致",
+      "切片与基线",
+      "资源与更新"
+    ],
+    "followUps": [
+      "同维度模型能混用吗？",
+      "离线分数好但线上差如何查？"
+    ],
+    "keywords": [
+      "蚂蚁集团",
+      "分块与 Embedding 选型",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-ant-edited"
+      ],
+      "topic": "分块与 Embedding 选型",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-ant-tool-conflicts",
+    "company": "蚂蚁集团",
+    "lessonId": "agent-tool-scheduler",
+    "type": "scenario",
+    "prompt": "同一轮模型提出查询和两个修改同一资源的工具调用，如何决定并行顺序与失败传播？",
+    "answer": "建立依赖与资源冲突关系，独立只读可并行，写入按业务版本与幂等策略处理，不信任模型列表顺序就能保证一致。运行前做参数、身份与预算准入，队列有界且等待计入总 deadline。\n\n必需步骤失败后阻止依赖任务，取消无价值并行工作；Promise 聚合失败不会自动取消远端操作。已写入结果不明时查 operation_id，测试并发修改、部分失败和迟到返回。",
+    "rubric": [
+      "依赖资源",
+      "有界预算",
+      "失败取消",
+      "副作用查账"
+    ],
+    "followUps": [
+      "为什么锁过期后还要版本校验？",
+      "可选工具失败怎样表示？"
+    ],
+    "keywords": [
+      "蚂蚁集团",
+      "多工具冲突",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-ant-edited"
+      ],
+      "topic": "多工具冲突",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-ant-context-cost",
+    "company": "蚂蚁集团",
+    "lessonId": "llm-cache-routing",
+    "type": "scenario",
+    "prompt": "长任务上下文越来越贵，如何联合评估裁剪、摘要和缓存，而不只追求命中率？",
+    "answer": "保留目标、确认和操作凭据等必要状态，按来源裁剪工具结果并显式标记缺失。摘要验证任务不变量；供应商前缀缓存和应用答案缓存分层，答案缓存绑定身份、权限与语料版本。\n\n固定任务比较总费用、成功率、尾延迟与过期答案，失败和缓存写入成本都计入。压缩可能改变缓存前缀，减少 token 与命中率需综合评估，不能为省钱共享私有内容或删关键规则。",
+    "rubric": [
+      "必要状态",
+      "缓存分层隔离",
+      "全任务成本",
+      "质量与新鲜度"
+    ],
+    "followUps": [
+      "压缩导致缓存命中下降一定更贵吗？",
+      "必要项超预算时怎么办？"
+    ],
+    "keywords": [
+      "蚂蚁集团",
+      "上下文裁剪",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-ant-edited"
+      ],
+      "topic": "上下文裁剪",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-ant-bloom-delete",
+    "company": "蚂蚁集团",
+    "lessonId": "crawl-storage",
+    "type": "scenario",
+    "prompt": "布隆过滤器用于采集或缓存去重时，可以直接清除一个元素对应的位吗？怎样处理误判和删除？",
+    "answer": "普通布隆位可能被多个元素共享，直接清位会引入漏判，因此不支持按这种方式安全删除。可按业务采用带计数的结构、分代重建或允许误判的窗口方案，仍需评估内存、溢出与一致性。\n\n布隆说“可能存在”不是持久事实，关键去重依赖稳定 ID 和数据库约束；说“不存在”的保证也建立在实现、无错误删除和数据同步正确前提。测试误判、重建切换和迟到数据，不把概率结构当账本。",
+    "rubric": [
+      "共享位",
+      "删除策略",
+      "概率与事实",
+      "重建同步"
+    ],
+    "followUps": [
+      "Counting Bloom 的计数溢出会怎样？",
+      "可接受误判为什么仍需数据库唯一键？"
+    ],
+    "keywords": [
+      "蚂蚁集团",
+      "布隆过滤器",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-ant-edited"
+      ],
+      "topic": "布隆过滤器",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    },
+    "technicalSourceIds": [
+      "redis-bloom"
+    ]
+  },
+  {
+    "id": "report-ant-budget-accounting",
+    "company": "蚂蚁集团",
+    "lessonId": "agent-evaluation",
+    "type": "scenario",
+    "prompt": "推理费用只统计最终成功回答，面试官质疑实际账单高很多，你如何修正统计？",
+    "answer": "按任务关联全部模型尝试、工具请求、重试与失败，区分预估和实际 usage，无法获得时明确 unknown。输入、输出、缓存与外部服务按真实计费口径汇总；不能只保留最后一次成功调用。\n\n以总成本除成功任务数评价方案，同时报告成功率与无成功时不可定义，分开人工审核和运营成本。用工具超时、模型拒绝、取消后仍产生费用的样本对账，保存版本和请求身份。",
+    "rubric": [
+      "全尝试关联",
+      "真实计量",
+      "成功任务分母",
+      "失败与取消对账"
+    ],
+    "followUps": [
+      "预留预算与最终费用如何结算？",
+      "零成功时为什么不能把分母设为一？"
+    ],
+    "keywords": [
+      "蚂蚁集团",
+      "推理成本",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-ant-edited"
+      ],
+      "topic": "推理成本",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-jd-logistic-contract",
+    "company": "京东",
+    "lessonId": "ai-training-inference",
+    "type": "scenario",
+    "prompt": "公开笔试提到逻辑回归分类器，若训练和测试都以 JSON 输入，写代码前你会明确哪些数学与数据契约？",
+    "answer": "明确二分类标签、样本矩阵维度、偏置、损失平均方式、学习率、迭代停止与输出概率顺序。校验空数据、维度不齐、非有限数和标签范围，训练与测试使用同一预处理，仅在训练集拟合归一化。\n\n原帖约束使用 NumPy；本题聚焦契约，不补造原题未公布的迭代数或容差。实现后用可手算样本、极端 logits 和固定持出集验证，概率不能直接当业务正确率。",
+    "rubric": [
+      "数学契约",
+      "输入校验",
+      "预处理边界",
+      "原题信息边界"
+    ],
+    "followUps": [
+      "偏置梯度如何计算？",
+      "怎样测试输出概率顺序未错位？"
+    ],
+    "keywords": [
+      "京东",
+      "逻辑回归",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-jd-sep"
+      ],
+      "topic": "逻辑回归",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-jd-batch-gradient",
+    "company": "京东",
+    "lessonId": "ai-training-inference",
+    "type": "scenario",
+    "prompt": "批量逻辑回归中梯度应求和还是求平均，如何让 batch 大小变化后的学习率解释一致？",
+    "answer": "先与损失定义一致：若损失是样本均值，则梯度也按样本数平均，权重梯度为 X 转置乘误差再除 n，偏置梯度为误差均值。若选择求和要相应解释学习率和样本量关系，不能前向均值、反向漏除。\n\n用重复同一批样本的性质测试：均值损失和梯度应不变。再检查特征维度、广播、标签形状和有限差分，避免 NumPy 自动广播把错误形状悄悄变成矩阵。",
+    "rubric": [
+      "损失与梯度一致",
+      "学习率口径",
+      "重复样本性质",
+      "形状与梯度检查"
+    ],
+    "followUps": [
+      "X 形状为 n×d，权重是什么形状？",
+      "为什么广播可能不报错却算错？"
+    ],
+    "keywords": [
+      "京东",
+      "逻辑回归",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-jd-sep"
+      ],
+      "topic": "逻辑回归",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-jd-stable-loss",
+    "company": "京东",
+    "lessonId": "ai-training-inference",
+    "type": "scenario",
+    "prompt": "分类器在大 logits 上输出概率接近零或一，计算 log 概率出现无穷，怎样改写损失？",
+    "answer": "可直接从 logit z 计算稳定二元交叉熵：max(z,0)-z*y+log(1+exp(-abs(z)))，用合适的 log1p 等数值函数。避免先计算已舍入成零或一的概率再取 log，Sigmoid 本身也使用稳定分支。\n\n测试大正负数、零、标签两端和梯度方向，保持训练与评分公式一致。人为裁剪可以作为明确策略，但不能掩盖错误标签、非有限输入或全部数值问题。",
+    "rubric": [
+      "稳定 logit 形式",
+      "分支数值",
+      "极端与梯度",
+      "输入契约"
+    ],
+    "followUps": [
+      "标签为 0 与 1 时损失应如何变化？",
+      "浮点精度改变会影响什么？"
+    ],
+    "keywords": [
+      "京东",
+      "逻辑回归",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-jd-sep"
+      ],
+      "topic": "逻辑回归",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-jd-data-leakage",
+    "company": "京东",
+    "lessonId": "llm-adaptation-data",
+    "type": "scenario",
+    "prompt": "训练/测试 JSON 一起读入后统一归一化，为什么可能让评估乐观，应该怎么修？",
+    "answer": "归一化均值、方差和特征选择只能从训练数据拟合，再对测试应用同一参数。一起拟合会让测试分布信息进入训练流程，其他去重、时间或实体泄漏也需检查。\n\n用明确 split 和可复现预处理流水线，保存拟合参数；处理零方差、缺失与极端值。最终测试集不能用于反复选超参或阈值，报告持出任务与业务误差，而不是只看训练准确率。",
+    "rubric": [
+      "训练拟合",
+      "泄漏类型",
+      "预处理版本",
+      "持出独立性"
+    ],
+    "followUps": [
+      "数据漂移后应不应该偷偷重拟合测试集？",
+      "同一用户多个样本如何切分？"
+    ],
+    "keywords": [
+      "京东",
+      "训练测试 JSON",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-jd-sep"
+      ],
+      "topic": "训练测试 JSON",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-jd-probability-threshold",
+    "company": "京东",
+    "lessonId": "ai-evaluation-primer",
+    "type": "scenario",
+    "prompt": "分类器输出概率后，阈值固定为 0.5 是否总合理，怎样与 Precision、Recall 和业务损失连接？",
+    "answer": "阈值选择取决于类别分布、误报漏报代价与概率校准。先在验证集观察 P/R、成本和覆盖，再确定阈值，最终持出集报告表现；不能从测试集挑一个最好点后当独立结论。\n\n如果训练分布与线上先验不同或分数未校准，0.5 不自动代表合理决策。保留概率与标签两层口径，做关键切片和漂移监测，高风险授权仍是确定性规则。",
+    "rubric": [
+      "代价与分布",
+      "验证选阈值",
+      "独立测试",
+      "概率校准"
+    ],
+    "followUps": [
+      "类别极不平衡时 Accuracy 有什么问题？",
+      "不同用户群能否用不同阈值？"
+    ],
+    "keywords": [
+      "京东",
+      "概率输出",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-jd-sep"
+      ],
+      "topic": "概率输出",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  },
+  {
+    "id": "report-jd-minimal-verification",
+    "company": "京东",
+    "lessonId": "ai-training-inference",
+    "type": "scenario",
+    "prompt": "手写分类器时间有限，你会优先用哪些小测试证明实现没错，而不是只调到 loss 看起来下降？",
+    "answer": "先验证零权重时概率约为 0.5、正负 logit 对称、概率范围和样本顺序，再用一维可手算数据检查一次梯度更新及损失。重复批次检验平均因子，有限差分核对梯度，检查维度和非有限输入。\n\n最后做小数据可拟合与独立测试，不把训练 loss 下降当泛化。若原题条件不完整，明确自己的补充假设；不能编造隐藏测试分数或把不明得分字符串解释为正确率。",
+    "rubric": [
+      "性质与手算",
+      "梯度归约",
+      "形状异常",
+      "泛化与信息边界"
+    ],
+    "followUps": [
+      "完全可分数据权重可能出现什么现象？",
+      "如何记录随机初始化以复现？"
+    ],
+    "keywords": [
+      "京东",
+      "NumPy 实现",
+      "公开面经改编"
+    ],
+    "origin": {
+      "kind": "public-report-adapted",
+      "sourceIds": [
+        "report-jd-sep"
+      ],
+      "topic": "NumPy 实现",
+      "adaptation": "原文考点经归纳后重新构造题干、约束与参考答案；不代表逐字原题、原候选人回答或公司官方题库。"
+    }
+  }
+]

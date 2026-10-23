@@ -14,6 +14,7 @@ import {
 import Icon from "./Icon.vue";
 import Markdown from "./Markdown.vue";
 import NoteEditor from "./NoteEditor.vue";
+import InterviewContext from "./InterviewContext.vue";
 const props = defineProps({ question: Object, reviewMode: Boolean });
 const emit = defineEmits(["graded"]);
 const selected = ref(null),
@@ -75,6 +76,10 @@ async function submit(selfRating) {
       </button>
     </div>
     <h2 class="question-title">{{ q.prompt }}</h2>
+    <InterviewContext
+      v-if="q.origin?.kind === 'public-report-adapted'"
+      :question="q"
+    />
     <template v-if="q.type === 'choice'"
       ><fieldset class="options">
         <legend class="sr-only">选择一个答案</legend>
@@ -150,6 +155,12 @@ async function submit(selfRating) {
         ><span v-else class="tiny">开放题需自己判断</span>
       </div>
       <Markdown :content="q.answer" />
+      <section v-if="q.followUps?.length" class="interview-followups">
+        <h4>继续追问</h4>
+        <ol>
+          <li v-for="item in q.followUps" :key="item">{{ item }}</li>
+        </ol>
+      </section>
       <template v-if="q.type !== 'choice'"
         ><h4>对照评分要点</h4>
         <div class="rubric">

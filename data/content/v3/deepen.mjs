@@ -147,8 +147,16 @@ const routes = {
   ],
   python: ["py-asgi-concurrency", "py-unit-of-work"],
   restapi: ["fullstack-contracts", "fullstack-idempotent-outbox"],
-  llmapp: ["agent-framework-design", "openai-agents-tools", "agent-evaluation"],
-  ai: ["agent-framework-design", "agent-evaluation"],
+  llmapp: [
+    "llm-context-engineering",
+    "llm-rag-diagnostics",
+    "llm-output-contracts",
+  ],
+  ai: [
+    "ai-stream-consistency",
+    "llm-context-engineering",
+    "agent-eval-experiments",
+  ],
   project: ["fde-discovery", "fde-production"],
   architecture: ["agent-framework-design", "fde-production"],
   algorithm: ["algo-window-invariants", "algo-search-dp", "algo-graph-heap"],
@@ -156,5 +164,7 @@ const routes = {
 };
 for (const l of lessons) {
   l.depth ??= "foundation";
-  l.relatedLessonIds = (routes[l.moduleId] ?? []).filter((id) => id !== l.id);
+  l.relatedLessonIds = (l.relatedLessonIds ?? routes[l.moduleId] ?? []).filter(
+    (id) => id !== l.id,
+  );
 }

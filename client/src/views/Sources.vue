@@ -182,9 +182,11 @@ async function importBackup() {
           <strong>{{ s.title }}</strong>
           <p>{{ s.scope }}</p>
           <small>{{
-            s.status === "verified"
-              ? "范围已核对 · " + s.checkedAt
-              : "拓展参考 · 未逐项在线核对"
+            s.kind === "interview-report"
+              ? "公开内容已读 · " + s.checkedAt + " · 未经公司确认"
+              : s.status === "verified"
+                ? "范围已核对 · " + s.checkedAt
+                : "拓展参考 · 未逐项在线核对"
           }}</small>
         </div>
         <Icon name="ArrowUpRight" :size="18"

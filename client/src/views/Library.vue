@@ -21,6 +21,7 @@ import Markdown from "../components/Markdown.vue";
 import CodeBlock from "../components/CodeBlock.vue";
 import NoteEditor from "../components/NoteEditor.vue";
 import LessonPractice from "../components/LessonPractice.vue";
+import AiGlossary from "../components/AiGlossary.vue";
 const practicePanel = ref(null);
 const route = useRoute(),
   router = useRouter();
@@ -94,7 +95,7 @@ watch(
         <p>
           {{ lessons.length }}
           篇系统讲解，每篇都有可运行示例与自动验证练习。新增深入专题覆盖全栈、Agent
-          框架与 FDE，基础导读可沿关联专题继续。
+          框架与 FDE；AI 基础与概念专题可从零开始，配有中英文概念速查。
         </p>
       </div>
       <a :href="apiUrl('/export/handbook')" class="btn"
@@ -152,6 +153,11 @@ watch(
         ]"
       /><span class="muted tiny">{{ filtered.length }} 篇</span>
     </div>
+    <AiGlossary
+      v-if="moduleId === 'aibasics'"
+      :items="store.catalog.glossary || []"
+      :lesson-count="moduleFor('aibasics')?.lessonCount || 0"
+    />
     <div v-if="filtered.length" class="lesson-grid">
       <RouterLink
         v-for="l in filtered"
@@ -174,11 +180,13 @@ watch(
         </div>
         <h2>{{ l.title }}</h2>
         <span class="tiny green-text">{{
-          l.depth === "deep"
-            ? "深入专题 · 原理 / 案例 / 反例"
-            : l.depth === "expanded"
-              ? "机制深化"
-              : "基础导读"
+          l.moduleId === "aibasics"
+            ? "系统基础 · 概念 / 机制 / 实验"
+            : l.depth === "deep"
+              ? "深入专题 · 原理 / 案例 / 反例"
+              : l.depth === "expanded"
+                ? "机制深化"
+                : "基础导读"
         }}</span>
         <p>{{ l.summary }}</p>
         <div class="keyword-row">

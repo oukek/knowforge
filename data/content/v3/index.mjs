@@ -17,6 +17,13 @@ for (const [id, title, subtitle, icon, color] of [
     "Compass",
     "#9a7952",
   ],
+  [
+    "aibasics",
+    "AI 基础与概念",
+    "从 LLM、模型原理到应用与 Agent 的系统入门",
+    "Lightbulb",
+    "#487b79",
+  ],
 ])
   modules.push({
     id,
@@ -24,10 +31,14 @@ for (const [id, title, subtitle, icon, color] of [
     subtitle,
     icon,
     color,
-    priority: "P1",
+    priority: id === "aibasics" ? "P0" : "P1",
     budget: 30,
-    order: modules.length + 1,
+    order: id === "aibasics" ? 0 : modules.length + 1,
   });
+modules.sort((a, b) => a.order - b.order);
+modules.forEach((module, index) => {
+  module.order = index + 1;
+});
 const references = [
   [
     "ms-agents",
@@ -125,6 +136,192 @@ const references = [
     "https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-model.html",
     "事务、并发控制与隔离",
   ],
+  [
+    "hf-kv",
+    "Transformers Cache strategies",
+    "https://huggingface.co/docs/transformers/main/en/kv_cache",
+    "KV 缓存、显存与延迟取舍",
+  ],
+  [
+    "hf-generation",
+    "Transformers Generation strategies",
+    "https://huggingface.co/docs/transformers/main/en/generation_strategies",
+    "自回归生成与解码策略",
+  ],
+  [
+    "hf-lora",
+    "PEFT LoRA",
+    "https://huggingface.co/docs/peft/main/en/conceptual_guides/lora",
+    "低秩更新与参数高效适配",
+  ],
+  [
+    "hf-dpo",
+    "TRL DPO Trainer",
+    "https://huggingface.co/docs/trl/main/en/dpo_trainer",
+    "偏好样本与参考策略",
+  ],
+  [
+    "oa-compaction",
+    "OpenAI Compaction",
+    "https://developers.openai.com/api/docs/guides/compaction",
+    "上下文压缩与不透明状态项",
+  ],
+  [
+    "oa-schema",
+    "OpenAI Structured outputs",
+    "https://developers.openai.com/api/docs/guides/structured-outputs",
+    "结构契约、拒绝与不完整输出",
+  ],
+  [
+    "oa-cache",
+    "OpenAI Prompt caching",
+    "https://developers.openai.com/api/docs/guides/prompt-caching",
+    "前缀匹配及模型相关的缓存规则",
+  ],
+  [
+    "oa-eval",
+    "OpenAI Evaluation best practices",
+    "https://developers.openai.com/api/docs/guides/evaluation-best-practices",
+    "任务评估、评审偏差与持续回归",
+  ],
+  [
+    "oa-shell",
+    "OpenAI Shell tool",
+    "https://developers.openai.com/api/docs/guides/tools-shell",
+    "宿主执行环境与工具隔离",
+  ],
+  [
+    "otel-agent",
+    "OpenTelemetry GenAI agent spans",
+    "https://github.com/open-telemetry/semantic-conventions-genai",
+    "独立维护的 GenAI 轨迹语义约定仓库",
+  ],
+  [
+    "lg-subgraphs",
+    "LangGraph Subgraphs",
+    "https://docs.langchain.com/oss/python/langgraph/use-subgraphs",
+    "子图输入输出与状态隔离",
+  ],
+  [
+    "mcp-version",
+    "MCP Versioning and Compatibility",
+    "https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning",
+    "2026 与传统握手版本的兼容边界",
+  ],
+  [
+    "mcp-security",
+    "MCP Security Best Practices",
+    "https://modelcontextprotocol.io/docs/2026-07-28/tutorials/security/security_best_practices",
+    "令牌受众、混淆代理与 SSRF",
+  ],
+  [
+    "hf-llm-intro",
+    "Hugging Face LLM Course Introduction",
+    "https://huggingface.co/learn/llm-course/en/chapter1/1",
+    "NLP、LLM 与模型学习路线",
+  ],
+  [
+    "hf-transformers-intro",
+    "Hugging Face How do Transformers work?",
+    "https://huggingface.co/learn/llm-course/en/chapter1/4",
+    "预训练、迁移与 Transformer 家族",
+  ],
+  [
+    "hf-bpe-intro",
+    "Hugging Face Byte-Pair Encoding",
+    "https://huggingface.co/learn/llm-course/en/chapter6/5",
+    "子词分词与 BPE 合并",
+  ],
+  [
+    "google-ml-intro",
+    "Google Introduction to Machine Learning",
+    "https://developers.google.com/machine-learning/intro-to-ml",
+    "机器学习的基本问题与学习方式",
+  ],
+  [
+    "google-embeddings-intro",
+    "Google Obtaining embeddings",
+    "https://developers.google.com/machine-learning/crash-course/embeddings/obtaining-embeddings",
+    "Embedding 的学习与语义表示",
+  ],
+  [
+    "oa-agents-overview",
+    "OpenAI Agents Overview",
+    "https://developers.openai.com/api/docs/guides/agents",
+    "Agent、工具与应用运行时的关系",
+  ],
+  [
+    "a2a-intro",
+    "Agent2Agent Protocol",
+    "https://a2a-protocol.org/latest/",
+    "跨 Agent 应用的通信与互操作边界",
+  ],
+  [
+    "hf-multimodal-intro",
+    "Transformers Image-text-to-text",
+    "https://huggingface.co/docs/transformers/main/en/tasks/image_text_to_text",
+    "视觉语言模型输入与任务边界",
+  ],
+  [
+    "hf-diffusion-intro",
+    "Diffusers Pipelines, models and schedulers",
+    "https://huggingface.co/docs/diffusers/main/en/using-diffusers/write_own_pipeline",
+    "扩散生成流水线与调度器",
+  ],
+  [
+    "hf-grpo-intro",
+    "TRL GRPO Trainer",
+    "https://huggingface.co/docs/trl/main/en/grpo_trainer",
+    "组内奖励、优势与训练配置边界",
+  ],
+  [
+    "hf-ppo-intro",
+    "Hugging Face PPO clipped objective",
+    "https://huggingface.co/learn/deep-rl-course/en/unit8/clipped-surrogate-objective",
+    "裁剪目标与策略更新的区别",
+  ],
+  [
+    "redis-eviction",
+    "Redis Key eviction",
+    "https://redis.io/docs/latest/develop/reference/eviction/",
+    "内存压力下的键淘汰策略",
+  ],
+  [
+    "redis-expire",
+    "Redis EXPIRE",
+    "https://redis.io/docs/latest/commands/expire/",
+    "TTL、过期与删除语义",
+  ],
+  [
+    "mysql-redo",
+    "MySQL InnoDB Redo Log",
+    "https://dev.mysql.com/doc/refman/8.4/en/innodb-redo-log.html",
+    "崩溃恢复与 redo",
+  ],
+  [
+    "mysql-undo",
+    "MySQL InnoDB Undo Logs",
+    "https://dev.mysql.com/doc/refman/8.4/en/innodb-undo-logs.html",
+    "回滚、一致性读与 undo",
+  ],
+  [
+    "mysql-binlog",
+    "MySQL Binary Log",
+    "https://dev.mysql.com/doc/refman/8.4/en/binary-log.html",
+    "服务层变更日志与复制",
+  ],
+  [
+    "mdn-bigint",
+    "MDN BigInt",
+    "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt",
+    "整数运算、Number 混用和 JSON 边界",
+  ],
+  [
+    "redis-bloom",
+    "Redis Bloom filters",
+    "https://redis.io/docs/latest/develop/data-types/probabilistic/bloom-filter/",
+    "布隆结构、误判与使用限制",
+  ],
 ];
 for (const [id, title, url, scope] of references)
   sources.push({
@@ -163,10 +360,10 @@ for (const entry of entries) {
   const row = {
     ...entry,
     sections,
-    depth: "deep",
+    depth: entry.depth || "deep",
     provenance: "editorial",
-    level: "进阶",
-    priority: "P1",
+    level: entry.level || "进阶",
+    priority: entry.priority || "P1",
     updatedAt: "2026-10-23",
     order: lessons.filter((l) => l.moduleId === entry.moduleId).length + 1,
     estimatedMinutes: Math.max(20, Math.ceil(markdown.length / 70)),
@@ -201,8 +398,8 @@ for (const entry of entries) {
       lessonId: entry.id,
       moduleId: entry.moduleId,
       pool: "transfer",
-      priority: "P1",
-      difficulty: q.difficulty || "进阶",
+      priority: entry.priority || "P1",
+      difficulty: q.difficulty || entry.level || "进阶",
       keywords: entry.keywords,
       provenance: "editorial",
       type: q.type || "scenario",

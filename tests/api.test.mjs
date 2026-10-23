@@ -51,7 +51,7 @@ async function fixture(t, options = {}) {
 }
 test("知识库关联与标准答案有效", () => {
   const ids = new Set(catalog.lessons.map((x) => x.id));
-  assert.equal(catalog.modules.length, 20);
+  assert.equal(catalog.modules.length, 21);
   assert(catalog.lessons.length >= 100);
   for (const q of catalog.questions) {
     assert(ids.has(q.lessonId));
@@ -84,7 +84,7 @@ test("扩展专题支持筛题、学习主线与新旧备份", async (t) => {
     count: 3,
     minutes: 10,
   });
-  assert.equal(result.status, 200, "全部 20 专题可组卷");
+  assert.equal(result.status, 200, "全部 21 专题可组卷");
   result = await api("/exams", "POST", {
     mode: "objective",
     moduleIds: ["restapi"],

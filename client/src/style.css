@@ -1369,6 +1369,88 @@ svg {
   color: var(--green);
   text-decoration: underline;
 }
+.prose-table {
+  max-width: 100%;
+  min-width: 0;
+  margin: 18px 0 22px;
+  border: 1px solid #bfcfc1;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+.prose-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #a5b8a8 #edf2ec;
+}
+.prose-table-scroll:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: -3px;
+}
+.prose table {
+  width: 100%;
+  min-width: calc(var(--table-columns, 2) * 12rem);
+  border-collapse: collapse;
+  line-height: 1.75;
+  color: #40584a;
+  font-size: 13px;
+}
+.prose th,
+.prose td {
+  min-width: 8rem;
+  padding: 13px 16px;
+  border-right: 1px solid #cbd8cd;
+  border-bottom: 1px solid #cbd8cd;
+  vertical-align: top;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.prose th {
+  background: #e5eee3;
+  color: #2f4d39;
+  font-weight: 650;
+  text-align: left;
+}
+.prose tbody tr:nth-child(even) {
+  background: #f4f7f2;
+}
+.prose th:first-child,
+.prose td:first-child {
+  min-width: 10rem;
+}
+.prose th:last-child,
+.prose td:last-child {
+  border-right: 0;
+}
+.prose tbody tr:last-child td,
+.prose tbody tr:last-child th {
+  border-bottom: 0;
+}
+.prose td p:last-child,
+.prose th p:last-child {
+  margin-bottom: 0;
+}
+.prose-table-hint {
+  display: none;
+  padding: 7px 12px;
+  border-top: 1px solid #cbd8cd;
+  background: #edf3eb;
+  color: #536b58;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.prose-table.is-overflowing .prose-table-hint {
+  display: block;
+}
+@media (max-width: 767px) {
+  .prose th,
+  .prose td {
+    padding: 11px 13px;
+  }
+}
 .code-block {
   border: 1px solid #e0e7df;
   border-radius: 7px;

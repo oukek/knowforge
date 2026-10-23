@@ -8,6 +8,7 @@ import Icon from "./Icon.vue";
 import CodeEditor from "./CodeEditor.vue";
 import CodeBlock from "./CodeBlock.vue";
 import RunOutput from "./RunOutput.vue";
+import PythonRuntimeDialog from "./PythonRuntimeDialog.vue";
 const props = defineProps({ lesson: Object, initialTab: String });
 const tab = ref("code"),
   resetPending = ref(false),
@@ -36,7 +37,8 @@ const fillCode = ref(
     : "",
 );
 answer.value = safeStorageGet("wxg-output-" + output.value.id) ?? "";
-const { running, result, logs, phase, run, stop, clear } = useCodeRunner();
+const { running, result, logs, phase, initialization, run, stop, clear } =
+  useCodeRunner();
 const lastSource = ref(null);
 let alive = true;
 onBeforeUnmount(() => (alive = false));
@@ -84,7 +86,7 @@ watch(tab, () => {
   resetPending.value = false;
   saveStatus.value = "";
 });
-async function execute() {
+async function execute({ reloadRuntime = false } = {}) {
   const isFill = tab.value === "fill",
     source = isFill ? fillCode.value : code.value;
   const current = fill.value;
@@ -97,10 +99,21 @@ async function execute() {
           code: source,
           signature: current.signature,
           tests: current.tests,
+          reloadRuntime,
         }
-      : { language: language.value, mode: "snippet", code: source },
+      : {
+          language: language.value,
+          mode: "snippet",
+          code: source,
+          reloadRuntime,
+        },
   );
   if (!alive || value.cancelled || !isFill) return;
+  if (value.initializationFailed) {
+    saveStatus.value =
+      "Python 环境尚未就绪，本次未记录为答错。可重新加载后验证。";
+    return;
+  }
   saveStatus.value = "正在保存本次验证…";
   const saved = await mutate(
     "/lesson-exercises/" + current.id + "/attempt",
@@ -184,6 +197,12 @@ defineExpose({ openExercises, openExample });
     <p class="lesson-practice-intro">
       从这篇资料的具体代码开始，修改输入、观察输出，再独立验证理解。
     </p>
+    <PythonRuntimeDialog
+      v-if="language === 'python'"
+      :state="initialization"
+      @cancel="stop()"
+      @retry="execute({ reloadRuntime: true })"
+    />
     <div
       class="lesson-practice-tabs"
       role="tablist"
@@ -238,8 +257,8 @@ defineExpose({ openExercises, openExample });
         </div>
         <p>{{ example.description }}</p>
         <p v-if="example.runtime === 'model'" class="example-scope">
-          此处验证教学模型，不执行真实浏览器排版、微信宿主或 Node 专属
-          API；适用边界见示例说明。
+          此处运行可控的教学模型，不调用真实 AI 服务、微信宿主或 Node 专属
+          API，也不执行业务写入；实际用法与边界见正文和示例说明。
         </p>
       </div>
       <div class="lesson-editor-shell">

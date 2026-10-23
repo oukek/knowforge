@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import {
   modules,
   lessons,
@@ -24,6 +24,16 @@ await import("../data/content/v3/algorithms.mjs");
 await import("../data/content/v3/transfer.mjs");
 await import("../data/content/v3/deepen.mjs");
 await import("../data/content/v3/exercises.mjs");
+await import("../data/content/v3/ai-exercises.mjs");
+await import("../data/content/ai-foundations/exercises.mjs");
+const { interviewSources } =
+  await import("../data/content/interviews/index.mjs");
+const glossary = JSON.parse(
+  readFileSync(
+    new URL("../data/content/ai-foundations/glossary.json", import.meta.url),
+    "utf8",
+  ),
+);
 attachExamples(lessons);
 lessons.sort(
   (a, b) =>
@@ -118,6 +128,12 @@ for (const m of modules) {
 }
 const tracks = [
   {
+    id: "ai-from-zero",
+    title: "AI 从概念到应用",
+    description: "概念、模型机制、应用、RAG、工具与 Agent",
+    moduleIds: ["aibasics", "llmapp", "agents", "fde"],
+  },
+  {
     id: "fullstack",
     title: "Node / Python 全栈进阶",
     description: "请求预算、事务、并发、流与跨语言契约",
@@ -139,7 +155,7 @@ const tracks = [
     id: "ai-application",
     title: "AI 应用工程",
     description: "打通 Python、服务契约、RAG 与工具执行。",
-    moduleIds: ["python", "restapi", "llmapp", "ai"],
+    moduleIds: ["aibasics", "python", "restapi", "llmapp", "ai"],
   },
   {
     id: "foundation",
@@ -170,6 +186,13 @@ const data = {
   schemaVersion: 1,
   edition: "2026.10 · 深度与迁移训练",
   curriculum: {
+    aiFoundationLessons: lessons.filter((l) => l.moduleId === "aibasics")
+      .length,
+    glossaryTerms: glossary.length,
+    publicInterviewQuestions: questions.filter(
+      (q) => q.provenance === "public-report-adapted",
+    ).length,
+    publicInterviewSources: interviewSources.length,
     deepLessons: lessons.filter((l) => l.depth === "deep").length,
     expandedLessons: lessons.filter((l) => l.depth === "expanded").length,
     transferQuestions: questions.filter((q) => q.pool === "transfer").length,
@@ -180,6 +203,8 @@ const data = {
   title: "KnowForge · 全栈与 AI 工程知识库",
   disclaimer:
     "覆盖前端、Python、数据采集、RESTful API 与 AI 应用的原创学习及练习资料。原微信面试材料保留并校正，不代表任何官方题库；平台行为以目标版本官方文档为准。",
+  glossary,
+  interviewSources,
   modules,
   tracks,
   lessons,
@@ -248,8 +273,16 @@ ${exercise.explanation}
         q.lessonId === l.id && q.pool === "transfer" && q.type !== "coding",
     )) {
       md += `#### 迁移训练：${question.prompt}\n\n`;
+      if (question.origin) {
+        const refs = question.origin.sourceIds.map((id) =>
+          sources.find((s) => s.id === id),
+        );
+        md += `公开面经考点改编 · ${question.company}。${question.origin.adaptation}\n\n${refs.map((s) => `来源：[${s.title}](${s.url})。${s.dateNote}`).join("\n\n")}\n\n`;
+      }
       if (question.type === "choice")
         md += `${question.options.map((option, index) => `${index + 1}. ${option}`).join("\n")}\n\n正确选项：${question.correct + 1}。\n\n`;
+      if (question.followUps?.length)
+        md += `追问：${question.followUps.join("；")}\n\n`;
       md += `${question.answer}\n\n检验要点：\n\n${question.rubric.map((point) => `- ${point}`).join("\n")}\n\n`;
     }
     const links = l.sourceIds
@@ -259,6 +292,16 @@ ${exercise.explanation}
       md += `参考：${links.map((s) => `[${s.title}](${s.url})`).join(" · ")}\n\n`;
   }
 }
+md += "## AI 概念速查\n\n";
+for (const term of glossary) {
+  const lesson = lessons.find((l) => l.id === term.lessonId);
+  md += `### ${term.term} · ${term.chinese}\n\n${term.definition}\n\n辨析：${term.distinction}\n\n关联课程：${lesson.title}\n\n`;
+}
+md +=
+  "## 公开面经来源边界\n\n只记录可访问公开内容。公司归属与面试经历为发布者自述或汇总，未经公司确认；发布日期不自动等于面试日期，不据有限样本宣称出题频率。\n\n";
+for (const source of interviewSources)
+  md += `- [${source.title}](${source.url})：${source.dateNote}\n`;
+md += "\n";
 md += "## 基础单选题与解析\n\n迁移单选题位于各篇资料的迁移训练中。\n\n";
 for (const q of choices)
   md += `### ${q.prompt}\n\n${q.options.map((o, i) => `${i + 1}. ${o}`).join("\n")}\n\n答案：${q.correct + 1}。${q.explanation}\n\n`;

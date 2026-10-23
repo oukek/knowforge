@@ -130,7 +130,10 @@ try {
   ).json();
   assert(bootstrap.catalog.lessons.length > 0);
   assert.equal(bootstrap.database, mysqlCheck ? "mysql" : "sqlite");
-  assert.equal(bootstrap.catalog.curriculum.deepLessons, 21);
+  assert.equal(bootstrap.catalog.curriculum.deepLessons, 39);
+  assert.equal(bootstrap.catalog.curriculum.aiFoundationLessons, 24);
+  assert.equal(bootstrap.catalog.curriculum.publicInterviewQuestions, 60);
+  assert.equal(bootstrap.catalog.glossary.length, 108);
   const pythonManifest = await (
     await fetch(`${base}/python-runtime/manifest.json`)
   ).json();

@@ -33,7 +33,7 @@ test("迁移题不复制资料问答，也没有相同归一化题干", () => {
 });
 test("新增深入专题具有机制、代码、边界、来源和关联练习", () => {
   const deep = data.lessons.filter((l) => l.depth === "deep");
-  assert.equal(deep.length, 21);
+  assert.equal(deep.length, 39);
   for (const lesson of deep) {
     assert(lesson.sections.length >= 5, lesson.id);
     assert(
@@ -68,4 +68,49 @@ test("新增深入专题具有机制、代码、边界、来源和关联练习",
       deep.some((l) => l.moduleId === moduleId),
       moduleId,
     );
+});
+test("AI 深入路线包含十八个新机制专题及独立场景、选择与随堂练习", () => {
+  const ids = [
+    "llm-attention-kv",
+    "llm-decoding-sampling",
+    "llm-context-engineering",
+    "llm-rag-diagnostics",
+    "llm-evidence-contracts",
+    "llm-output-contracts",
+    "llm-cache-routing",
+    "llm-adaptation-data",
+    "agent-tool-scheduler",
+    "agent-memory-lifecycle",
+    "agent-mcp-boundaries",
+    "agent-sandbox-capabilities",
+    "agent-observability",
+    "agent-eval-experiments",
+    "agent-multi-agent-contracts",
+    "ai-stream-consistency",
+    "fde-ai-rollout",
+    "fde-ai-capstone",
+  ];
+  let fills = 0;
+  for (const id of ids) {
+    const lesson = data.lessons.find((l) => l.id === id);
+    assert(lesson, id);
+    assert.equal(lesson.depth, "deep", id);
+    assert.equal(lesson.sections.length, 6, id);
+    assert(lesson.relatedLessonIds.length >= 2, id);
+    const questions = data.questions.filter(
+      (q) =>
+        q.lessonId === id &&
+        q.pool === "transfer" &&
+        q.provenance === "editorial",
+    );
+    assert.equal(questions.filter((q) => q.type === "scenario").length, 2, id);
+    assert.equal(questions.filter((q) => q.type === "choice").length, 1, id);
+    fills += lesson.exercises.filter((e) => e.type === "fill").length;
+  }
+  assert.equal(fills, 8);
+  const ai = data.lessons.filter((l) =>
+    ["ai", "llmapp", "agents", "fde"].includes(l.moduleId),
+  );
+  assert.equal(ai.length, 64);
+  assert.equal(ai.filter((l) => l.depth === "deep").length, 28);
 });

@@ -7,6 +7,7 @@ import { useRoute, useRouter } from "vue-router";
 import { store, modules, questions, typeLabel, moduleFor } from "../store";
 import Icon from "../components/Icon.vue";
 import QuestionPanel from "../components/QuestionPanel.vue";
+import { matchesQuestionSource } from "../../../shared/question-filters.mjs";
 const route = useRoute(),
   router = useRouter();
 const questionPool = ref(
@@ -23,9 +24,22 @@ const query = ref(""),
   type = ref(route.query.type || ""),
   moduleId = ref(route.query.module || ""),
   priority = ref(""),
+  origin = ref(
+    route.query.source === "public" || route.query.company ? "public" : "",
+  ),
+  company = ref(route.query.company || ""),
   onlyNew = ref(false),
   page = ref(1);
 const size = 20;
+const companies = computed(() =>
+  [
+    ...new Set(
+      questions.value
+        .filter((q) => q.provenance === "public-report-adapted")
+        .map((q) => q.company),
+    ),
+  ].sort((a, b) => a.localeCompare(b, "zh-CN")),
+);
 const attempted = computed(
   () => new Set(store.state.attempts.map((x) => x.questionId)),
 );
@@ -36,7 +50,11 @@ const filtered = computed(() =>
       (!moduleId.value || q.moduleId === moduleId.value) &&
       (!priority.value || q.priority === priority.value) &&
       (!onlyNew.value || !attempted.value.has(q.id)) &&
-      [q.prompt, ...q.keywords]
+      matchesQuestionSource(q, {
+        origin: origin.value,
+        company: company.value,
+      }) &&
+      [q.prompt, q.company || "", ...q.keywords]
         .join(" ")
         .toLowerCase()
         .includes(query.value.toLowerCase()),
@@ -62,9 +80,20 @@ const currentIndex = computed(() =>
   filtered.value.findIndex((x) => x.id === current.value?.id),
 );
 watch(
-  [query, type, moduleId, priority, onlyNew, questionPool],
+  [query, type, moduleId, priority, onlyNew, questionPool, origin, company],
   () => (page.value = 1),
 );
+watch(company, (value) => {
+  if (value) {
+    origin.value = "public";
+    if (questionPool.value === "foundation") questionPool.value = "transfer";
+  }
+});
+watch(origin, (value) => {
+  if (value === "editorial") company.value = "";
+  if (value === "public" && questionPool.value === "foundation")
+    questionPool.value = "transfer";
+});
 function open(q) {
   router.push(q.type === "coding" ? "/labs/" + q.labId : "/practice/" + q.id);
 }
@@ -81,6 +110,7 @@ function random() {
         <h1>问得深入，答得有据。</h1>
         <p>
           默认练迁移题：改变约束、分析故障、比较方案。基础自测单独归档，客观题自动判分，开放题对照证据自评。
+          公开面经按考点改编，保留公司、来源与日期边界。
         </p>
       </div>
       <button class="btn primary" :disabled="!filtered.length" @click="random">
@@ -132,14 +162,34 @@ function random() {
           { value: '', label: '全部优先级' },
           ...['P0', 'P1', 'P2'].map((value) => ({ value, label: value })),
         ]"
-      /><AppChoice class="check-label" type="checkbox" v-model="onlyNew"
+      />
+      <AppSelect
+        v-model="origin"
+        label="题目来源类型"
+        :options="[
+          { value: '', label: '全部来源' },
+          { value: 'editorial', label: '原创专题题' },
+          { value: 'public', label: '公开面经考点改编' },
+        ]"
+      />
+      <AppSelect
+        v-model="company"
+        label="公开面经公司"
+        :options="[
+          { value: '', label: '全部公司' },
+          ...companies.map((value) => ({ value, label: value })),
+        ]"
+      />
+      <AppChoice class="check-label" type="checkbox" v-model="onlyNew"
         >只看未练</AppChoice
       >
     </div>
     <div class="table-summary">
       <span
         >共 <strong>{{ filtered.length }}</strong> 道题目</span
-      ><span class="muted tiny">题目为知识点练习构造，未标榜“面试真题”</span>
+      ><span class="muted tiny"
+        >公开面经为考点改编，非公司官方题库；未据有限样本统计出题频率</span
+      >
     </div>
     <div class="question-list">
       <button
@@ -154,6 +204,9 @@ function random() {
         <div class="question-row-main">
           <h3>{{ q.prompt }}</h3>
           <div class="row wrap">
+            <span v-if="q.company" class="badge subtle"
+              >{{ q.company }} · 考点改编</span
+            >
             <span
               class="tiny"
               :style="{ color: moduleFor(q.moduleId).color }"
@@ -183,6 +236,9 @@ function random() {
           moduleId = '';
           priority = '';
           onlyNew = false;
+          origin = '';
+          company = '';
+          questionPool = 'transfer';
         "
       >
         重置筛选

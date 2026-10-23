@@ -1,0 +1,974 @@
+[
+  {
+    "id": "ai-term-1",
+    "term": "AI",
+    "chinese": "人工智能",
+    "category": "领域与对象",
+    "definition": "研究和实现感知、推断、规划等智能任务的广泛领域，可以包含规则与学习方法。",
+    "distinction": "不等于所有功能都要调用大模型。",
+    "lessonId": "ai-concept-map"
+  },
+  {
+    "id": "ai-term-2",
+    "term": "ML",
+    "chinese": "机器学习",
+    "category": "领域与对象",
+    "definition": "从数据中学习规律并对新输入做预测或决策的方法集合。",
+    "distinction": "模型需要独立评估，训练准确不等于泛化好。",
+    "lessonId": "ai-concept-map"
+  },
+  {
+    "id": "ai-term-3",
+    "term": "DL",
+    "chinese": "深度学习",
+    "category": "领域与对象",
+    "definition": "使用多层神经网络学习表示与任务映射，是机器学习的重要方法。",
+    "distinction": "不是参数越多就能解决一切。",
+    "lessonId": "ai-concept-map"
+  },
+  {
+    "id": "ai-term-4",
+    "term": "GenAI",
+    "chinese": "生成式人工智能",
+    "category": "领域与对象",
+    "definition": "围绕生成文本、图像、音频等新内容的一类能力和应用。",
+    "distinction": "不涵盖全部 AI 任务，也不保证事实真实。",
+    "lessonId": "ai-concept-map"
+  },
+  {
+    "id": "ai-term-5",
+    "term": "AIGC",
+    "chinese": "人工智能生成内容",
+    "category": "领域与对象",
+    "definition": "从内容生产角度描述由 AI 辅助或自动生成的文本、图片和媒体。",
+    "distinction": "与某一个特定模型或框架不是同义词。",
+    "lessonId": "ai-concept-map"
+  },
+  {
+    "id": "ai-term-6",
+    "term": "NLP",
+    "chinese": "自然语言处理",
+    "category": "领域与对象",
+    "definition": "对语言进行表示、分析、理解与生成的领域，包含传统方法与大模型。",
+    "distinction": "不是只有聊天才算 NLP。",
+    "lessonId": "ai-concept-map"
+  },
+  {
+    "id": "ai-term-7",
+    "term": "LLM",
+    "chinese": "大语言模型",
+    "category": "语言模型与表示",
+    "definition": "利用大规模语言数据学习条件生成与相关任务能力的模型，通常以 token 为单位计算。",
+    "distinction": "模型、API 和聊天产品是不同层。",
+    "lessonId": "ai-llm-primer"
+  },
+  {
+    "id": "ai-term-8",
+    "term": "Base Model",
+    "chinese": "基座模型",
+    "category": "语言模型与表示",
+    "definition": "经过基础训练、可进一步适配的模型版本，具体行为取决于训练目标与模板。",
+    "distinction": "并不自动擅长所有指令任务。",
+    "lessonId": "ai-llm-primer"
+  },
+  {
+    "id": "ai-term-9",
+    "term": "Instruction Model",
+    "chinese": "指令模型",
+    "category": "语言模型与表示",
+    "definition": "通过指令相关训练适配，更适合按任务要求产生输出的模型。",
+    "distinction": "指令遵循仍需实测，不能当授权保证。",
+    "lessonId": "ai-llm-primer"
+  },
+  {
+    "id": "ai-term-10",
+    "term": "Parameters",
+    "chinese": "模型参数",
+    "category": "语言模型与表示",
+    "definition": "模型结构中通过学习确定的数值，参与推理映射。",
+    "distinction": "上下文和数据库记录不会自动变成参数。",
+    "lessonId": "ai-llm-primer"
+  },
+  {
+    "id": "ai-term-11",
+    "term": "Weights",
+    "chinese": "模型权重",
+    "category": "语言模型与表示",
+    "definition": "参数的常见组成，决定网络中的线性或其他可学习变换。",
+    "distinction": "文件体积不等于全部运行显存。",
+    "lessonId": "ai-llm-primer"
+  },
+  {
+    "id": "ai-term-12",
+    "term": "Checkpoint",
+    "chinese": "模型检查点",
+    "category": "语言模型与表示",
+    "definition": "某一训练阶段保存的权重和可能的其他状态，内容随工具而异。",
+    "distinction": "与 Agent 图状态 checkpoint 不是同一个对象。",
+    "lessonId": "ai-llm-primer"
+  },
+  {
+    "id": "ai-term-13",
+    "term": "Token",
+    "chinese": "词元",
+    "category": "分词与向量",
+    "definition": "分词器定义的离散文本片段或特殊符号，用于形成模型输入序列。",
+    "distinction": "一个汉字不保证正好一个 token。",
+    "lessonId": "ai-tokenization-primer"
+  },
+  {
+    "id": "ai-term-14",
+    "term": "Tokenizer",
+    "chinese": "分词器",
+    "category": "分词与向量",
+    "definition": "按固定词表和规则将文本与 token ID 序列转换的组件。",
+    "distinction": "不同模型版本的 ID 和计数不可随意混用。",
+    "lessonId": "ai-tokenization-primer"
+  },
+  {
+    "id": "ai-term-15",
+    "term": "BPE",
+    "chinese": "字节对编码式子词分词",
+    "category": "分词与向量",
+    "definition": "依据学习得到的合并优先级组合相邻片段的一类分词方法。",
+    "distinction": "简单最长字符串匹配不等于完整 BPE。",
+    "lessonId": "ai-tokenization-primer"
+  },
+  {
+    "id": "ai-term-16",
+    "term": "Vocabulary",
+    "chinese": "词表",
+    "category": "分词与向量",
+    "definition": "模型分词组件支持的片段与 ID 映射及相关特殊符号集合。",
+    "distinction": "ID 接近不代表语义接近。",
+    "lessonId": "ai-tokenization-primer"
+  },
+  {
+    "id": "ai-term-17",
+    "term": "Embedding",
+    "chinese": "嵌入向量",
+    "category": "分词与向量",
+    "definition": "将对象映射为可计算连续向量的表示，可用于检索、分类和其他任务。",
+    "distinction": "维度高不自动意味着业务表示好。",
+    "lessonId": "ai-embedding-primer"
+  },
+  {
+    "id": "ai-term-18",
+    "term": "Cosine Similarity",
+    "chinese": "余弦相似度",
+    "category": "分词与向量",
+    "definition": "非零向量点积除以两者长度乘积，衡量方向接近程度。",
+    "distinction": "相似不是事实支持，也不是权限。",
+    "lessonId": "ai-embedding-primer"
+  },
+  {
+    "id": "ai-term-19",
+    "term": "Normalization",
+    "chinese": "向量归一化",
+    "category": "分词与向量",
+    "definition": "按约定缩放向量，例如转换为单位长度，改变某些距离比较的性质。",
+    "distinction": "须与 embedding 与索引约定一致。",
+    "lessonId": "ai-embedding-primer"
+  },
+  {
+    "id": "ai-term-20",
+    "term": "Transformer",
+    "chinese": "变换器结构",
+    "category": "模型结构与推理",
+    "definition": "由注意力、前馈、残差、归一化和位置相关处理等组成的序列模型结构族。",
+    "distinction": "不能只用一个 Attention 公式概括全部网络。",
+    "lessonId": "ai-transformer-primer"
+  },
+  {
+    "id": "ai-term-21",
+    "term": "Attention",
+    "chinese": "注意力",
+    "category": "模型结构与推理",
+    "definition": "根据 query 与 key 的关系对可见 value 加权汇总的信息交互机制。",
+    "distinction": "权重不是可靠引用或因果解释。",
+    "lessonId": "ai-transformer-primer"
+  },
+  {
+    "id": "ai-term-22",
+    "term": "Q/K/V",
+    "chinese": "查询、键和值",
+    "category": "模型结构与推理",
+    "definition": "注意力中用于匹配与汇总的表示，通常通过可学习变换得到。",
+    "distinction": "不是三个手写的词义数据库。",
+    "lessonId": "ai-transformer-primer"
+  },
+  {
+    "id": "ai-term-23",
+    "term": "Encoder",
+    "chinese": "编码器",
+    "category": "模型结构与推理",
+    "definition": "常用于构造输入的双向表示，具体能力取决于训练目标。",
+    "distinction": "不是任何输入转换都等于 Transformer Encoder。",
+    "lessonId": "ai-transformer-primer"
+  },
+  {
+    "id": "ai-term-24",
+    "term": "Decoder",
+    "chinese": "解码器",
+    "category": "模型结构与推理",
+    "definition": "在序列生成中按可见前缀产生输出的结构，具体实现可能含不同注意力层。",
+    "distinction": "生成时不能偷看尚未给出的正确未来。",
+    "lessonId": "ai-transformer-primer"
+  },
+  {
+    "id": "ai-term-25",
+    "term": "Causal Mask",
+    "chinese": "因果掩码",
+    "category": "模型结构与推理",
+    "definition": "限制每个预测位置只能使用合法前缀信息的可见性规则。",
+    "distinction": "并行训练仍需防未来泄漏。",
+    "lessonId": "ai-transformer-primer"
+  },
+  {
+    "id": "ai-term-26",
+    "term": "Positional Encoding",
+    "chinese": "位置表示",
+    "category": "模型结构与推理",
+    "definition": "向模型提供顺序或相对位置关系的方法族。",
+    "distinction": "改最大长度配置不等于可靠外推。",
+    "lessonId": "ai-transformer-primer"
+  },
+  {
+    "id": "ai-term-27",
+    "term": "Dense",
+    "chinese": "稠密模型",
+    "category": "模型结构与推理",
+    "definition": "输入通常经过相应层的大部分参数的模型组织方式。",
+    "distinction": "参数规模不能单独决定质量和延迟。",
+    "lessonId": "ai-model-specifications"
+  },
+  {
+    "id": "ai-term-28",
+    "term": "MoE",
+    "chinese": "混合专家",
+    "category": "模型结构与推理",
+    "definition": "通过路由让部分专家模块参与计算，可区分总参数与激活参数。",
+    "distinction": "激活参数少不代表只需同等权重内存。",
+    "lessonId": "ai-model-specifications"
+  },
+  {
+    "id": "ai-term-29",
+    "term": "Context Window",
+    "chinese": "上下文窗口",
+    "category": "模型结构与推理",
+    "definition": "一次推理可利用的序列容量范围，计量与接口规则需核对。",
+    "distinction": "不是永久记忆容量，也不是质量承诺。",
+    "lessonId": "ai-model-specifications"
+  },
+  {
+    "id": "ai-term-30",
+    "term": "KV Cache",
+    "chinese": "键值缓存",
+    "category": "模型结构与推理",
+    "definition": "自回归推理中复用已有位置的 K/V 中间张量以减少重复计算。",
+    "distinction": "不是自然语言摘要或应用答案缓存。",
+    "lessonId": "llm-attention-kv"
+  },
+  {
+    "id": "ai-term-31",
+    "term": "Prefill",
+    "chinese": "输入预填充",
+    "category": "模型结构与推理",
+    "definition": "处理已有输入并建立表示和缓存的推理阶段。",
+    "distinction": "首 token 等待还可能包含排队和检索。",
+    "lessonId": "llm-attention-kv"
+  },
+  {
+    "id": "ai-term-32",
+    "term": "Decode",
+    "chinese": "逐步生成",
+    "category": "模型结构与推理",
+    "definition": "利用当前上下文和缓存产生后续 token 的阶段。",
+    "distinction": "长输出仍有串行生成成本。",
+    "lessonId": "llm-attention-kv"
+  },
+  {
+    "id": "ai-term-33",
+    "term": "Training",
+    "chinese": "训练",
+    "category": "训练与数值",
+    "definition": "使用数据、目标和优化方法调整可学习参数的过程。",
+    "distinction": "增加对话示例通常不等于训练权重。",
+    "lessonId": "ai-training-inference"
+  },
+  {
+    "id": "ai-term-34",
+    "term": "Inference",
+    "chinese": "推理",
+    "category": "训练与数值",
+    "definition": "以已有参数和当前输入计算结果的过程，可包含生成与工具循环。",
+    "distinction": "模型推理和业务执行不能混为一谈。",
+    "lessonId": "ai-training-inference"
+  },
+  {
+    "id": "ai-term-35",
+    "term": "Loss",
+    "chinese": "损失函数",
+    "category": "训练与数值",
+    "definition": "量化预测与训练目标差异、供优化使用的函数。",
+    "distinction": "训练 loss 降低不自动代表业务更好。",
+    "lessonId": "ai-training-inference"
+  },
+  {
+    "id": "ai-term-36",
+    "term": "Gradient",
+    "chinese": "梯度",
+    "category": "训练与数值",
+    "definition": "目标对参数变化的局部敏感方向，用于优化更新。",
+    "distinction": "非凸优化不保证全局最优。",
+    "lessonId": "ai-training-inference"
+  },
+  {
+    "id": "ai-term-37",
+    "term": "Activation",
+    "chinese": "激活函数",
+    "category": "训练与数值",
+    "definition": "为网络引入非线性变换的函数，例如 ReLU、Sigmoid 等。",
+    "distinction": "与 MoE 激活参数的“激活”不是同一概念。",
+    "lessonId": "ai-training-inference"
+  },
+  {
+    "id": "ai-term-38",
+    "term": "Sigmoid",
+    "chinese": "逻辑函数",
+    "category": "训练与数值",
+    "definition": "将实数映射到零到一之间，常见于二分类概率建模。",
+    "distinction": "输出像概率仍需验证模型与校准。",
+    "lessonId": "ai-training-inference"
+  },
+  {
+    "id": "ai-term-39",
+    "term": "ReLU",
+    "chinese": "线性整流",
+    "category": "训练与数值",
+    "definition": "对输入取 max(0,x) 的非线性函数。",
+    "distinction": "负区间梯度为零可能带来失活问题。",
+    "lessonId": "ai-training-inference"
+  },
+  {
+    "id": "ai-term-40",
+    "term": "Cross Entropy",
+    "chinese": "交叉熵",
+    "category": "训练与数值",
+    "definition": "根据目标分布和预测概率计算预测代价的常见目标。",
+    "distinction": "需要明确标签、归一化和平均口径。",
+    "lessonId": "ai-training-inference"
+  },
+  {
+    "id": "ai-term-41",
+    "term": "Pretraining",
+    "chinese": "预训练",
+    "category": "训练与数值",
+    "definition": "通过大规模数据构造的目标学习通用表示和预测规律。",
+    "distinction": "不等于只背百科，也不保证实时事实。",
+    "lessonId": "ai-training-stages"
+  },
+  {
+    "id": "ai-term-42",
+    "term": "SFT",
+    "chinese": "监督微调",
+    "category": "训练与数值",
+    "definition": "用任务输入与期望输出样本学习目标行为。",
+    "distinction": "数据标签和持出评估比术语更关键。",
+    "lessonId": "ai-training-stages"
+  },
+  {
+    "id": "ai-term-43",
+    "term": "RLHF",
+    "chinese": "人类反馈强化学习",
+    "category": "训练与数值",
+    "definition": "利用人类反馈及相关奖励或优化流程进行行为对齐的一类方法。",
+    "distinction": "不是所有偏好学习都使用同一训练算法。",
+    "lessonId": "ai-training-stages"
+  },
+  {
+    "id": "ai-term-44",
+    "term": "DPO",
+    "chinese": "直接偏好优化",
+    "category": "训练与数值",
+    "definition": "基于同一输入的优劣回答及参考策略关系优化偏好的方法。",
+    "distinction": "不同问题的两个回答不能随便构成偏好对。",
+    "lessonId": "ai-training-stages"
+  },
+  {
+    "id": "ai-term-45",
+    "term": "LoRA",
+    "chinese": "低秩适配",
+    "category": "训练与数值",
+    "definition": "冻结基座并用低秩增量参数化更新，降低可训练参数量的方法。",
+    "distinction": "它是更新方式，可与不同训练目标组合。",
+    "lessonId": "ai-training-stages"
+  },
+  {
+    "id": "ai-term-46",
+    "term": "Fine-tuning",
+    "chinese": "微调",
+    "category": "训练与数值",
+    "definition": "在已有模型基础上继续训练以适配目标任务或行为。",
+    "distinction": "不一定适合每日变化的业务知识更新。",
+    "lessonId": "ai-training-stages"
+  },
+  {
+    "id": "ai-term-47",
+    "term": "Quantization",
+    "chinese": "量化",
+    "category": "训练与数值",
+    "definition": "用低精度离散表示近似权重、激活或缓存等数值。",
+    "distinction": "省内存不保证所有设备更快。",
+    "lessonId": "ai-precision-quantization"
+  },
+  {
+    "id": "ai-term-48",
+    "term": "FP16",
+    "chinese": "半精度浮点",
+    "category": "训练与数值",
+    "definition": "一种十六位浮点格式，范围与有效精度取决于位分配。",
+    "distinction": "与 BF16 位数相同但性质不相同。",
+    "lessonId": "ai-precision-quantization"
+  },
+  {
+    "id": "ai-term-49",
+    "term": "BF16",
+    "chinese": "脑浮点格式",
+    "category": "训练与数值",
+    "definition": "十六位浮点格式，在指数范围与有效精度上与 FP16 有不同取舍。",
+    "distinction": "具体收益依赖硬件和训练实现。",
+    "lessonId": "ai-precision-quantization"
+  },
+  {
+    "id": "ai-term-50",
+    "term": "Prompt",
+    "chinese": "提示输入",
+    "category": "输入与生成",
+    "definition": "为本轮任务组织的指令、上下文、示例和用户内容。",
+    "distinction": "提示只是行为引导，长度和角色名称不能替代事实验证与权限。",
+    "lessonId": "ai-prompting-primer"
+  },
+  {
+    "id": "ai-term-51",
+    "term": "Few-shot",
+    "chinese": "少样本提示",
+    "category": "输入与生成",
+    "definition": "在上下文放入少量输入输出示例引导任务行为。",
+    "distinction": "通常通过上下文影响本次推理，不是梯度训练或永久存储。",
+    "lessonId": "ai-prompting-primer"
+  },
+  {
+    "id": "ai-term-52",
+    "term": "ICL",
+    "chinese": "上下文学习",
+    "category": "输入与生成",
+    "definition": "利用当前输入中的示例和信息调整本轮任务表现的现象。",
+    "distinction": "不应直接解释为永久学习。",
+    "lessonId": "ai-prompting-primer"
+  },
+  {
+    "id": "ai-term-53",
+    "term": "Temperature",
+    "chinese": "温度",
+    "category": "输入与生成",
+    "definition": "对 logits 缩放以改变概率集中程度的解码参数。",
+    "distinction": "降低温度不能补足错误事实。",
+    "lessonId": "ai-decoding-primer"
+  },
+  {
+    "id": "ai-term-54",
+    "term": "Top-k",
+    "chinese": "前 K 候选截断",
+    "category": "输入与生成",
+    "definition": "生成中保留最高的固定数量候选；检索中也可表示返回数，需看语境。",
+    "distinction": "生成候选数与检索 Recall@k 不是同一指标。",
+    "lessonId": "ai-decoding-primer"
+  },
+  {
+    "id": "ai-term-55",
+    "term": "Top-p",
+    "chinese": "核采样阈值",
+    "category": "输入与生成",
+    "definition": "保留累计概率质量达到阈值的最小排序前缀。",
+    "distinction": "不是保留词表的 p 比例。",
+    "lessonId": "ai-decoding-primer"
+  },
+  {
+    "id": "ai-term-56",
+    "term": "Greedy",
+    "chinese": "贪心解码",
+    "category": "输入与生成",
+    "definition": "在每个生成位置选择当前分数最高候选的局部解码策略。",
+    "distinction": "不保证整段最优或事实正确。",
+    "lessonId": "ai-decoding-primer"
+  },
+  {
+    "id": "ai-term-57",
+    "term": "Hallucination",
+    "chinese": "幻觉",
+    "category": "输入与生成",
+    "definition": "生成无依据、错误或与给定材料冲突内容的现象，需明确评价定义。",
+    "distinction": "流畅、有链接、自信都不是事实保证。",
+    "lessonId": "ai-hallucination-primer"
+  },
+  {
+    "id": "ai-term-58",
+    "term": "Grounding",
+    "chinese": "事实或证据落地",
+    "category": "输入与生成",
+    "definition": "把输出主张连接到可信输入、来源或权威系统并加以核验。",
+    "distinction": "引用 ID 存在还需检查语义支持。",
+    "lessonId": "ai-hallucination-primer"
+  },
+  {
+    "id": "ai-term-59",
+    "term": "RAG",
+    "chinese": "检索增强生成",
+    "category": "检索与知识",
+    "definition": "将运行时检索出的外部信息装入上下文以辅助生成。",
+    "distinction": "通常不修改模型权重，知识更新发生在外部资料与索引。",
+    "lessonId": "ai-rag-primer"
+  },
+  {
+    "id": "ai-term-60",
+    "term": "Vector Database",
+    "chinese": "向量数据库",
+    "category": "检索与知识",
+    "definition": "存储向量及元数据并提供近邻等查询能力的系统。",
+    "distinction": "不是完整 RAG，也不自动处理全部权限。",
+    "lessonId": "ai-rag-primer"
+  },
+  {
+    "id": "ai-term-61",
+    "term": "Chunk",
+    "chinese": "知识片段",
+    "category": "检索与知识",
+    "definition": "用于检索和上下文装配的文档单元，需要保留来源和完整语义关系。",
+    "distinction": "块越小不一定召回或回答更好。",
+    "lessonId": "ai-knowledge-indexing"
+  },
+  {
+    "id": "ai-term-62",
+    "term": "Overlap",
+    "chinese": "分块重叠",
+    "category": "检索与知识",
+    "definition": "相邻片段共享部分内容以降低边界割裂。",
+    "distinction": "过大可能造成重复挤占。",
+    "lessonId": "ai-knowledge-indexing"
+  },
+  {
+    "id": "ai-term-63",
+    "term": "ANN",
+    "chinese": "近似近邻",
+    "category": "检索与知识",
+    "definition": "以索引和近似策略降低向量查找代价的方法族。",
+    "distinction": "需衡量召回、内存与时延。",
+    "lessonId": "ai-knowledge-indexing"
+  },
+  {
+    "id": "ai-term-64",
+    "term": "HNSW",
+    "chinese": "分层图近邻索引",
+    "category": "检索与知识",
+    "definition": "通过分层邻接图进行近似近邻查找的一类方法。",
+    "distinction": "参数与过滤策略会影响实际覆盖。",
+    "lessonId": "ai-knowledge-indexing"
+  },
+  {
+    "id": "ai-term-65",
+    "term": "BM25",
+    "chinese": "词项相关性评分",
+    "category": "检索与知识",
+    "definition": "利用词项频率、文档频率和长度等因素的关键词检索评分方法。",
+    "distinction": "不是 embedding 余弦分数。",
+    "lessonId": "ai-knowledge-indexing"
+  },
+  {
+    "id": "ai-term-66",
+    "term": "RRF",
+    "chinese": "倒数排名融合",
+    "category": "检索与知识",
+    "definition": "使用各路结果的排名倒数进行融合的一类方法。",
+    "distinction": "融合并不能找回所有未召回文档。",
+    "lessonId": "ai-knowledge-indexing"
+  },
+  {
+    "id": "ai-term-67",
+    "term": "Rerank",
+    "chinese": "重排序",
+    "category": "检索与知识",
+    "definition": "对候选重新评分排序，以改善更靠前证据的相关性。",
+    "distinction": "候选里没有的证据不能凭空补出。",
+    "lessonId": "ai-knowledge-indexing"
+  },
+  {
+    "id": "ai-term-68",
+    "term": "Agent",
+    "chinese": "智能体",
+    "category": "Agent 与协议",
+    "definition": "在目标和状态下选择行动、获取观察并继续决策的系统。",
+    "distinction": "不等于一个角色提示或普通聊天框。",
+    "lessonId": "ai-agent-primer"
+  },
+  {
+    "id": "ai-term-69",
+    "term": "Harness",
+    "chinese": "运行支撑",
+    "category": "Agent 与协议",
+    "definition": "围绕模型的工具、上下文、状态、权限、预算、观测和验证等执行支撑。",
+    "distinction": "不是只接一个协议或 SDK。",
+    "lessonId": "ai-agent-primer"
+  },
+  {
+    "id": "ai-term-70",
+    "term": "Copilot",
+    "chinese": "协作助手",
+    "category": "Agent 与协议",
+    "definition": "强调辅助用户、由人保留明确控制的产品形态。",
+    "distinction": "名称不决定真实自主程度。",
+    "lessonId": "ai-agent-primer"
+  },
+  {
+    "id": "ai-term-71",
+    "term": "Tool",
+    "chinese": "工具",
+    "category": "Agent 与协议",
+    "definition": "宿主暴露给任务使用的受控能力，例如读资料、查订单或计算。",
+    "distinction": "模型看到工具不代表已获资源授权。",
+    "lessonId": "ai-tools-primer"
+  },
+  {
+    "id": "ai-term-72",
+    "term": "Function Calling",
+    "chinese": "函数调用机制",
+    "category": "Agent 与协议",
+    "definition": "模型提出结构化调用请求、宿主执行并回传结果的往返机制。",
+    "distinction": "生成 JSON 不等于函数已执行。",
+    "lessonId": "ai-tools-primer"
+  },
+  {
+    "id": "ai-term-73",
+    "term": "JSON Schema",
+    "chinese": "JSON 结构契约",
+    "category": "Agent 与协议",
+    "definition": "描述字段类型、必填与结构约束的规则。",
+    "distinction": "不保证业务事实与权限正确。",
+    "lessonId": "ai-tools-primer"
+  },
+  {
+    "id": "ai-term-74",
+    "term": "Workflow",
+    "chinese": "工作流",
+    "category": "Agent 与协议",
+    "definition": "显式定义步骤与条件路径的执行组织方式。",
+    "distinction": "并非所有路径都必须由模型决定。",
+    "lessonId": "ai-workflow-patterns"
+  },
+  {
+    "id": "ai-term-75",
+    "term": "ReAct",
+    "chinese": "交替决策与行动",
+    "category": "Agent 与协议",
+    "definition": "根据观察持续选择下一步行动的一种组织模式。",
+    "distinction": "不自动保证少轮次或任务收敛。",
+    "lessonId": "ai-workflow-patterns"
+  },
+  {
+    "id": "ai-term-76",
+    "term": "Plan-and-Execute",
+    "chinese": "计划与执行",
+    "category": "Agent 与协议",
+    "definition": "先形成步骤计划，再执行并按新事实重规划的模式。",
+    "distinction": "计划文本不等于动作已发生。",
+    "lessonId": "ai-workflow-patterns"
+  },
+  {
+    "id": "ai-term-77",
+    "term": "Reflection",
+    "chinese": "反思或检查",
+    "category": "Agent 与协议",
+    "definition": "对候选结果进行审查和修正的环节。",
+    "distinction": "同模型自评可能重复共同错误。",
+    "lessonId": "ai-workflow-patterns"
+  },
+  {
+    "id": "ai-term-78",
+    "term": "Memory",
+    "chinese": "记忆",
+    "category": "Agent 与协议",
+    "definition": "应用为任务或跨任务保存并按规则读取的信息，需来源、作用域和生命周期。",
+    "distinction": "不等于无限追加聊天，也不能替代权威业务账本。",
+    "lessonId": "ai-memory-primer"
+  },
+  {
+    "id": "ai-term-79",
+    "term": "Checkpointer",
+    "chinese": "状态检查点组件",
+    "category": "Agent 与协议",
+    "definition": "按线程或运行保存图状态，支持恢复等需求的机制。",
+    "distinction": "不自动保证外部副作用恰好一次。",
+    "lessonId": "ai-memory-primer"
+  },
+  {
+    "id": "ai-term-80",
+    "term": "Store",
+    "chinese": "跨任务存储",
+    "category": "Agent 与协议",
+    "definition": "用于应用定义长期数据的存储抽象，具体责任由框架和应用约定。",
+    "distinction": "不是默认所有用户共享全部记忆。",
+    "lessonId": "ai-memory-primer"
+  },
+  {
+    "id": "ai-term-81",
+    "term": "MCP",
+    "chinese": "模型上下文协议",
+    "category": "Agent 与协议",
+    "definition": "面向应用与工具、资源或上下文互操作的协议体系。",
+    "distinction": "版本兼容与业务授权需独立验证。",
+    "lessonId": "ai-protocol-frameworks"
+  },
+  {
+    "id": "ai-term-82",
+    "term": "Skill",
+    "chinese": "可复用技能说明",
+    "category": "Agent 与协议",
+    "definition": "包含任务说明、资源或步骤的复用单元，具体格式依产品而异。",
+    "distinction": "说明文件不能授予真实执行权限。",
+    "lessonId": "ai-protocol-frameworks"
+  },
+  {
+    "id": "ai-term-83",
+    "term": "SDK",
+    "chinese": "软件开发工具包",
+    "category": "Agent 与协议",
+    "definition": "封装接口、类型和常用流程的代码库。",
+    "distinction": "API 方便不代表业务契约自动正确。",
+    "lessonId": "ai-protocol-frameworks"
+  },
+  {
+    "id": "ai-term-84",
+    "term": "Agent Framework",
+    "chinese": "智能体框架",
+    "category": "Agent 与协议",
+    "definition": "提供状态、节点、路由、工具循环等组合能力的运行开发框架。",
+    "distinction": "不能替代数据、评估和业务规则。",
+    "lessonId": "ai-protocol-frameworks"
+  },
+  {
+    "id": "ai-term-85",
+    "term": "A2A",
+    "chinese": "Agent 间互操作协议",
+    "category": "Agent 与协议",
+    "definition": "为不同 Agent 应用之间通信与协作提供共同约定。",
+    "distinction": "不表示每个内部函数都要走网络协议。",
+    "lessonId": "ai-protocol-frameworks"
+  },
+  {
+    "id": "ai-term-86",
+    "term": "Handoff",
+    "chinese": "控制权交接",
+    "category": "Agent 与协议",
+    "definition": "把当前任务控制转给其他受约束 Agent 或组件的编排方式。",
+    "distinction": "控制权变化不自动转移用户授权。",
+    "lessonId": "ai-protocol-frameworks"
+  },
+  {
+    "id": "ai-term-87",
+    "term": "Accuracy",
+    "chinese": "准确率",
+    "category": "评估与交付",
+    "definition": "预测正确数占全部被评价样本的比例。",
+    "distinction": "类别不平衡时单看它易误导。",
+    "lessonId": "ai-evaluation-primer"
+  },
+  {
+    "id": "ai-term-88",
+    "term": "Precision",
+    "chinese": "精确率",
+    "category": "评估与交付",
+    "definition": "预测为正的样本中实际为正的比例。",
+    "distinction": "没有预测正例时需明确零分母口径。",
+    "lessonId": "ai-evaluation-primer"
+  },
+  {
+    "id": "ai-term-89",
+    "term": "Recall",
+    "chinese": "召回率",
+    "category": "评估与交付",
+    "definition": "实际正例中被正确找出的比例，检索中需另定义相关证据集合。",
+    "distinction": "不同任务的分母不能混用。",
+    "lessonId": "ai-evaluation-primer"
+  },
+  {
+    "id": "ai-term-90",
+    "term": "F1",
+    "chinese": "F1 分数",
+    "category": "评估与交付",
+    "definition": "精确率和召回率的调和平均，需明确类别和汇总方式。",
+    "distinction": "不能自动代表业务风险损失。",
+    "lessonId": "ai-evaluation-primer"
+  },
+  {
+    "id": "ai-term-91",
+    "term": "PPL",
+    "chinese": "困惑度",
+    "category": "评估与交付",
+    "definition": "平均 token 负对数似然取指数的常见语言预测指标。",
+    "distinction": "不同 tokenizer/语料不可无条件横比。",
+    "lessonId": "ai-evaluation-primer"
+  },
+  {
+    "id": "ai-term-92",
+    "term": "Eval",
+    "chinese": "评估",
+    "category": "评估与交付",
+    "definition": "用数据、标准与评分流程验证任务表现，评分器也需测试。",
+    "distinction": "几个演示案例不足以证明生产质量。",
+    "lessonId": "ai-evaluation-primer"
+  },
+  {
+    "id": "ai-term-93",
+    "term": "TTFT",
+    "chinese": "首 token 时间",
+    "category": "评估与交付",
+    "definition": "从定义的请求起点到首次输出 token 的等待时间。",
+    "distinction": "起点可能包含排队和检索，需统一口径。",
+    "lessonId": "agent-observability"
+  },
+  {
+    "id": "ai-term-94",
+    "term": "TPOT",
+    "chinese": "每输出 token 时间",
+    "category": "评估与交付",
+    "definition": "生成阶段单位 token 的时间指标或其分布。",
+    "distinction": "不等于包括检索、排队和多轮工具在内的完整任务延迟。",
+    "lessonId": "agent-observability"
+  },
+  {
+    "id": "ai-term-95",
+    "term": "Trace",
+    "chinese": "调用轨迹",
+    "category": "评估与交付",
+    "definition": "关联任务与模型、工具等执行 span 的诊断记录。",
+    "distinction": "存在轨迹不代表有完整观测或正确结果。",
+    "lessonId": "agent-observability"
+  },
+  {
+    "id": "ai-term-96",
+    "term": "FDE",
+    "chinese": "前线部署工程",
+    "category": "评估与交付",
+    "definition": "深入客户业务流程，完成问题发现、集成、验收和生产运营的工程工作。",
+    "distinction": "不只是把 Demo 放上服务器。",
+    "lessonId": "fde-ai-rollout"
+  },
+  {
+    "id": "ai-term-97",
+    "term": "Shadow",
+    "chinese": "影子运行",
+    "category": "评估与交付",
+    "definition": "复制获准输入比较新方案，用户仍使用旧方案，写工具需隔离。",
+    "distinction": "结果不展示不代表副作用不存在。",
+    "lessonId": "fde-ai-rollout"
+  },
+  {
+    "id": "ai-term-98",
+    "term": "Canary",
+    "chinese": "灰度发布",
+    "category": "评估与交付",
+    "definition": "让受控一部分主体使用新方案，按明确门槛逐步扩大或回滚。",
+    "distinction": "总体平均不能抵消越权等硬性违规。",
+    "lessonId": "fde-ai-rollout"
+  },
+  {
+    "id": "ai-term-99",
+    "term": "Idempotency",
+    "chinese": "幂等",
+    "category": "评估与交付",
+    "definition": "同一业务意图重复请求不会产生额外效果的契约，需稳定身份和持久事实。",
+    "distinction": "内存 Map 无法保证多实例事务一致性。",
+    "lessonId": "fde-ai-rollout"
+  },
+  {
+    "id": "ai-term-100",
+    "term": "Multimodal",
+    "chinese": "多模态",
+    "category": "多模态",
+    "definition": "处理文本、图像、音频或视频等多个信息类型的能力。",
+    "distinction": "不等于任意输入输出互转。",
+    "lessonId": "ai-multimodal-primer"
+  },
+  {
+    "id": "ai-term-101",
+    "term": "VLM",
+    "chinese": "视觉语言模型",
+    "category": "多模态",
+    "definition": "结合视觉与语言输入进行理解和文本等任务的模型族。",
+    "distinction": "不自动支持图片或语音生成。",
+    "lessonId": "ai-multimodal-primer"
+  },
+  {
+    "id": "ai-term-102",
+    "term": "OCR",
+    "chinese": "光学字符识别",
+    "category": "多模态",
+    "definition": "从图像提取文字及可能的结构信息。",
+    "distinction": "识字正确不代表表格关系和单位正确。",
+    "lessonId": "ai-multimodal-primer"
+  },
+  {
+    "id": "ai-term-103",
+    "term": "ASR",
+    "chinese": "自动语音识别",
+    "category": "多模态",
+    "definition": "将语音转成文本及可能的时间或说话人信息。",
+    "distinction": "转录不是语义事实核验。",
+    "lessonId": "ai-multimodal-primer"
+  },
+  {
+    "id": "ai-term-104",
+    "term": "TTS",
+    "chinese": "语音合成",
+    "category": "多模态",
+    "definition": "将文字等条件转换为语音输出的任务。",
+    "distinction": "与语音识别方向不同，不自动具备内容理解与事实校验。",
+    "lessonId": "ai-multimodal-primer"
+  },
+  {
+    "id": "ai-term-105",
+    "term": "Diffusion",
+    "chinese": "扩散式生成",
+    "category": "多模态",
+    "definition": "通过噪声与逐步去噪等建模方式生成样本的技术族。",
+    "distinction": "不是所有图像和视频模型都完全相同。",
+    "lessonId": "ai-multimodal-primer"
+  },
+  {
+    "id": "ai-term-106",
+    "term": "PPO",
+    "chinese": "近端策略优化",
+    "category": "训练与数值",
+    "definition": "使用裁剪等目标形式抑制过大策略更新的强化学习方法族。",
+    "distinction": "目标裁剪不等于对所有参数或概率变化提供严格上界。",
+    "lessonId": "ai-training-stages"
+  },
+  {
+    "id": "ai-term-107",
+    "term": "GRPO",
+    "chinese": "组相对策略优化",
+    "category": "训练与数值",
+    "definition": "利用同输入多候选的组内奖励关系构造优势等优化信号的一类方法。",
+    "distinction": "具体归一化、KL 与奖励设置要按实现核对。",
+    "lessonId": "ai-training-stages"
+  },
+  {
+    "id": "ai-term-108",
+    "term": "CoT",
+    "chinese": "链式推导",
+    "category": "训练与数值",
+    "definition": "用中间推导示例或表达帮助完成多步任务的相关方法与输出形式。",
+    "distinction": "推导文本不自动证明事实正确，也不是审计必须暴露的模型私有过程。",
+    "lessonId": "ai-training-stages"
+  }
+]
