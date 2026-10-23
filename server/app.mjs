@@ -397,6 +397,9 @@ export async function createApp({
     const input = z
       .object({
         mode: z.enum(["objective", "interview"]),
+        questionPool: z
+          .enum(["transfer", "foundation", "all"])
+          .default("transfer"),
         moduleIds: z.array(z.string()).max(catalog.modules.length).default([]),
         count: z.number().int().min(3).max(50),
         minutes: z.number().int().min(1).max(120),
@@ -405,6 +408,7 @@ export async function createApp({
     let pool = catalog.questions.filter(
       (q) =>
         q.type !== "coding" &&
+        (input.questionPool === "all" || q.pool === input.questionPool) &&
         (input.mode !== "objective" || q.type === "choice") &&
         (!input.moduleIds.length || input.moduleIds.includes(q.moduleId)),
     );
@@ -415,6 +419,7 @@ export async function createApp({
     const exam = {
       id: randomUUID(),
       mode: input.mode,
+      questionPool: input.questionPool,
       questionIds: selected.map((q) => q.id),
       minutes: input.minutes,
       startedAt: new Date().toISOString(),
@@ -667,12 +672,43 @@ export async function createApp({
       throw e;
     }
   });
+  const pythonRoot = resolve("node_modules/pyodide");
+  const pythonVersion = JSON.parse(
+    readFileSync(resolve(pythonRoot, "package.json"), "utf8"),
+  ).version;
+  app.get("/python-runtime/manifest.json", (_, res) =>
+    res.set("Cache-Control", "no-store").json({
+      version: pythonVersion,
+      base: `/python-runtime/${pythonVersion}/`,
+      files: [
+        "pyodide.js",
+        "pyodide.asm.mjs",
+        "pyodide.asm.wasm",
+        "python_stdlib.zip",
+        "pyodide-lock.json",
+      ],
+    }),
+  );
+  app.use(
+    `/python-runtime/${pythonVersion}`,
+    express.static(pythonRoot, {
+      maxAge: "365d",
+      immutable: true,
+      index: false,
+    }),
+  );
   app.use(
     "/python-runtime",
-    express.static(resolve("node_modules/pyodide"), {
+    express.static(pythonRoot, {
       maxAge: "1d",
       index: false,
     }),
+  );
+  // A missing runtime file must never fall through to the SPA HTML response.
+  app.use("/python-runtime", (_, res) =>
+    res
+      .status(404)
+      .json({ error: "Python 运行资源不存在，请检查后端部署版本" }),
   );
   app.get("/python-runner.js", async (req, res) => {
     const runtimeOrigin = new URL(
@@ -802,6 +838,7 @@ const backupSchema = z.object({
         z.object({
           id: z.string().uuid(),
           mode: z.enum(["objective", "interview"]),
+          questionPool: z.enum(["transfer", "foundation", "all"]).optional(),
           questionIds: z.array(z.string()).max(50),
           minutes: z.number().int().min(1).max(120),
           startedAt: stamp,

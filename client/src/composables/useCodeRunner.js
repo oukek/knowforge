@@ -43,7 +43,9 @@ export function useCodeRunner() {
               finish(
                 {
                   error: initializing
-                    ? "Python 运行环境加载超时，请检查本地服务和运行资源。"
+                    ? "Python 环境初始化超时（首次需下载约 13MB）。最后阶段：" +
+                      phase.value +
+                      "。请检查网络及 API 域名的 /python-runtime/ 资源，稍后重试；已下载资源会复用浏览器缓存。"
                     : "执行超过 " +
                       limit / 1000 +
                       " 秒，已终止。检查无限循环或未完成的异步任务。",
@@ -54,7 +56,7 @@ export function useCodeRunner() {
             limit,
           );
         }
-        if (python) deadline(30000, true);
+        if (python) deadline(180000, true);
         else
           timer = setTimeout(
             () =>

@@ -21,7 +21,7 @@ const modules = new Set(d.modules.map((x) => x.id)),
   lessons = new Set(d.lessons.map((x) => x.id)),
   sources = new Set(d.sources.map((x) => x.id)),
   labs = new Set(d.labs.map((x) => x.id));
-assert.equal(d.modules.length, 18);
+assert.equal(d.modules.length, 20);
 for (const id of ["python", "crawler", "restapi", "llmapp"])
   assert(modules.has(id));
 for (const track of d.tracks)

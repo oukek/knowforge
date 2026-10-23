@@ -51,7 +51,7 @@ async function fixture(t, options = {}) {
 }
 test("知识库关联与标准答案有效", () => {
   const ids = new Set(catalog.lessons.map((x) => x.id));
-  assert.equal(catalog.modules.length, 18);
+  assert.equal(catalog.modules.length, 20);
   assert(catalog.lessons.length >= 100);
   for (const q of catalog.questions) {
     assert(ids.has(q.lessonId));
@@ -84,7 +84,7 @@ test("扩展专题支持筛题、学习主线与新旧备份", async (t) => {
     count: 3,
     minutes: 10,
   });
-  assert.equal(result.status, 200, "全部 18 专题可组卷");
+  assert.equal(result.status, 200, "全部 20 专题可组卷");
   result = await api("/exams", "POST", {
     mode: "objective",
     moduleIds: ["restapi"],
@@ -125,6 +125,59 @@ test("Python Worker、离线运行资源及项目下载可用", async (t) => {
       .includes("knowforge-python-workbench.py"),
   );
   assert((await demo.text()).includes("def run_demo"));
+});
+test("Python 清单不缓存，版本资源可长期缓存且 WASM MIME 正确", async (t) => {
+  const { base } = await fixture(t);
+  const response = await fetch(base + "/python-runtime/manifest.json");
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  const manifest = await response.json();
+  assert.match(manifest.base, /^\/python-runtime\/[\w.-]+\/$/);
+  assert(manifest.files.includes("pyodide.asm.wasm"));
+  for (const file of manifest.files) {
+    const resource = await fetch(base + manifest.base + file, {
+      method: "HEAD",
+    });
+    assert.equal(resource.status, 200, file);
+    assert.match(resource.headers.get("cache-control"), /immutable/);
+    if (file.endsWith(".wasm"))
+      assert.match(resource.headers.get("content-type"), /application\/wasm/);
+  }
+  assert.equal(
+    (await fetch(base + "/python-runtime/no-such-version/pyodide.js")).status,
+    404,
+  );
+});
+test("模拟面试默认只选迁移题，基础题和混合题需显式选择", async (t) => {
+  const { api } = await fixture(t);
+  for (const questionPool of [undefined, "foundation", "all"]) {
+    const result = await api("/exams", "POST", {
+      mode: "interview",
+      count: 10,
+      minutes: 10,
+      moduleIds: [],
+      ...(questionPool ? { questionPool } : {}),
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.data.exam.questionPool, questionPool ?? "transfer");
+    for (const id of result.data.exam.questionIds) {
+      const question = catalog.questions.find((q) => q.id === id);
+      assert.notEqual(question.type, "coding");
+      if (questionPool !== "all")
+        assert.equal(question.pool, questionPool ?? "transfer");
+    }
+  }
+  assert.equal(
+    (
+      await api("/exams", "POST", {
+        mode: "interview",
+        count: 3,
+        minutes: 10,
+        questionPool: "bogus",
+      })
+    ).status,
+    400,
+  );
 });
 test("随堂输出在服务端逐行判题，JSON 容错且记录与题库作答隔离", async (t) => {
   const { api } = await fixture(t);
@@ -376,6 +429,7 @@ test("混合模拟开放题不混入自动分数，未自评不记为答错", as
     count: 10,
     minutes: 15,
     moduleIds: ["architecture"],
+    questionPool: "foundation",
   });
   assert.equal(r.data.exam.questionIds.length, 10);
   const x = await api("/exams/" + r.data.exam.id + "/submit", "POST", {

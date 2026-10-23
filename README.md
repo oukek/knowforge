@@ -2,7 +2,7 @@
 
 **Learn. Practice. Build.**
 
-A local-first learning workbench for frontend, Python, web scraping, REST APIs, and AI engineering.
+A learning workbench for full-stack engineering, AI agents, algorithms, and deliberate practice.
 
 **KnowForge · 知行实验室** 是一个基于 Vue 3 与 Node.js 的本地工程学习工作台。把知识讲解、可运行示例、自动验证练习、面试题库和复习记录放在一起，让你边读、边写、边验证。
 
@@ -14,12 +14,12 @@ A local-first learning workbench for frontend, Python, web scraping, REST APIs, 
 
 | 功能 | 可以做什么 |
 | --- | --- |
-| 知识资料库 | 按专题、优先级、学习状态和关键词筛选，阅读机制、步骤、误区和参考来源 |
+| 知识资料库 | 按专题、资料深度、优先级、学习状态和关键词筛选，阅读机制、步骤、误区和参考来源 |
 | 边读边试 | 修改每课 JavaScript / Python 示例，运行后查看输出与错误 |
 | 随堂练习 | 预测输出、补全代码，通过逐行反馈与测试用例验证理解 |
-| 面试题库 | 练习单选、原理问答、场景分析和手写代码，对照解析与参考答案 |
+| 面试题库 | 区分基础自测与迁移训练，练习场景推演、设计取舍、反例与手写代码 |
 | 手写实验室 | 在浏览器里实现算法、异步控制与工程工具函数，运行边界用例 |
-| 模拟面试 | 按专题随机组卷、限时作答、保存草稿，交卷后复盘 |
+| 模拟面试 | 默认使用迁移题组卷，也可选择基础或混合题，限时作答、保存草稿并复盘 |
 | 复习与计划 | 管理薄弱题、到期复习、收藏、笔记及 7 / 14 / 21 / 30 天学习计划 |
 | 账号空间 | 公开注册、登录与退出；个人记录按账号隔离，同账号跨设备接续学习 |
 | 数据管理 | 导出完整资料、Markdown 手册和个人备份，合并导入已有学习记录 |
@@ -35,7 +35,7 @@ A local-first learning workbench for frontend, Python, web scraping, REST APIs, 
 | 缩进 / 反缩进 | `Tab` / `Shift + Tab` |
 | 离开编辑器 | 先按 `Esc`，再按 `Tab` |
 
-JavaScript 在独立 Web Worker 中执行；Python 通过本地 Pyodide 运行时在 Worker 中执行。运行支持实时输出、手动停止与 4 秒超时终止；Python 运行时初始化单独限时 30 秒。课程示例无需调用外部模型或采集真实网站。
+JavaScript 在独立 Web Worker 中执行；Python 通过本地 Pyodide 运行时在 Worker 中执行。运行支持实时输出、手动停止与 4 秒超时终止；Python 首次初始化需下载约 13 MB 资源并编译 WebAssembly，独立限时 180 秒，显示下载与初始化阶段。后续运行复用浏览器中的版本化资源缓存。课程示例无需调用外部模型或采集真实网站。
 
 ### 验证与复盘
 
@@ -48,27 +48,33 @@ JavaScript 在独立 Web Worker 中执行；Python 通过本地 Pyodide 运行�
 
 ## 学习内容
 
-当前资料版本：**2026-10-21**。
+当前资料版本：**2026-10-23 · 深度与迁移训练**。
 
 | 内容 | 数量 |
 | --- | ---: |
-| 学习专题 | 18 |
-| 知识讲解 | 218 |
-| 可编辑运行示例 | 218（JavaScript 130 / Python 88） |
-| 随堂练习 | 310（预测输出 218 / 代码补全 92） |
-| 面试题 | 614（原理 218 / 场景 218 / 单选 150 / 手写 28） |
-| 代码实验 | 28，配套 117 个用例 |
-| 官方及一手资料入口 | 60 |
+| 学习专题 | 20 |
+| 知识讲解 | 239（21 篇新增深入专题，13 篇原有内容机制深化） |
+| 可编辑运行示例 | 239（JavaScript 144 / Python 95） |
+| 随堂练习 | 337（预测输出 239 / 代码补全 98） |
+| 题库 | 772（基础自测 656 / 迁移训练 116；含原理、场景、单选与手写） |
+| 代码实验 | 40，配套 174 个用例；新增 12 个算法挑战 |
+| 官方及一手资料入口 | 76 |
 
 | 方向 | 覆盖范围 |
 | --- | --- |
 | JavaScript 与浏览器 | 语言机制、异步调度、网络、CSS、移动端、性能与稳定性 |
 | 前端框架与平台 | Vue / React、微信小程序、工程化、Node.js、系统设计 |
 | 算法与工程表达 | 数据结构、手写实现、项目深挖、架构讨论、备考与表达 |
-| Python · 24 篇 | 对象与容器、函数、迭代器、装饰器、异常、类型、测试、asyncio、并发、SQL 与交付 |
+| Python · 27 篇 | 对象与容器、函数、迭代器、装饰器、异常、类型、测试、asyncio、并发、SQL 与交付 |
 | 爬虫与采集 · 20 篇 | HTTP、解析、分页、编码、robots、限速重试、增量采集、幂等存储与观测 |
-| RESTful API · 20 篇 | 资源建模、方法与状态码、校验、分页、缓存、鉴权、幂等、OpenAPI 与服务设计 |
+| RESTful API · 21 篇 | 资源建模、方法与状态码、校验、分页、缓存、鉴权、幂等、OpenAPI 与服务设计 |
 | AI 应用 · 24 篇 | 模型接入、结构化输出、流式响应、Embedding、RAG、评估、工具调用、Agent、MCP 与部署 |
+| Node.js · 11 篇 | 事件循环、请求上下文、统一 deadline、背压、幂等与 Outbox、队列租约与优雅退出 |
+| Agent 框架 · 8 篇 | Microsoft Agent Framework、LangGraph 状态与恢复、人工审批、OpenAI Agents SDK 工具与编排、轨迹评估 |
+| FDE · 2 篇 | 需求发现、价值验证、客户系统集成、灰度、故障演练与交接 |
+| 算法迁移 | 窗口、前缀频次、最小覆盖、二分、堆、拓扑排序、并查集、零钱兑换、LIS、编辑距离、区间与带权调度 |
+
+资料分为基础导读、机制深化、深入专题。基础题用于回忆和自测；迁移题独立编写，不复制课内问答，默认用于题库和模拟面试。每篇深入专题包含机制、案例、失败边界和独立问题；算法练习配有输入契约、反例、复杂度与参考解。旧资料保留基础定位，并非全部已重写成深入专题。
 
 部分平台、网络及框架示例采用纯语言教学模型，页面会标记其运行范围。通过示例用例不等于在微信宿主、真实网络或生产模型上完成验证。
 
@@ -243,7 +249,7 @@ knowforge/
 
 ### 添加或修改资料
 
-1. 编辑 `data/content/` 中的结构化内容源；Python、爬虫、REST 和 AI 内容位于 `data/content/expansion/`。
+1. 编辑 `data/content/` 中的结构化内容源；Python、爬虫、REST 和 AI 基础内容位于 `data/content/expansion/`。新增深度正文、运行代码、迁移题和算法位于 `data/content/v3/`；`entries.json` 保存元信息，`lessons/` 保存正文，`code/` 保存确定性实验。
 2. 为知识点补充讲解、来源、示例、预期输出、练习与参考答案，并保留明确的输入输出契约。
 3. 生成资料并检查数据关系：
 
@@ -280,8 +286,20 @@ MySQL 集成测试单独运行 `npm run test:mysql`，需通过环境变量提�
 
 KnowForge 支持公开注册和个人学习记录隔离。账号为 3–32 位字母、数字、下划线或短横线，不区分大小写；密码为 8–128 位。登录会话有效期 7 天，退出会立即注销当前会话。当前没有邮箱验证、自助密码找回或管理员界面，请妥善保管密码。数据库请求在单个 Node 进程内串行处理，部署使用单实例，不启用 PM2 cluster 或多副本。代码在浏览器 Worker 中运行，支持取消和超时，但没有严格内存配额；学习运行器不承担防作弊在线评测职责，也不能直接执行 Vue SFC、DOM 或 Node.js 模块。
 
-Python 运行时随 npm 依赖从本地加载，项目不自动安装第三方 Python 包。课程中的框架、网络、采集和 AI 模型示例按页面标记区分真实语言执行与教学模拟，官方参考链接需要联网访问。
+Python 运行时随 npm 依赖从本地加载，项目不自动安装第三方 Python 包。课程中的框架、网络、采集和 AI 模型示例按页面标记区分真实语言执行与教学模拟，官方参考链接需要联网访问。正文中的真实 SDK/服务代码需要按说明在本地安装依赖；涉及模型的示例还需自行配置服务端凭据和模型，浏览器实验不会偷偷请求模型。
 
 资料用于学习和练习，不代表腾讯或其他机构的官方题库、招聘流程或命中率承诺。涉及平台行为时，应以目标版本的官方文档和实际环境为准。
 
 本仓库暂未添加 `LICENSE`。引用资料的版权归原作者所有，来源见课程引用和覆盖说明。
+
+
+### Python 运行环境排查
+
+前后端分域部署时，Python Worker 与 `/python-runtime/` 都由 API 域名提供。前端从 OSS 加载页面，再通过 API 的隔离运行器启动 Worker。首次加载较慢时可查看运行区显示的资源名称、下载量和编译阶段；等待过程中可以停止。
+
+1. 检查 `https://knowforge-api.ookew.com/python-runtime/manifest.json` 返回 JSON，不能返回站点首页；该清单使用 `Cache-Control: no-store`。
+2. 按清单 `base` 检查 `pyodide.js`、`pyodide.asm.mjs`、`pyodide.asm.wasm`、`python_stdlib.zip` 和 `pyodide-lock.json` 都返回 200；WASM 类型必须是 `application/wasm`。
+3. 运行资源使用版本路径与长期缓存，避免不同版本混用。资源缺失返回明确 404；错误会包含资源名、HTTP 状态或 MIME 原因。
+4. 发布这次更新需要分别运行前端、后端两个部署 Actions。只更新 OSS 不能更新后端运行资源清单和 Worker；不要把 API 的资源路径转发成前端 SPA 页面。
+
+框架概念与 API 示例参考 [Microsoft Agent Framework](https://learn.microsoft.com/en-us/agent-framework/overview/)、[LangGraph](https://docs.langchain.com/oss/python/langgraph/overview)、[OpenAI Agents SDK](https://developers.openai.com/api/docs/guides/agents/sdk) 等官方资料，核对日期为 2026-10-23。升级框架时仍需按目标版本复核示例。

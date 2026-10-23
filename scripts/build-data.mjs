@@ -19,6 +19,11 @@ await import("../data/content/expansion/crawler.mjs");
 await import("../data/content/expansion/restapi.mjs");
 await import("../data/content/expansion/ai.mjs");
 await import("../data/content/expansion/practice.mjs");
+const { transferQuestions } = await import("../data/content/v3/index.mjs");
+await import("../data/content/v3/algorithms.mjs");
+await import("../data/content/v3/transfer.mjs");
+await import("../data/content/v3/deepen.mjs");
+await import("../data/content/v3/exercises.mjs");
 attachExamples(lessons);
 lessons.sort(
   (a, b) =>
@@ -77,6 +82,7 @@ for (const lab of labs) {
     moduleId: l.moduleId,
     type: "coding",
     labId: lab.id,
+    pool: lab.pool ?? "foundation",
     prompt: lab.title,
     answer: lab.solution,
     rubric: lab.hints,
@@ -86,6 +92,23 @@ for (const lab of labs) {
     provenance: "editorial",
   });
 }
+questions.push(...transferQuestions);
+for (const question of questions) question.pool ??= "foundation";
+const normalizePrompt = (text) =>
+  text.replace(/\s|[，。？！、：；,.?!:;]/g, "");
+const prompts = new Set();
+for (const question of questions.filter((q) => q.pool === "transfer")) {
+  const normalized = normalizePrompt(question.prompt);
+  if (prompts.has(normalized)) throw new Error("迁移题重复：" + question.id);
+  prompts.add(normalized);
+  const lesson = lessons.find((l) => l.id === question.lessonId);
+  if (
+    [lesson.interview.question, lesson.interview.scenario].some(
+      (p) => normalizePrompt(p) === normalized,
+    )
+  )
+    throw new Error("迁移题复制了基础自测：" + question.id);
+}
 for (const m of modules) {
   m.lessonCount = lessons.filter((x) => x.moduleId === m.id).length;
   m.questionCount = questions.filter((x) => x.moduleId === m.id).length;
@@ -94,6 +117,18 @@ for (const m of modules) {
     .reduce((s, l) => s + l.estimatedMinutes, 0);
 }
 const tracks = [
+  {
+    id: "fullstack",
+    title: "Node / Python 全栈进阶",
+    description: "请求预算、事务、并发、流与跨语言契约",
+    moduleIds: ["node", "python", "restapi", "design"],
+  },
+  {
+    id: "agent-delivery",
+    title: "Agent 与 FDE 交付",
+    description: "框架原理、状态恢复、工具授权、评估和生产落地",
+    moduleIds: ["agents", "fde", "llmapp", "python", "node"],
+  },
   {
     id: "python-data",
     title: "Python 与数据采集",
@@ -133,8 +168,15 @@ const tracks = [
 ];
 const data = {
   schemaVersion: 1,
-  edition: "2026.10",
-  updatedAt: "2026-10-21",
+  edition: "2026.10 · 深度与迁移训练",
+  curriculum: {
+    deepLessons: lessons.filter((l) => l.depth === "deep").length,
+    expandedLessons: lessons.filter((l) => l.depth === "expanded").length,
+    transferQuestions: questions.filter((q) => q.pool === "transfer").length,
+    foundationQuestions: questions.filter((q) => q.pool === "foundation")
+      .length,
+  },
+  updatedAt: "2026-10-23",
   title: "KnowForge · 全栈与 AI 工程知识库",
   disclaimer:
     "覆盖前端、Python、数据采集、RESTful API 与 AI 应用的原创学习及练习资料。原微信面试材料保留并校正，不代表任何官方题库；平台行为以目标版本官方文档为准。",
@@ -200,7 +242,16 @@ ${exercise.explanation}
 
 `;
     }
-    md += `#### 面试问答\n\n**${l.interview.question}**\n\n${l.interview.answer}\n\n**场景追问：${l.interview.scenario}**\n\n${l.interview.scenarioAnswer}\n\n`;
+    md += `#### 基础自测\n\n**${l.interview.question}**\n\n${l.interview.answer}\n\n**场景追问：${l.interview.scenario}**\n\n${l.interview.scenarioAnswer}\n\n`;
+    for (const question of questions.filter(
+      (q) =>
+        q.lessonId === l.id && q.pool === "transfer" && q.type !== "coding",
+    )) {
+      md += `#### 迁移训练：${question.prompt}\n\n`;
+      if (question.type === "choice")
+        md += `${question.options.map((option, index) => `${index + 1}. ${option}`).join("\n")}\n\n正确选项：${question.correct + 1}。\n\n`;
+      md += `${question.answer}\n\n检验要点：\n\n${question.rubric.map((point) => `- ${point}`).join("\n")}\n\n`;
+    }
     const links = l.sourceIds
       .map((id) => sources.find((s) => s.id === id))
       .filter(Boolean);
@@ -208,7 +259,7 @@ ${exercise.explanation}
       md += `参考：${links.map((s) => `[${s.title}](${s.url})`).join(" · ")}\n\n`;
   }
 }
-md += "## 客观题与解析\n\n";
+md += "## 基础单选题与解析\n\n迁移单选题位于各篇资料的迁移训练中。\n\n";
 for (const q of choices)
   md += `### ${q.prompt}\n\n${q.options.map((o, i) => `${i + 1}. ${o}`).join("\n")}\n\n答案：${q.correct + 1}。${q.explanation}\n\n`;
 md += "## 手写实验\n\n";
@@ -221,7 +272,7 @@ console.log(
     modules: modules.length,
     lessons: lessons.length,
     questions: questions.length,
-    choices: choices.length,
+    choices: questions.filter((q) => q.type === "choice").length,
     labs: labs.length,
     examples: lessons.filter((l) => l.playground).length,
     exercises: lessons.reduce((s, l) => s + l.exercises.length, 0),

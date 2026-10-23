@@ -1,0 +1,993 @@
+[
+  {
+    "id": "node-deadline-context",
+    "moduleId": "node",
+    "title": "Node 请求生命周期：上下文、取消与时间预算",
+    "summary": "从 HTTP 连接建立到响应结束，追踪认证、请求上下文、下游调用、取消与错误归属；用剩余预算而非每层重新计时控制尾延迟。",
+    "language": "javascript",
+    "model": true,
+    "keywords": [
+      "Node",
+      "请求生命周期",
+      "上下文",
+      "取消与时间预算"
+    ],
+    "sourceIds": [
+      "node-context",
+      "node-loop"
+    ],
+    "logs": [
+      "[730,600,0]",
+      "{\"requestId\":\"r-1\",\"timeout\":600}"
+    ],
+    "explanation": "第一行显示每个阶段使用相同截止点，剩余预算不会被重新放大。第二行发送的是剩余 600ms，而不是再次给下游完整的 800ms。把截止时间改小，观察请求何时应立即拒绝继续工作。",
+    "questions": [
+      {
+        "prompt": "接口承诺 800ms，但三个下游各设置 800ms；线上 P99 超过两秒，怎么修改超时与重试？",
+        "answer": "先分解认证、排队、连接获取和服务调用耗时，建立从入口开始的统一预算。每次调用计算剩余时间，重试退避也扣预算；不足以完成一次合理尝试时直接失败。仅对安全且可去重的调用重试，并把客户端断开转换为可传播的取消信号。观测取消后资源是否真的释放，而不只观察 HTTP 是否返回 504。",
+        "rubric": [
+          "统一截止点",
+          "排队和重试计入预算",
+          "安全重试与取消",
+          "检查资源释放"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "日志偶尔把 A 用户的 SQL 标到 B 用户名下，进程内维护 currentUser 是否可行？",
+        "answer": "全局变量会被交错请求覆盖。认证后用 AsyncLocalStorage.run 建立请求范围，并在异步链读取小型元数据。跨队列或线程要显式序列化上下文、在新边界重新校验身份，不应透传任意客户端 tenantId 作为授权事实。增加并发交错测试，而不是用单请求测试证明正确。",
+        "rubric": [
+          "异步交错原因",
+          "ALS 生命周期",
+          "跨边界身份校验",
+          "并发测试"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "node-stream-pressure",
+    "moduleId": "node",
+    "title": "流式处理：背压、内存上界与失败传播",
+    "summary": "从生产速率与消费速率推导缓冲增长，理解 write(false)、drain、pipeline 的职责，并设计可取消、可观测的文件与网络传输链路。",
+    "language": "javascript",
+    "model": true,
+    "keywords": [
+      "流式处理",
+      "背压",
+      "内存上界与失败传播"
+    ],
+    "sourceIds": [
+      "node-stream"
+    ],
+    "logs": [
+      "[8,16,24]",
+      "{\"buffer\":8,\"paused\":true}"
+    ],
+    "explanation": "这是缓冲增长与限流的教学模型，不是 Node Stream 的替代实现。第一行说明无背压时按时间增长的积压；第二行显示容量有限时必须暂停生产，而不是无限加数组。真实 write(false) 仍然接收了该块，不能按模型的 accepted 再重写。",
+    "questions": [
+      {
+        "prompt": "CSV 导出已经使用 stream，10GB 导出时 RSS 仍一直增长，你会优先找什么？",
+        "answer": "区分流内缓冲与流外业务缓存。检查是否先收集全部行、并发转换任务是否无界、write(false) 后是否仍继续读，以及对象模式单个对象是否巨大。用 writableLength、队列长度、RSS 与 GC 曲线对照；注入慢消费者验证内存能否稳定，而不是凭用了 stream 就认为已解决。",
+        "rubric": [
+          "流外缓存",
+          "背压传播",
+          "对象大小",
+          "慢消费者实验"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "write 返回 false 时，调用方等 drain 后把同一块重写，为什么导出内容重复？",
+        "answer": "false 是缓冲压力信号，不是写入拒绝。该块已进入缓冲，等待 drain 后应继续下一块。还需处理 error、close 和取消，防止永远等不到 drain；优先采用 pipeline 或已有库的流式接口管理整条链。",
+        "rubric": [
+          "false 语义",
+          "下一块而非重写",
+          "错误关闭处理",
+          "pipeline"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "fullstack-idempotent-outbox",
+    "moduleId": "node",
+    "title": "全栈写入一致性：幂等键、事务与 Outbox",
+    "summary": "以创建订单并通知仓库为例，区分重复请求、并发冲突和双写丢失，使用数据库约束与事务 Outbox 构建可重试的业务操作。",
+    "language": "javascript",
+    "model": true,
+    "keywords": [
+      "全栈写入一致性",
+      "幂等键",
+      "事务与",
+      "Outbox"
+    ],
+    "sourceIds": [
+      "sql-transaction",
+      "node-context"
+    ],
+    "logs": [
+      "[1,1]",
+      "{\"orders\":1,\"events\":1}",
+      "conflict"
+    ],
+    "explanation": "Map 仅演示相同意图与冲突判断，不具备多实例事务语义。第二次调用复用订单 1，事件也只创建一次；同键不同金额被拒绝。生产实现必须把声明幂等键、写订单和写 outbox 放进数据库事务并使用唯一约束。 本实验用 JSON.stringify 作简化比较，属性顺序可能影响结果；真实接口应按约定规范化字段、缺省值与数值后计算摘要。",
+    "questions": [
+      {
+        "prompt": "用户收到创建订单超时，重试后出现两笔订单；加 Redis 锁就够了吗？",
+        "answer": "先确认客户端重试复用同一业务键，再在数据库建立租户和操作维度的唯一约束。请求摘要用于拒绝同键异体，事务内保存业务结果供重试读取。Redis 锁最多辅助削峰，租约过期或进程崩溃后仍必须靠数据库事实判断是否已完成。还要测试提交成功但响应丢失的路径。",
+        "rubric": [
+          "稳定业务键",
+          "唯一约束与摘要",
+          "结果重放",
+          "崩溃路径"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "Outbox 发布后、更新 sent_at 前进程宕机，会丢消息还是重复，如何处理？",
+        "answer": "记录仍未标成功，恢复后会再次发送，因此是可能重复而不是应当丢弃。消费端使用稳定 event_id 在与业务效果同一事务中去重，业务聚合附带版本处理乱序。不能仅以消费者启动时间或随机生成新消息 ID 去重。观测发布延迟和重试次数，隔离永久失败。",
+        "rubric": [
+          "至少一次语义",
+          "消费事务去重",
+          "版本与乱序",
+          "故障隔离"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "py-asgi-concurrency",
+    "moduleId": "python",
+    "title": "Python API 并发：ASGI、阻塞边界与结构化取消",
+    "summary": "区分 async def、线程池与进程池，从请求生命周期推导连接池容量、并发上限和取消范围，避免把异步函数误当成自动并行。",
+    "language": "python",
+    "model": false,
+    "keywords": [
+      "Python",
+      "API",
+      "并发",
+      "ASGI",
+      "阻塞边界与结构化取消"
+    ],
+    "sourceIds": [
+      "py-asyncio",
+      "fastapi-doc"
+    ],
+    "logs": [
+      "[0, 2, 4, 6, 8]",
+      "2"
+    ],
+    "explanation": "所有协程都被创建，但只有两个进入受控作用域；gather 按输入顺序返回，峰值不超过 2。把 Semaphore 改为 1 或移到 work 内部，观察为什么“每个任务自己建信号量”不能限制全局并发。",
+    "questions": [
+      {
+        "prompt": "把 requests.get 放进 async def 后，接口并发反而变差；应该增加 uvicorn worker 吗？",
+        "answer": "同步网络调用阻塞事件循环，多 worker 只能部分掩盖且增加资源占用。先用异步客户端和共享连接池，或把确实只能同步的 I/O 放入有界线程池；把 CPU 任务拆到进程/任务服务。度量事件循环延迟、池等待和下游容量，再确定 worker 数。",
+        "rubric": [
+          "阻塞机制",
+          "正确卸载或异步客户端",
+          "容量和等待指标",
+          "worker 成本"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "用户取消请求后，后台扣款仍执行成功，为什么 asyncio.cancel 不等于业务回滚？",
+        "answer": "取消是本地控制流信号，无法撤销已发出的网络请求或已提交事务。用业务幂等键和可查询的支付状态处理不确定结果；必要时设计补偿流程。资源清理后传播 CancelledError，不把它当普通失败无限重试。对必须完成的工作转持久队列并明确返回任务 ID。",
+        "rubric": [
+          "取消与副作用区别",
+          "幂等及状态查询",
+          "取消传播",
+          "持久任务边界"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "py-unit-of-work",
+    "moduleId": "python",
+    "title": "Python 事务与 Unit of Work：提交、回滚及并发约束",
+    "summary": "把一个业务操作的读取、约束校验、写入和事件记录组织为一个提交边界，用可重复实验解释事务回滚、唯一约束和 ORM 会话的职责。",
+    "language": "python",
+    "model": false,
+    "keywords": [
+      "Python",
+      "事务与",
+      "Unit",
+      "of",
+      "Work",
+      "提交",
+      "回滚及并发约束"
+    ],
+    "sourceIds": [
+      "py-context",
+      "sql-transaction"
+    ],
+    "logs": [
+      "1"
+    ],
+    "explanation": "UPDATE 的可见中间结果为 0，但 with 作用域因异常退出后发生回滚，最终重新读取为 1。删除 raise 再运行会得到 0，直接观察提交和回滚的不同。",
+    "questions": [
+      {
+        "prompt": "库存扣了但订单没创建成功，仓储里每个 save 都 commit，应该在哪里改？",
+        "answer": "以完整创建订单作为事务边界，让应用服务统一管理 Unit of Work，仓储不能各自提前提交。库存条件更新、订单与 outbox 写入使用同一事务。通过在订单写入前注入异常验证库存回滚；并发正确性再用条件更新或锁和唯一约束保证，不能只靠 rollback。",
+        "rubric": [
+          "应用服务提交边界",
+          "同事务写入",
+          "故障注入",
+          "并发不变量"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "SQLite 的事务测试通过，生产 MySQL 仍死锁，这是否说明测试毫无价值？",
+        "answer": "SQLite 测试能验证应用事务边界和回滚路径，但不能证明 MySQL 锁、隔离和调度行为。补充目标数据库集成测试，统一锁获取顺序、缩短事务，并对可重试的死锁错误重试整个事务。区分死锁、唯一冲突和连接超时，记录 SQL 指纹与 traceId。",
+        "rubric": [
+          "测试范围",
+          "目标库验证",
+          "锁顺序与短事务",
+          "错误分类"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "fullstack-contracts",
+    "moduleId": "restapi",
+    "title": "全栈契约：版本演进、验证与契约测试",
+    "summary": "用前端表单、Node 网关、Python 服务和数据库的一条数据链，解释静态类型、运行时校验、错误契约、兼容发布与跨语言测试的不同职责。",
+    "language": "javascript",
+    "model": true,
+    "keywords": [
+      "全栈契约",
+      "版本演进",
+      "验证与契约测试"
+    ],
+    "sourceIds": [
+      "fastapi-doc",
+      "sql-transaction"
+    ],
+    "logs": [
+      "[true,false,false,false,false]",
+      "true"
+    ],
+    "explanation": "第一行显示输入字符串与数字不是同一契约，布尔值不能靠隐式转换成为金额。第二行揭示超出安全整数范围的两个 ID 经过 Number 后发生碰撞，因此 ID 不应仅因看起来是数字就定义成 number。",
+    "questions": [
+      {
+        "prompt": "后端新增一个枚举值，本应向后兼容，前端却白屏，如何修正契约与发布？",
+        "answer": "检查消费者是否使用穷尽分支却没有未知值回退，或校验器是否只接受封闭旧枚举。先给前端添加未知状态显示与日志，再逐步发布服务新值。用共享 fixture 和消费者契约测试锁定假设，区分加字段与扩展封闭值域的兼容性，而不是笼统规定所有新增都安全。",
+        "rubric": [
+          "封闭枚举风险",
+          "未知值回退",
+          "发布顺序",
+          "消费者契约测试"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "Python 接口接受 true 作为金额 1，JavaScript 又把长订单 ID 合并，分别应在哪层修？",
+        "answer": "Python bool 是 int 子类，验证正整数时需严格类型策略；JavaScript number 超过安全整数范围会丢失精度。金额使用严格正整数的最小货币单位，ID 使用字符串，边界处运行时校验并拒绝隐式强转。数据库约束和授权再独立保证，不让前端校验充当唯一防线。",
+        "rubric": [
+          "bool/int 边界",
+          "安全整数",
+          "传输类型选择",
+          "分层约束"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "agent-framework-design",
+    "moduleId": "agents",
+    "title": "Agent Framework 选型：循环、工作流与宿主责任",
+    "summary": "把 Agent 拆成状态、策略、工具执行器和停止条件，对比 Microsoft Agent Framework、LangGraph 与 OpenAI Agents SDK 的控制方式，而不是仅按流行度选库。",
+    "language": "javascript",
+    "model": true,
+    "keywords": [
+      "Agent",
+      "Framework",
+      "选型",
+      "循环",
+      "工作流与宿主责任"
+    ],
+    "sourceIds": [
+      "ms-agents",
+      "agents-sdk",
+      "lg-overview"
+    ],
+    "logs": [
+      "[\"lookup\",\"finish\"]",
+      "{\"steps\":2,\"stopped\":true}"
+    ],
+    "explanation": "策略是固定数组，目的是暴露执行器的边界。把动作改为不存在的工具，会在执行前被拒绝；去掉 finish 后需由预算或无法推进检测终止，不能无限等待模型“自觉停下”。",
+    "questions": [
+      {
+        "prompt": "团队要把固定报销审核流程改为多 Agent，什么情况下你会反对，如何证明？",
+        "answer": "先拆出确定的校验、权限和状态推进，只有材料理解或异常分析保留模型决策。用相同业务样本与工具契约比较普通工作流和 Agent 方案，考察成功率、异常恢复、成本与运维复杂度。若固定流程能覆盖需求且 Agent 没有可测收益，应保留普通函数/工作流，而不是为框架增加不可解释分支。",
+        "rubric": [
+          "确定性与不确定性",
+          "相同任务基线",
+          "指标和异常恢复",
+          "复杂度收益"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "同一模型在两个框架上准确率不同，能直接说某个框架更智能吗？",
+        "answer": "不能。先固定检索数据、提示构造、工具 schema、上下文历史、停止条件和评估样本。追踪工具序列与状态注入差异，框架可能改变信息组织或重试行为，而不是改变模型本身能力。用成对样本和错误分类找可解释原因，再讨论维护成本与运行时能力。",
+        "rubric": [
+          "控制变量",
+          "状态和工具差异",
+          "成对评估",
+          "能力边界"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "ms-agent-framework",
+    "moduleId": "agents",
+    "title": "Microsoft Agent Framework：客户端、会话与显式工作流",
+    "summary": "从模型客户端与 Agent 分层入手，理解 Microsoft Agent Framework 如何组织工具、中间件、上下文与工作流，并区分稳定能力和仍需核对的实验性 API。",
+    "language": "javascript",
+    "model": true,
+    "keywords": [
+      "Microsoft",
+      "Agent",
+      "Framework",
+      "客户端",
+      "会话与显式工作流"
+    ],
+    "sourceIds": [
+      "ms-agents",
+      "ms-workflows"
+    ],
+    "logs": [
+      "[\"classify\",\"rejected\",\"write\"]",
+      "{\"sessionKey\":\"tenant-a:ticket-7\"}"
+    ],
+    "explanation": "这段不导入微软 SDK，而是验证显式控制流：未批准不能进入 write。组合会话键说明租户维度不能遗漏，但实际授权仍需根据认证主体查询资源，不能只凭字符串命名。",
+    "questions": [
+      {
+        "prompt": "开发机 AzureCliCredential 正常，容器部署后 Agent 不能调用模型，为什么不能把开发机凭据复制进去？",
+        "answer": "开发机依赖交互登录和本机缓存，容器应使用该环境配置的部署身份或受控凭据，并核对部署资源的权限。模型客户端、Agent 配置与用户输入分开管理；记录认证、授权、部署名和网络失败的不同类别。使用最小只读调用验证，不能把个人长期凭据打进镜像。",
+        "rubric": [
+          "身份与环境差异",
+          "客户端配置边界",
+          "失败分类",
+          "最小验证"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "把 AutoGen 的代码原样改包名为 Agent Framework 后不能恢复会话，迁移应该怎么做？",
+        "answer": "迁移不只是重命名导入。先列出现有消息、会话、工具、状态持久化和副作用契约，对照目标版本的 Agent/Session/Workflow API 建立适配。用历史 fixture 验证多轮上下文与断点恢复，必要时进行状态格式迁移。实验 API 与各语言能力分别核对，不能把某一版本教程当通用规范。",
+        "rubric": [
+          "契约清单",
+          "状态迁移",
+          "多轮恢复测试",
+          "版本与语言边界"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "langgraph-state",
+    "moduleId": "agents",
+    "title": "LangGraph 状态与 Reducer：并行更新如何合并",
+    "summary": "从节点返回局部更新推导状态演化，理解覆盖、追加与去重的差异，通过可运行实验分析并行分支和不确定顺序造成的错误。",
+    "language": "python",
+    "model": false,
+    "keywords": [
+      "LangGraph",
+      "状态与",
+      "Reducer",
+      "并行更新如何合并"
+    ],
+    "sourceIds": [
+      "lg-graph"
+    ],
+    "logs": [
+      "[3, 2]",
+      "[{\"id\":\"a\",\"text\":\"A\"},{\"id\":\"b\",\"text\":\"B\"}]"
+    ],
+    "explanation": "第一行对比 list 追加与按证据 ID 合并的重放结果。这个 reducer 选择右侧同 ID 版本，只有版本先后已定义时才合理；生产中还要用版本号解决乱序覆盖，而不是直接照搬 update。",
+    "questions": [
+      {
+        "prompt": "LangGraph 两个检索分支都返回 messages 列表，偶发丢消息或更新冲突，怎么分析？",
+        "answer": "先看状态字段是否定义 reducer，以及节点返回局部更新还是完整旧状态。追加消息需合适的合并规则，但同一更新重放会导致重复，应按消息或操作 ID 处理。并行完成顺序不保证业务顺序，汇合前需定义稳定排序及版本策略，并用分支延迟/失败测试验证。",
+        "rubric": [
+          "字段 reducer",
+          "局部更新",
+          "幂等与排序",
+          "并行故障测试"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "为了去重把所有证据按正文做 set，答案的引用来源却丢失了，为什么？",
+        "answer": "正文相同不代表证据身份相同，不同来源和版本可能共享文本。状态应保存 doc_id、版本、来源与租户，用主键和版本规则合并。评估应同时检查引用可追溯和覆盖率，不只检查最终答案文本；将大正文外置，图状态保留引用以控制 checkpoint 体积。",
+        "rubric": [
+          "证据身份",
+          "版本与租户",
+          "引用评估",
+          "状态大小"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "langgraph-recovery",
+    "moduleId": "agents",
+    "title": "LangGraph Checkpoint：线程、恢复与副作用重放",
+    "summary": "区分线程级状态、长期记忆和业务事实，明确 checkpoint 的恢复粒度，设计能承受进程崩溃与工作流升级的持久任务。",
+    "language": "python",
+    "model": false,
+    "keywords": [
+      "LangGraph",
+      "Checkpoint",
+      "线程",
+      "恢复与副作用重放"
+    ],
+    "sourceIds": [
+      "lg-memory",
+      "lg-interrupt"
+    ],
+    "logs": [
+      "[{\"ticket_id\":1},{\"ticket_id\":1}]",
+      "1"
+    ],
+    "explanation": "重复读取相同 checkpoint 会两次请求 write，但账本只创建一次效果。移除稳定 operation_id，改成每次随机生成新值，会让恢复失去去重基础。这个字典不是耐久存储，生产需事务与唯一约束。",
+    "questions": [
+      {
+        "prompt": "图已经启用数据库 checkpointer，恢复后还是重复创建工单，哪里出了概念错误？",
+        "answer": "把恢复状态和外部副作用混淆了。工具成功到 checkpoint 落盘之间仍有崩溃窗口；恢复可能重放执行。用跨重试稳定的 operation_id，在工单服务中通过唯一约束和结果重放保证效果幂等。测试真实崩溃窗口并记录业务创建次数，不能只检查图最后是否到 END。",
+        "rubric": [
+          "checkpoint 边界",
+          "崩溃窗口",
+          "稳定幂等键",
+          "业务效果断言"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "前端传来 thread_id 就允许恢复，这会造成什么问题？",
+        "answer": "thread_id 是定位符，不是授权证明。服务端必须将线程与认证主体、租户和工作流版本绑定，读写/恢复都验证资源权限。并发恢复还需串行化或乐观版本检查，避免同一状态被多个执行器推进；敏感历史应有访问审计和保留策略。",
+        "rubric": [
+          "定位与授权",
+          "租户绑定",
+          "并发恢复",
+          "历史治理"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "agent-human-review",
+    "moduleId": "agents",
+    "title": "人工审批：中断、恢复、操作绑定与 TOCTOU",
+    "summary": "让高影响操作在执行前暂停，绑定审批人、具体参数、版本和有效期，避免把一句“同意”误当成可以执行任意未来操作的授权。",
+    "language": "python",
+    "model": false,
+    "keywords": [
+      "人工审批",
+      "中断",
+      "恢复",
+      "操作绑定与",
+      "TOCTOU"
+    ],
+    "sourceIds": [
+      "lg-interrupt",
+      "agents-guard"
+    ],
+    "logs": [
+      "[true, false]",
+      "false"
+    ],
+    "explanation": "第二个请求只改金额也必须拒绝；消费审批后，相同请求再次执行应走幂等结果查询而不是再次产生副作用。生产中比较的是规范化参数摘要，并在数据库事务中消费审批。",
+    "questions": [
+      {
+        "prompt": "审批时展示的是退款 100 元，执行时变成 1000 元，明明 approved=true 为什么仍是漏洞？",
+        "answer": "审批只绑定布尔值，没有绑定具体操作参数和资源版本。将规范化参数摘要、目标、版本、审批人、有效期与 operation_id 一起持久化；执行前重新核对，变化后重新审批。事务内消费一次性批准并记录幂等结果，不能由模型输出代替认证用户批准。",
+        "rubric": [
+          "参数与资源绑定",
+          "执行时复核",
+          "一次性消费",
+          "可信审批主体"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "interrupt 前已经发送了邮件，恢复时用户收到两封，应该把发送放哪里？",
+        "answer": "中断恢复可能从节点开头重执行。把不可逆副作用放到审批之后的独立节点，并使用稳定操作 ID 去重。只把发送移到 interrupt 后仍不能覆盖发送成功但 checkpoint 未提交的崩溃窗口，因此接收端或发送账本仍要幂等。测试拒绝路径确保完全没有发送。",
+        "rubric": [
+          "节点重执行",
+          "审批前无副作用",
+          "崩溃窗口幂等",
+          "拒绝路径测试"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "openai-agents-tools",
+    "moduleId": "agents",
+    "title": "OpenAI Agents SDK：工具循环、参数契约与身份隔离",
+    "summary": "通过一个只读工单工具解释 Agent、Runner、function_tool 与上下文的边界，再用确定性执行器验证授权和工具预算，避免将模型参数当作可信身份。",
+    "language": "python",
+    "model": false,
+    "keywords": [
+      "OpenAI",
+      "Agents",
+      "SDK",
+      "工具循环",
+      "参数契约与身份隔离"
+    ],
+    "sourceIds": [
+      "agents-quick",
+      "agents-sdk",
+      "agents-guard"
+    ],
+    "logs": [
+      "[\"缓存失效\", \"not_found\"]",
+      "{\"caller\":\"a\",\"tool_args\":{\"ticket_id\":\"ticket-8\"}}"
+    ],
+    "explanation": "工具参数只包含要查询的工单，不包含可被模型自由指定的调用身份。第二次即使 ID 存在，也因租户归属不同返回 not_found；修改提示词不会改变这条宿主授权规则。",
+    "questions": [
+      {
+        "prompt": "模型生成了合法 JSON，参数 ticket_id 指向另一个租户，为什么 structured output 不能保证安全？",
+        "answer": "Schema 验证只检查数据形状，无法证明资源归属。工具根据服务端认证主体做授权与租户过滤，身份不由模型参数决定。加入跨租户 ID 和直接工具调用测试，确保即使绕过提示词仍拒绝。trace 对敏感字段最小化记录，保留审计 ID。",
+        "rubric": [
+          "形状与权限区别",
+          "认证主体注入",
+          "工具内部检查",
+          "越权回归测试"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "Runner 设置 max_turns=6 后，某次运行仍花了大量时间和费用，为什么？",
+        "answer": "轮数不是墙钟时间和工具成本的替代品，一轮可能包含昂贵工具、长输出或多次外部请求。另设总 deadline、工具调用数、token/费用预算和每工具超时；取消应传播到可取消的操作。对重复无进展轨迹提前终止，记录每成功任务成本而非只看单次模型价格。",
+        "rubric": [
+          "预算维度",
+          "工具与输出成本",
+          "取消传播",
+          "无进展检测"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "openai-agents-orchestration",
+    "moduleId": "agents",
+    "title": "OpenAI Agents SDK：Handoff、Agent-as-tool 与会话历史",
+    "summary": "从“谁拥有本轮控制权”区分专家转交与专家调用，理解会话历史、业务状态和可恢复运行状态的不同用途，避免上下文重复和跨用户串话。",
+    "language": "javascript",
+    "model": true,
+    "keywords": [
+      "OpenAI",
+      "Agents",
+      "SDK",
+      "Handoff",
+      "Agent-as-tool",
+      "与会话历史"
+    ],
+    "sourceIds": [
+      "agents-handoff",
+      "agents-state",
+      "agents-sdk"
+    ],
+    "logs": [
+      "[[\"订单问题\"],[\"工资问题\"]]",
+      "{\"handoff\":\"expert owns next step\",\"tool\":\"manager resumes after result\"}"
+    ],
+    "explanation": "相同 userId 在不同租户仍拥有不同历史。代码中的控制权描述用于对比调用协议，并不模拟 SDK 的完整运行时；真实实现需要按返回结果和持久状态管理后续轮次。",
+    "questions": [
+      {
+        "prompt": "主 Agent 调用税务专家后还要结合库存结果生成总报告，该使用 handoff 还是专家工具？",
+        "answer": "如果主 Agent 需要在专家返回后继续整合结果，专家作为工具更贴合控制权结构；若要将用户对话交给专家继续处理，才考虑 handoff。对专家输入做范围控制，保留主任务预算，并测试专家失败时主 Agent 的回退。不能仅按“有多个 Agent”就默认交接。",
+        "rubric": [
+          "控制权归属",
+          "输入范围",
+          "失败回退",
+          "组合结果"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "前端收到一段“已处理完成”文本就标成功，随后工具失败，应该怎么修？",
+        "answer": "文本内容是模型输出而不是运行状态协议。前端依据受控的 run_completed/run_failed 事件推进状态，并分别显示工具和审批状态；断线后按任务 ID 查询或恢复。后端把业务提交结果与 run 事件关联，最终回答中的成功措辞不能覆盖工具失败或未提交事实。",
+        "rubric": [
+          "文本与状态分离",
+          "受控事件",
+          "断线恢复",
+          "业务事实"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "agent-evaluation",
+    "moduleId": "agents",
+    "title": "Agent 评估与可观测性：轨迹、任务成功与成本预算",
+    "summary": "建立能暴露工具误用、越权、循环和恢复错误的评估集，以业务成功而非回答相似度衡量 Agent，并把离线评估连接到灰度发布。",
+    "language": "javascript",
+    "model": true,
+    "keywords": [
+      "Agent",
+      "评估与可观测性",
+      "轨迹",
+      "任务成功与成本预算"
+    ],
+    "sourceIds": [
+      "agents-state",
+      "agents-guard",
+      "agents-sdk"
+    ],
+    "logs": [
+      "{\"successRate\":0.6666666666666666,\"costPerSuccess\":3}",
+      "block"
+    ],
+    "explanation": "即使任务表面成功率达到三分之二，存在一次越权也会阻断发布。把失败任务成本改大，观察每成功任务成本，而不是只计算成功任务自身花费。",
+    "questions": [
+      {
+        "prompt": "新提示让答案评分从 85 提升到 92，却多出了重复退款，是否应该上线？",
+        "answer": "不应仅看软评分均值。重复副作用是业务门槛失败，应先阻断写能力并定位操作 ID、重试和恢复轨迹。评估加入幂等与授权的确定性断言，用相同样本比较新旧版本。只有门槛通过后再权衡开放答案质量、成本和延迟。",
+        "rubric": [
+          "门槛指标",
+          "副作用轨迹",
+          "成对比较",
+          "综合权衡"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "每次模型调用更便宜，但每个成功工单成本翻倍，应如何排查？",
+        "answer": "把失败调用、重试、工具费用与长输出都计入总成本，并除以实际成功任务数。分解失败率和每任务尝试次数，查看上下文膨胀、错误工具选择与循环。用预算和无进展检测限制放大，再通过离线及灰度评估确认修改没有牺牲任务质量。",
+        "rubric": [
+          "正确成本分母",
+          "重试与上下文",
+          "轨迹定位",
+          "预算与评估"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "fde-discovery",
+    "moduleId": "fde",
+    "title": "FDE 需求发现：把模糊诉求变成可验收的工程问题",
+    "summary": "Forward Deployed Engineer 需要嵌入真实业务流，从数据、权限、异常和经济约束中找到值得解决的问题，再把演示推进到可运营的交付。",
+    "language": "javascript",
+    "model": true,
+    "keywords": [
+      "FDE",
+      "需求发现",
+      "把模糊诉求变成可验收的工程问题"
+    ],
+    "sourceIds": [
+      "fde-official"
+    ],
+    "logs": [
+      "{\"accepted\":2,\"total\":3,\"savedMinutes\":5}",
+      "draft generated is not business accepted"
+    ],
+    "explanation": "只把被业务接受的结果计入已实现节省，避免将失败草稿的理论节省算入成果。真实实验还应计入审核、纠错和流程切换成本，并与同类任务基线比较。",
+    "questions": [
+      {
+        "prompt": "客户说“让 Agent 自动处理所有售后”，你只有两周，第一周最重要的产出是什么？",
+        "answer": "先梳理任务流、系统和权限，收集分层的成功/失败样本，形成可验收的最小范围与基线。选择只读或草稿阶段，明确不能自动执行的退款/发送动作、风险升级和负责人。用数据可达性与离线结果判断是否进入实现，不以做出一个漂亮聊天页作为第一周成功。",
+        "rubric": [
+          "真实流程与样本",
+          "可验收范围",
+          "权限风险与负责人",
+          "基线和阶段决策"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "演示准确率 95%，客户上线后不用，FDE 应先调模型还是做什么调查？",
+        "answer": "检查任务代表性、真实输入和权限、错误恢复、审核负担及工作流嵌入位置。用实际使用数据和访谈确定放弃点，比较端到端完成率与人工时间。若演示样本不代表线上，先修评估与流程；只有证据指向模型能力时再调整提示、模型或训练。",
+        "rubric": [
+          "代表性",
+          "工作流采用",
+          "端到端指标",
+          "证据归因"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "fde-production",
+    "moduleId": "fde",
+    "title": "FDE 生产交付：数据集成、权限、灰度与交接",
+    "summary": "将一个 AI 工单助手拆成前端、API、任务执行、数据连接与评估链路，说明生产交付中的隔离、版本、运营和责任归属。",
+    "language": "javascript",
+    "model": true,
+    "keywords": [
+      "FDE",
+      "生产交付",
+      "数据集成",
+      "权限",
+      "灰度与交接"
+    ],
+    "sourceIds": [
+      "fde-official",
+      "agents-state"
+    ],
+    "logs": [
+      "[false,true,true]",
+      "{\"capacity\":60,\"meaning\":\"10 tasks x 3 tools x 2 attempts\"}"
+    ],
+    "explanation": "queued 不能直接被前端一条文本标成 succeeded；审批等待恢复到 running 后才继续执行。容量模型说明入口并发并不等于外部操作并发，实际还需用阶段分布和时间预算估算。",
+    "questions": [
+      {
+        "prompt": "客户验收后开发者离场，审批任务全部卡住，怎样判断这是交付问题而不只是代码 bug？",
+        "answer": "检查是否定义审批负责人、等待超时、告警、任务恢复与操作手册，接收团队是否做过演练。代码可运行不等于系统可运营。恢复当前任务时保留状态和审批绑定，分析告警缺失与责任归属，补充由客户团队执行的故障演练和交接验收。",
+        "rubric": [
+          "运营责任",
+          "等待状态和告警",
+          "保持任务恢复语义",
+          "接收团队演练"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "新增一个大客户后所有小客户都变慢，如何限制 noisy neighbor？",
+        "answer": "按租户设置并发、排队长度、模型/工具预算和速率，区分共享池与关键资源隔离。观察队列等待、执行耗时及每租户资源分布；必要时做公平调度与专属容量。不能仅按 API QPS 限流，因为单任务工具扇出和重试成本可能差几个数量级。",
+        "rubric": [
+          "租户预算",
+          "队列和公平性",
+          "分阶段指标",
+          "任务成本差异"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "algo-window-invariants",
+    "moduleId": "algorithm",
+    "title": "滑动窗口与前缀和：从不变量选择算法",
+    "summary": "用含负数、重复字符和 Unicode 的反例判断窗口何时成立，解释计数前缀和、最小覆盖窗口和复杂度证明，而不是仅记双指针模板。",
+    "language": "javascript",
+    "model": false,
+    "keywords": [
+      "滑动窗口与前缀和",
+      "从不变量选择算法"
+    ],
+    "sourceIds": [
+      "mdn-js"
+    ],
+    "logs": [
+      "3",
+      "6"
+    ],
+    "explanation": "三个零产生 3+2+1 个非空连续区间。将查询和记录顺序互换会多算空区间，这是一条能解释错误原因的变式测试，而非仅换一组普通数字。",
+    "questions": [
+      {
+        "prompt": "含负数数组求和为 k 的子数组个数，为什么“和大就左移”可能漏解？",
+        "answer": "负数破坏了扩张使和不减的单调条件，移动左边界不再安全。用前缀差关系统计历史前缀和等于当前和减 k 的次数，初始记录 0 一次，先查询再记录当前前缀避免空区间。用 [1,-1,1] 与多个零验证，说明 O(n) 时间和 O(n) 空间。",
+        "rubric": [
+          "单调性条件",
+          "前缀差推导",
+          "查询顺序",
+          "反例与复杂度"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "最小覆盖子串用 Set 可以通过 ABC，却在 AABC 失败，缺了哪个不变量？",
+        "answer": "覆盖条件不是每种字符出现过，而是每种字符的出现次数达到需求。维护需求频次和窗口频次，只在跨过需求阈值时更新满足类别数；全满足后收缩，移出关键字符才变为不足。测试重复字符与无法覆盖，明确按码点还是字素计数。",
+        "rubric": [
+          "需求频次",
+          "阈值跨越",
+          "收缩不变量",
+          "字符单位"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "algo-search-dp",
+    "moduleId": "algorithm",
+    "title": "二分边界与动态规划：状态、转移和最优性",
+    "summary": "用 lower_bound、LIS、零钱兑换和加权区间调度说明如何选择状态、定义边界、构造贪心反例并将搜索嵌入动态规划。",
+    "language": "javascript",
+    "model": false,
+    "keywords": [
+      "二分边界与动态规划",
+      "状态",
+      "转移和最优性"
+    ],
+    "sourceIds": [
+      "mdn-js"
+    ],
+    "logs": [
+      "[0,1,4]",
+      "2"
+    ],
+    "explanation": "lower_bound 允许返回数组长度，这是合法插入边界而不是越界错误。零钱兑换的结果 2 对应 3+3，直接反驳“总选最大面额必然最优”。",
+    "questions": [
+      {
+        "prompt": "LIS 的 tails 得到了 [1,3,4]，可以直接把它当成原序列的一条递增子序列返回吗？",
+        "answer": "不能。tails 的每个位置可能由不同历史路径替换，保证的是该长度的最小可能结尾，不保证这些结尾来自同一条路径。若要恢复序列，记录每个元素的前驱索引和每个长度的末尾索引。用会发生替换的反例说明区别，再给出 O(n log n) 时间与额外空间。",
+        "rubric": [
+          "tails 语义",
+          "不同历史路径",
+          "前驱恢复",
+          "复杂度"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "带收益的任务调度为什么不能照搬“最早结束先选”？",
+        "answer": "最早结束贪心解决的是无权最大数量，带权时一个长任务的收益可能超过多个短任务。按结束排序，用 dp 比较不选和选择当前任务，再二分兼容前缀。定义 end==nextStart 可衔接，测试收益冲突、完全重叠和输入顺序变化。",
+        "rubric": [
+          "目标函数区别",
+          "DP 选择转移",
+          "二分兼容边界",
+          "反例"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "algo-graph-heap",
+    "moduleId": "algorithm",
+    "title": "图与堆：拓扑依赖、连通性和 Top-K",
+    "summary": "以构建依赖和任务调度为背景，区分拓扑排序、并查集与最短路适用范围，解释有界小根堆维护 Top-K 的不变量和测试策略。",
+    "language": "javascript",
+    "model": false,
+    "keywords": [
+      "图与堆",
+      "拓扑依赖",
+      "连通性和",
+      "Top-K"
+    ],
+    "sourceIds": [
+      "mdn-js"
+    ],
+    "logs": [
+      "[0,1,2,3]",
+      "null"
+    ],
+    "explanation": "图中存在多条合法拓扑序，示例的顺序来自队列与边遍历规则。第二个输入有向成环，返回 null 表示不存在拓扑序；不能返回已经处理的部分节点并当作完整结果。",
+    "questions": [
+      {
+        "prompt": "构建系统拓扑排序返回了 90 个节点，但总共 100 个任务，可以先当成功提交吗？",
+        "answer": "不能把部分结果当完整依赖计划。Kahn 输出不足节点总数说明存在环或依赖建模问题，应定位剩余入度与环相关节点，区分缺失节点和非法边。也要计入孤立任务。测试结果时检查全部节点覆盖及每条边的先后，而不是只比较一个固定数组。",
+        "rubric": [
+          "覆盖与环",
+          "孤立节点",
+          "诊断信息",
+          "结构性断言"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "持续输入一百万个数，只需要前 20 大，为什么全排序不是最合适默认方案？",
+        "answer": "流式场景无法无界保存全部输入，维护 20 个候选的小根堆即可。堆顶是候选下界，只有更大的新数才替换并下沉，重复值按题意计数。说明 O(n log k)/O(k) 与最终排序 k 个结果的成本，并测试负数和边界 k。",
+        "rubric": [
+          "流式空间约束",
+          "堆顶不变量",
+          "复杂度",
+          "重复与边界"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "node-queue-leases",
+    "moduleId": "node",
+    "title": "后台任务：租约、重试、Fencing 与优雅退出",
+    "summary": "把 HTTP 请求交给可恢复的后台任务，推导租约过期、重复领取、重试放大与旧 worker 回写的问题，使用稳定任务 ID 和单调令牌约束效果。",
+    "language": "javascript",
+    "model": true,
+    "keywords": [
+      "后台任务",
+      "租约",
+      "重试",
+      "Fencing",
+      "与优雅退出"
+    ],
+    "sourceIds": [
+      "sql-transaction",
+      "node-worker"
+    ],
+    "logs": [
+      "[false,true]",
+      "done"
+    ],
+    "explanation": "重新领取后 token 从 1 变为 2，旧 owner 的回写不能覆盖新结果。该模型没有真正的数据库并发；生产必须用带条件的原子更新和稳定业务操作键实现同样约束。",
+    "questions": [
+      {
+        "prompt": "租约过期后新 worker 接手，旧 worker 恢复又写成功，为什么只检测 lease_until 不够？",
+        "answer": "租约时间不能证明旧进程已停止。重新领取生成单调 fencing token，续租/完成使用 owner+token 条件更新并检查影响行数。外部效果仍使用稳定操作 ID 幂等；若目标支持 token，可在目标侧拒绝陈旧写入。测试暂停超过租约再恢复，而不只测试进程被杀。",
+        "rubric": [
+          "租约与进程存活区别",
+          "单调 token",
+          "目标幂等",
+          "暂停恢复实验"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "队列错误重试把下游打垮了，降低 worker 数是不是完整方案？",
+        "answer": "降低并发可以暂时止损，但还需分类永久/瞬时/不确定结果，设置退避抖动、最大次数和总预算，避免热循环。按来源或租户共享限速，记录队列年龄和重试放大。对副作用超时先查状态；给永久失败死信和人工处理流程。",
+        "rubric": [
+          "失败分类",
+          "退避与预算",
+          "全局配额",
+          "不确定副作用"
+        ],
+        "type": "scenario"
+      }
+    ]
+  },
+  {
+    "id": "py-stream-resources",
+    "moduleId": "python",
+    "title": "Python 流式数据管道：生成器、资源关闭与内存预算",
+    "summary": "通过提前停止消费、批量处理与慢下游，解释生成器为什么不天然保证低内存或资源释放，并连接 CSV、数据库游标和 ASGI 响应的生命周期。",
+    "language": "python",
+    "model": false,
+    "keywords": [
+      "Python",
+      "流式数据管道",
+      "生成器",
+      "资源关闭与内存预算"
+    ],
+    "sourceIds": [
+      "py-context",
+      "py-asyncio"
+    ],
+    "logs": [
+      "[0, 1, 2]",
+      "closed"
+    ],
+    "explanation": "只消费三条并不会让生成器函数自然走到结束。显式 close 才立即执行 finally；把它删掉或将所有行转为 list，观察资源生命周期和内存策略如何改变。",
+    "questions": [
+      {
+        "prompt": "API 使用生成器返回一百万行，内存依然线性增长，可能是哪几层没有真正流式化？",
+        "answer": "检查数据库驱动是否预缓冲、生成器内部是否读取全部文件、调用方是否 list() 收集、并发批次和 HTTP 缓冲是否无界。量化批次大小、行大小与在途批次数，再用慢消费者和大数据验证峰值。迭代语法本身不能证明资源上界。",
+        "rubric": [
+          "驱动与生成器缓冲",
+          "消费端收集",
+          "在途批次",
+          "规模/慢消费者验证"
+        ],
+        "type": "scenario"
+      },
+      {
+        "prompt": "用户只读取前十行后断开连接，文件句柄保持打开，应该怎么设计关闭责任？",
+        "answer": "资源生产者把打开/关闭放在 with 或 finally，消费者提前结束时显式 close/aclose，并让响应取消沿链路传递。不要依赖垃圾回收。测试 break、解析异常、下游失败和客户端断开，确认句柄、游标及连接池归还；已提交业务效果另用幂等处理。",
+        "rubric": [
+          "生产者清理",
+          "消费者提前关闭",
+          "取消传播",
+          "资源验收"
+        ],
+        "type": "scenario"
+      }
+    ]
+  }
+]

@@ -9,6 +9,16 @@ import Icon from "../components/Icon.vue";
 import QuestionPanel from "../components/QuestionPanel.vue";
 const route = useRoute(),
   router = useRouter();
+const questionPool = ref(
+  ["transfer", "foundation", "all"].includes(route.query.pool)
+    ? route.query.pool
+    : "transfer",
+);
+const poolQuestions = computed(() =>
+  questions.value.filter(
+    (q) => questionPool.value === "all" || q.pool === questionPool.value,
+  ),
+);
 const query = ref(""),
   type = ref(route.query.type || ""),
   moduleId = ref(route.query.module || ""),
@@ -20,7 +30,7 @@ const attempted = computed(
   () => new Set(store.state.attempts.map((x) => x.questionId)),
 );
 const filtered = computed(() =>
-  questions.value.filter(
+  poolQuestions.value.filter(
     (q) =>
       (!type.value || q.type === type.value) &&
       (!moduleId.value || q.moduleId === moduleId.value) &&
@@ -43,13 +53,18 @@ watch(
   current,
   (q) => {
     if (q?.type === "coding") router.replace("/labs/" + q.labId);
+    if (q && questionPool.value !== "all" && questionPool.value !== q.pool)
+      questionPool.value = q.pool;
   },
   { immediate: true },
 );
 const currentIndex = computed(() =>
   filtered.value.findIndex((x) => x.id === current.value?.id),
 );
-watch([query, type, moduleId, priority, onlyNew], () => (page.value = 1));
+watch(
+  [query, type, moduleId, priority, onlyNew, questionPool],
+  () => (page.value = 1),
+);
 function open(q) {
   router.push(q.type === "coding" ? "/labs/" + q.labId : "/practice/" + q.id);
 }
@@ -64,7 +79,9 @@ function random() {
       <div>
         <div class="eyebrow">INTERVIEW PRACTICE</div>
         <h1>问得深入，答得有据。</h1>
-        <p>客观题自动判分，开放题对照要点自评。每次练习都会进入复习记录。</p>
+        <p>
+          默认练迁移题：改变约束、分析故障、比较方案。基础自测单独归档，客观题自动判分，开放题对照证据自评。
+        </p>
       </div>
       <button class="btn primary" :disabled="!filtered.length" @click="random">
         <Icon name="Shuffle" :size="17" />随机练一题
@@ -79,11 +96,20 @@ function random() {
       >
         {{ label
         }}<span>{{
-          questions.filter((q) => !key || q.type === key).length
+          poolQuestions.filter((q) => !key || q.type === key).length
         }}</span>
       </button>
     </div>
     <div class="filter-bar">
+      <AppSelect
+        v-model="questionPool"
+        label="题目训练范围"
+        :options="[
+          { value: 'transfer', label: '迁移训练（推荐）' },
+          { value: 'foundation', label: '基础自测' },
+          { value: 'all', label: '全部题目' },
+        ]"
+      />
       <div class="input-search">
         <Icon name="Search" :size="18" /><AppField
           v-model="query"

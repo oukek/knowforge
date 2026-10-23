@@ -130,6 +130,16 @@ try {
   ).json();
   assert(bootstrap.catalog.lessons.length > 0);
   assert.equal(bootstrap.database, mysqlCheck ? "mysql" : "sqlite");
+  assert.equal(bootstrap.catalog.curriculum.deepLessons, 21);
+  const pythonManifest = await (
+    await fetch(`${base}/python-runtime/manifest.json`)
+  ).json();
+  const wasm = await fetch(base + pythonManifest.base + "pyodide.asm.wasm", {
+    method: "HEAD",
+  });
+  assert.equal(wasm.status, 200);
+  assert.match(wasm.headers.get("content-type"), /application\/wasm/);
+  assert.match(wasm.headers.get("cache-control"), /immutable/);
   const outputCheck = await fetch(
     `${base}/api/lesson-exercises/output-js-promise-combinators/attempt`,
     {

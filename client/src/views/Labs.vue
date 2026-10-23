@@ -20,6 +20,24 @@ const route = useRoute(),
   router = useRouter();
 const labs = computed(() => store.catalog.labs),
   lab = computed(() => labs.value.find((l) => l.id === route.params.id));
+const moduleId = ref(""),
+  training = ref("");
+const filteredLabs = computed(() =>
+  labs.value
+    .filter(
+      (item) =>
+        (!moduleId.value || item.moduleId === moduleId.value) &&
+        (!training.value || (item.pool || "foundation") === training.value),
+    )
+    .sort(
+      (a, b) => Number(b.pool === "transfer") - Number(a.pool === "transfer"),
+    ),
+);
+const labModules = computed(() =>
+  store.catalog.modules.filter((item) =>
+    labs.value.some((entry) => entry.moduleId === item.id),
+  ),
+);
 const code = ref(""),
   showSolution = ref(false),
   hintCount = ref(0),
@@ -104,13 +122,33 @@ const passed = computed(
       <Icon name="FlaskConical" :size="20" />
       <p>
         每道题都有输入契约、边界用例、分步提示和参考实现。代码在浏览器 Worker
-        中运行，4 秒超时会终止，Node 服务端不执行你的代码。Python 的 40
-        道补全练习位于各篇 Python、爬虫、API 与 AI 资料的“边读边试”。
+        中运行，4 秒超时会终止，Node 服务端不执行你的代码。Python 补全练习位于
+        Python、爬虫、API、AI 与 Agent 资料的“边读边试”。
       </p>
+    </div>
+    <div class="filter-bar">
+      <AppSelect
+        v-model="moduleId"
+        label="实验专题"
+        :options="[
+          { value: '', label: '全部实验专题' },
+          ...labModules.map((item) => ({ value: item.id, label: item.title })),
+        ]"
+      />
+      <AppSelect
+        v-model="training"
+        label="实验训练范围"
+        :options="[
+          { value: '', label: '全部实验（新增算法优先）' },
+          { value: 'transfer', label: '算法迁移挑战' },
+          { value: 'foundation', label: '基础手写实验' },
+        ]"
+      />
+      <span class="muted tiny">{{ filteredLabs.length }} 个实验</span>
     </div>
     <div class="lab-grid">
       <RouterLink
-        v-for="(l, i) in labs"
+        v-for="(l, i) in filteredLabs"
         :key="l.id"
         :to="'/labs/' + l.id"
         class="lab-card"
@@ -123,6 +161,9 @@ const passed = computed(
           >
         </div>
         <h2>{{ l.title }}</h2>
+        <span v-if="l.pool === 'transfer'" class="tiny green-text"
+          >算法迁移 · 不变量与边界</span
+        >
         <p>{{ l.prompt }}</p>
         <div class="card-meta">
           <span
@@ -130,6 +171,9 @@ const passed = computed(
             {{ moduleFor(l.moduleId)?.title }}</span
           ><Icon name="ArrowUpRight" :size="18" /></div
       ></RouterLink>
+    </div>
+    <div v-if="!filteredLabs.length" class="empty-state">
+      <p>当前筛选没有实验，调整专题或训练范围再试。</p>
     </div>
   </div>
   <div v-else-if="lab" class="lab-workspace page-enter">

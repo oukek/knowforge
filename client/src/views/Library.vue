@@ -26,27 +26,39 @@ const route = useRoute(),
   router = useRouter();
 const query = ref(""),
   priority = ref(""),
-  status = ref("");
+  status = ref(""),
+  depth = ref("");
 const moduleId = computed(() => route.query.module || "");
 const lesson = computed(() => lessonFor(route.params.id));
 const filtered = computed(() =>
-  lessons.value.filter(
-    (l) =>
-      (!moduleId.value || l.moduleId === moduleId.value) &&
-      (!priority.value || l.priority === priority.value) &&
-      (!status.value ||
-        (store.state.progress[l.id]?.status || "new") === status.value) &&
-      [l.title, l.summary, ...l.keywords]
-        .join(" ")
-        .toLowerCase()
-        .includes(query.value.toLowerCase()),
-  ),
+  lessons.value
+    .filter(
+      (l) =>
+        (!depth.value || l.depth === depth.value) &&
+        (!moduleId.value || l.moduleId === moduleId.value) &&
+        (!priority.value || l.priority === priority.value) &&
+        (!status.value ||
+          (store.state.progress[l.id]?.status || "new") === status.value) &&
+        [l.title, l.summary, ...l.keywords]
+          .join(" ")
+          .toLowerCase()
+          .includes(query.value.toLowerCase()),
+    )
+    .sort(
+      (a, b) =>
+        (({ deep: 0, expanded: 1, foundation: 2 })[a.depth] ?? 2) -
+        ({ deep: 0, expanded: 1, foundation: 2 }[b.depth] ?? 2),
+    ),
 );
 const siblings = computed(() =>
   lessons.value.filter((l) => l.moduleId === lesson.value?.moduleId),
 );
 const related = computed(() =>
-  questions.value.filter((q) => q.lessonId === lesson.value?.id),
+  questions.value
+    .filter((q) => q.lessonId === lesson.value?.id)
+    .sort(
+      (a, b) => Number(b.pool === "transfer") - Number(a.pool === "transfer"),
+    ),
 );
 const sourceLinks = computed(() =>
   store.catalog.sources.filter((x) => lesson.value?.sourceIds.includes(x.id)),
@@ -80,8 +92,9 @@ watch(
         <div class="eyebrow">KNOWLEDGE LIBRARY</div>
         <h1>先理解，再构建。</h1>
         <p>
-          {{ lessons.length }} 篇系统讲解，每篇都有可运行 JavaScript
-          示例与自动验证练习。
+          {{ lessons.length }}
+          篇系统讲解，每篇都有可运行示例与自动验证练习。新增深入专题覆盖全栈、Agent
+          框架与 FDE，基础导读可沿关联专题继续。
         </p>
       </div>
       <a :href="apiUrl('/export/handbook')" class="btn"
@@ -101,6 +114,16 @@ watch(
       </button>
     </div>
     <div class="filter-bar">
+      <AppSelect
+        v-model="depth"
+        label="资料深度"
+        :options="[
+          { value: '', label: '全部深度（进阶优先）' },
+          { value: 'deep', label: '深入专题' },
+          { value: 'expanded', label: '机制深化' },
+          { value: 'foundation', label: '基础导读' },
+        ]"
+      />
       <div class="input-search">
         <Icon name="Search" :size="18" /><AppField
           v-model="query"
@@ -150,6 +173,13 @@ watch(
           /><span v-else class="badge subtle">{{ l.priority }}</span>
         </div>
         <h2>{{ l.title }}</h2>
+        <span class="tiny green-text">{{
+          l.depth === "deep"
+            ? "深入专题 · 原理 / 案例 / 反例"
+            : l.depth === "expanded"
+              ? "机制深化"
+              : "基础导读"
+        }}</span>
         <p>{{ l.summary }}</p>
         <div class="keyword-row">
           <span v-for="k in l.keywords.slice(0, 3)" :key="k">{{ k }}</span>
@@ -179,6 +209,7 @@ watch(
         class="btn"
         @click="
           query = '';
+          depth = '';
           priority = '';
           status = '';
           router.push('/learn');
@@ -259,6 +290,20 @@ watch(
           {{ lesson.exercises.length }} 道随堂练习
         </button>
       </div>
+      <div v-if="lesson.relatedLessonIds?.length" class="info-banner">
+        <div>
+          <strong>继续深入与迁移</strong>
+          <div class="row wrap">
+            <RouterLink
+              v-for="id in lesson.relatedLessonIds"
+              :key="id"
+              :to="'/learn/' + id"
+              class="text-link"
+              >{{ lessonFor(id)?.title }}</RouterLink
+            >
+          </div>
+        </div>
+      </div>
       <section
         v-for="(section, i) in lesson.sections"
         :key="section.title"
@@ -300,7 +345,10 @@ watch(
                     ? "场景"
                     : "问答"
             }}</span
-            ><span>{{ q.prompt }}</span
+            ><span
+              ><small class="muted"
+                >{{ q.pool === "transfer" ? "迁移训练" : "基础自测" }} · </small
+              >{{ q.prompt }}</span
             ><Icon name="ArrowUpRight" :size="16"
           /></RouterLink>
         </div>

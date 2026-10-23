@@ -16,7 +16,8 @@ import {
 } from "../store";
 import Icon from "../components/Icon.vue";
 import Markdown from "../components/Markdown.vue";
-const mode = ref("objective"),
+const questionPool = ref("transfer");
+const mode = ref("interview"),
   count = ref(10),
   minutes = ref(15),
   selectedModules = ref([]),
@@ -95,10 +96,22 @@ async function saveDraft() {
   });
   if (result && version === draftVersion) saved.value = "草稿已保存";
 }
+const availableCount = computed(
+  () =>
+    questions.value.filter(
+      (q) =>
+        q.type !== "coding" &&
+        (questionPool.value === "all" || q.pool === questionPool.value) &&
+        (mode.value !== "objective" || q.type === "choice") &&
+        (!selectedModules.value.length ||
+          selectedModules.value.includes(q.moduleId)),
+    ).length,
+);
 async function start() {
   busy.value = true;
   const result = await mutate("/exams", "POST", {
     mode: mode.value,
+    questionPool: questionPool.value,
     count: count.value,
     minutes: minutes.value,
     moduleIds: selectedModules.value,
@@ -182,8 +195,8 @@ const objectiveCount = computed(
               :class="{ selected: mode === 'objective' }"
               @click="mode = 'objective'"
             >
-              <Icon name="ListChecks" :size="25" /><strong>基础自测</strong>
-              <p>单选题自动判分<br />适合检查概念和边界</p>
+              <Icon name="ListChecks" :size="25" /><strong>客观题训练</strong>
+              <p>单选题自动判分<br />检查判断依据和边界</p>
               <span class="badge">客观分数</span></button
             ><button
               class="mode-card"
@@ -218,6 +231,17 @@ const objectiveCount = computed(
         </section>
         <aside class="setup-aside">
           <h3>练习配置</h3>
+          <label class="field-label" for="exam-pool">题目范围</label>
+          <AppSelect
+            id="exam-pool"
+            v-model="questionPool"
+            label="模拟题目范围"
+            :options="[
+              { value: 'transfer', label: '迁移训练（推荐）' },
+              { value: 'foundation', label: '基础自测' },
+              { value: 'all', label: '全部题目' },
+            ]"
+          />
           <label class="field-label" for="exam-count">题目数量</label
           ><AppSelect
             id="exam-count"
@@ -239,10 +263,16 @@ const objectiveCount = computed(
             "
           />
           <p class="muted tiny">
-            范围内题量不足时使用现有题目，至少需要 3
+            当前范围有
+            {{ availableCount }}
+            道可用题。范围内题量不足时使用现有题目，至少需要 3
             道。时间到自动交卷；刷新后可以恢复已保存草稿。
           </p>
-          <button class="btn primary wide" :disabled="busy" @click="start">
+          <button
+            class="btn primary wide"
+            :disabled="busy || availableCount < 3"
+            @click="start"
+          >
             {{ busy ? "组卷中…" : "开始模拟"
             }}<Icon name="ArrowRight" :size="17" />
           </button>
