@@ -306,6 +306,11 @@ defineExpose({ openExercises, openExample });
       <div class="lesson-example-caption">
         <h3>先预测，再验证</h3>
         <p>{{ output.prompt }}</p>
+        <p class="output-line-hint">
+          本题需要
+          {{ output.expectedLogs.length }} 行输出，每次输出占一行。布尔值填写
+          true / false，无需加引号。
+        </p>
         <p class="example-scope">
           以下面的原始代码为准，试验区的修改不会改变本题答案。
         </p>
@@ -330,7 +335,7 @@ defineExpose({ openExercises, openExample });
             ? "此前" +
               (lastOutput.passed ? "已通过" : "尚未通过") +
               " · 可反复尝试"
-            : "自动按行核对；JSON 对象允许空格和键顺序不同"
+            : "逐行核对；容许单/双引号、格式空格和对象键顺序不同"
         }}</span
         ><button
           class="btn primary small"
@@ -356,6 +361,17 @@ defineExpose({ openExercises, openExample });
         </div>
         <p v-if="feedbackAnswer !== answer" class="run-stale">
           答案已修改，请再次验证。
+        </p>
+        <p class="output-match-summary" role="status">
+          已匹配 {{ feedback.matched }} / {{ feedback.total }} 行
+          <span v-if="feedback.lines.some((line) => line.actual === null)">
+            · 还有输出未填写，请按顺序补全。</span
+          >
+          <span
+            v-else-if="feedback.lines.some((line) => line.expected === null)"
+          >
+            · 填写的行数超过了原始代码的输出次数。</span
+          >
         </p>
         <div
           v-for="(line, i) in feedback.lines"

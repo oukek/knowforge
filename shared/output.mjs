@@ -24,7 +24,7 @@ export function sameJSON(a, b) {
 export function outputLineMatches(actual, expected) {
   if (actual === expected) return true;
   try {
-    return sameJSON(JSON.parse(actual), JSON.parse(expected));
+    return sameJSON(parseOutputLiteral(actual), JSON.parse(expected));
   } catch {
     return false;
   }
@@ -50,3 +50,4 @@ export function compareOutput(answer, expectedLogs) {
     lines,
   };
 }
+import { parseOutputLiteral } from "./output-literal.mjs";

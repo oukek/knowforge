@@ -1,20 +1,21 @@
 <script setup>
-import { ref } from "vue";
+import { computed, ref } from "vue";
 defineOptions({ inheritAttrs: false });
-defineProps({
+const props = defineProps({
   modelValue: { type: [String, Number], default: "" },
   multiline: Boolean,
 });
 const emit = defineEmits(["update:modelValue"]);
 const control = ref(null);
-let composing = false;
-function input(event) {
-  if (!composing && !event.isComposing)
+// Native v-model handles IME, change-event fallbacks and updates during composition.
+const model = computed({
+  get: () => props.modelValue,
+  set: (value) => emit("update:modelValue", value),
+});
+function commit(event) {
+  event.target.composing = false;
+  if (event.target.value !== String(props.modelValue))
     emit("update:modelValue", event.target.value);
-}
-function compositionEnd(event) {
-  composing = false;
-  emit("update:modelValue", event.target.value);
 }
 defineExpose({
   focus: (options) => control.value?.focus(options),
@@ -22,15 +23,23 @@ defineExpose({
 });
 </script>
 <template>
-  <component
-    :is="multiline ? 'textarea' : 'input'"
+  <textarea
+    v-if="multiline"
     ref="control"
     v-bind="$attrs"
     class="app-field"
-    :value="modelValue"
-    @input="input"
-    @compositionstart="composing = true"
-    @compositionend="compositionEnd"
+    v-model="model"
+    @change="commit"
+    @blur="commit"
+  ></textarea>
+  <input
+    v-else
+    ref="control"
+    v-bind="$attrs"
+    class="app-field"
+    v-model="model"
+    @change="commit"
+    @blur="commit"
   />
 </template>
 <style>

@@ -72,6 +72,30 @@ test("输出判题容许 JSON 空格与键顺序，但不容许类型、顺序�
   assert(!compareOutput("1", ["1", "2"]).passed);
   assert(!compareOutput('"1"', ["1"]).passed);
 });
+test("全部预测题的答案与运行示例一致，文本 true 不会被误判为字符串类型错误", () => {
+  for (const lesson of data.lessons) {
+    const exercise = lesson.exercises.find((item) => item.type === "output");
+    assert.deepEqual(
+      exercise.expectedLogs,
+      lesson.playground.expectedLogs,
+      lesson.id,
+    );
+    assert.equal(exercise.code, lesson.playground.code, lesson.id);
+    assert(
+      compareOutput(exercise.expectedLogs.join("\n"), exercise.expectedLogs)
+        .passed,
+      lesson.id,
+    );
+  }
+  assert(compareOutput("true", ["true"]).passed);
+  assert(compareOutput(" true\r\n", ["true"]).passed);
+  assert(!compareOutput('"true"', ["true"]).passed);
+  assert(!compareOutput("ture", ["true"]).passed);
+  const missing = compareOutput("true", ["true", "null"]);
+  assert.equal(missing.passed, false);
+  assert.equal(missing.lines[0].passed, true);
+  assert.equal(missing.lines[1].actual, null);
+});
 test("snippet 定时器、异步回调、实时日志与错误", async () => {
   const { result, messages } = await execute({
     mode: "snippet",

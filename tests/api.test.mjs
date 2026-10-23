@@ -163,6 +163,53 @@ test("随堂输出在服务端逐行判题，JSON 容错且记录与题库作答
     404,
   );
 });
+test("布尔输出以文本提交，true 正常通过，引号/拼写/缺行错误分别判错", async (t) => {
+  const { api } = await fixture(t);
+  const path = "/lesson-exercises/output-algo-cycle/attempt";
+  const right = await api(path, "POST", { answer: "true\nnull" });
+  assert.equal(right.status, 200);
+  assert.equal(right.data.feedback.passed, true);
+  assert.equal(right.data.feedback.lines[0].actual, "true");
+  assert.equal(right.data.feedback.lines[0].expected, "true");
+  for (const answer of ['"true"\nnull', "ture\nnull", "false\nnull"]) {
+    const wrong = await api(path, "POST", { answer });
+    assert.equal(wrong.data.feedback.passed, false, answer);
+    assert.equal(wrong.data.feedback.lines[0].passed, false, answer);
+  }
+  const missing = await api(path, "POST", { answer: "true" });
+  assert.equal(missing.data.feedback.passed, false);
+  assert.equal(missing.data.feedback.lines[0].passed, true);
+  assert.equal(missing.data.feedback.lines[1].actual, null);
+});
+test("服务端预测输出接受单引号数组与 Python 布尔值，仍拒绝内容或顺序错误", async (t) => {
+  const { api } = await fixture(t);
+  const lesson = catalog.lessons.find((item) =>
+    item.exercises.some(
+      (exercise) =>
+        exercise.type === "output" &&
+        exercise.expectedLogs.some((line) => line === '["慢","快"]'),
+    ),
+  );
+  assert(lesson, "缺少慢/快示例");
+  const exercise = lesson.exercises.find((item) => item.type === "output");
+  const path = "/lesson-exercises/" + exercise.id + "/attempt";
+  const answer = exercise.expectedLogs
+    .map((line) => (line === '["慢","快"]' ? "['慢', '快']" : line))
+    .join("\n");
+  const right = await api(path, "POST", { answer });
+  assert.equal(right.status, 200);
+  assert.equal(right.data.feedback.passed, true);
+  const wrong = await api(path, "POST", {
+    answer: answer.replace("['慢', '快']", "['快', '慢']"),
+  });
+  assert.equal(wrong.data.feedback.passed, false);
+  const boolean = await api(
+    "/lesson-exercises/output-algo-cycle/attempt",
+    "POST",
+    { answer: "True\nNone" },
+  );
+  assert.equal(boolean.data.feedback.passed, true);
+});
 test("随堂补全记录浏览器用例结果，拒绝不匹配数量，并支持新旧备份", async (t) => {
   const { api } = await fixture(t);
   const lesson = catalog.lessons.find((l) =>

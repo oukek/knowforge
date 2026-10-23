@@ -130,6 +130,23 @@ try {
   ).json();
   assert(bootstrap.catalog.lessons.length > 0);
   assert.equal(bootstrap.database, mysqlCheck ? "mysql" : "sqlite");
+  const outputCheck = await fetch(
+    `${base}/api/lesson-exercises/output-js-promise-combinators/attempt`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: base,
+        Cookie: cookie,
+        "X-CSRF-Token": csrfToken,
+      },
+      body: JSON.stringify({
+        answer: "['慢', '快']\n['fulfilled', 'rejected']\n可用",
+      }),
+    },
+  );
+  assert.equal(outputCheck.status, 200);
+  assert.equal((await outputCheck.json()).feedback.passed, true);
   for (const path of [
     "/runner.js",
     "/python-runner.js",
