@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AiError, now } from "./policy.mjs";
+import { micro } from "./amounts.mjs";
 
 export const decodeRun = (row) =>
   row ? { ...row, ...JSON.parse(row.data), data: undefined } : null;
@@ -106,7 +107,11 @@ export class AiRepository {
       JSON.stringify(payload),
       run.usage?.input ?? null,
       run.usage?.output ?? null,
-      run.chargedPoints ?? null,
+      run.chargedPoints == null
+        ? null
+        : run.billingVersion === 2
+          ? String(micro(run.chargedPoints))
+          : run.chargedPoints,
       run.updatedAt,
       run.id,
     );
@@ -183,42 +188,6 @@ export class AiRepository {
         }),
       ).values(),
     ];
-  }
-  async grant(actorId, userId, amount, note, operationId) {
-    return this.transaction(async (db) => {
-      const prior = await db.get(
-        "SELECT * FROM ai_ledger WHERE id=?",
-        operationId,
-      );
-      if (prior) {
-        if (
-          prior.userId !== userId ||
-          Number(prior.amount) !== amount ||
-          prior.note !== note ||
-          prior.kind !== "grant"
-        )
-          throw new AiError(409, "操作标识已经用于另一笔额度调整");
-        return this.account(db, userId);
-      }
-      if (!(await db.get("SELECT id FROM auth_users WHERE id=?", userId)))
-        throw new AiError(404, "账号不存在");
-      const account = await this.account(db, userId, true);
-      if (
-        account.balance + amount < account.reserved ||
-        account.balance + amount > 1000000000
-      )
-        throw new AiError(400, "调整后余额不能小于预占额度或超过上限");
-      account.balance += amount;
-      await this.saveAccount(db, account);
-      await this.ledger(db, account, "", "grant", amount, note, operationId);
-      await this.audit(db, actorId, "credit.adjust", {
-        userId,
-        amount,
-        note,
-        operationId,
-      });
-      return account;
-    });
   }
   async recoverExpired() {
     return this.transaction(async (db) => {

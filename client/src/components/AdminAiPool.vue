@@ -24,9 +24,9 @@ const booleanOptions = [
 ];
 const fields = [
   ["outputLimit", "最大输出 Token", 512, 4096],
-  ["inputRate", "每千输入 Token 资源点", 1, 1000],
-  ["cachedRate", "每千缓存 Token 资源点", 1, 1000],
-  ["outputRate", "每千输出 Token 资源点", 1, 1000],
+  ["inputRate", "每千输入 Token 额度", 1, 1000],
+  ["cachedRate", "每千缓存 Token 额度", 1, 1000],
+  ["outputRate", "每千输出 Token 额度", 1, 1000],
   ["dailyRuns", "每用户近 24 小时次数", 1, 100],
   ["siteDailyRuns", "全站近 24 小时次数", 1, 10000],
   ["perQuestionRuns", "每题近 24 小时评阅次数", 1, 10],
@@ -88,6 +88,7 @@ function addModel(p) {
     maxConcurrent: 3,
     format: "schema",
     tokenParameter: "max_completion_tokens",
+    procurement: null,
   });
 }
 function toggleFeature(m, f) {
@@ -188,7 +189,7 @@ onMounted(() => void act(load));
         先选择优先级数字最小的可用模型，同级按权重和当前并发分配。故障、限流会自动避让并尝试其他模型；备用模型可设置更大的优先级数字。连接测试只测试指定模型。
       </p>
       <p class="tiny muted">
-        切换成功后只按最终结果结算一次；全部失败时按已知用量结算，未知用量保留预占待核对。每次上游尝试都会记录，超时可能产生的平台额外费用会标记待核对。当前协议支持
+        切换成功后只按最终有效结果结算一次；未交付有效结果不扣用户额度。有效结果缺少用量时，预占额度等待核对。每次上游尝试都会记录，超时可能产生的平台额外费用会标记待核对。当前协议支持
         OpenAI 兼容 Chat Completions 和 Responses。
       </p>
       <AiRunMeta :run="task.run.value" />
@@ -369,6 +370,44 @@ onMounted(() => void act(load));
                 ]"
             /></label>
           </div>
+          <AppDisclosure title="模型采购成本 · 可选">
+            <p class="tiny muted">
+              填写折算人民币后的每百万 Token
+              采购价，仅用于平台预计成本，不改变用户费率；最终费用以服务商账单为准。
+            </p>
+            <button
+              v-if="!m.procurement"
+              type="button"
+              class="text-btn"
+              @click="m.procurement = { input: '0', cached: '0', output: '0' }"
+            >
+              配置采购价
+            </button>
+            <template v-else
+              ><div class="ai-admin-grid">
+                <label
+                  >每百万输入 Token 成本（元）<AppField
+                    v-model="m.procurement.input"
+                    inputmode="decimal" /></label
+                ><label
+                  >每百万缓存 Token 成本（元）<AppField
+                    v-model="m.procurement.cached"
+                    inputmode="decimal" /></label
+                ><label
+                  >每百万输出 Token 成本（元）<AppField
+                    v-model="m.procurement.output"
+                    inputmode="decimal"
+                /></label>
+              </div>
+              <button
+                type="button"
+                class="text-btn"
+                @click="m.procurement = null"
+              >
+                移除采购价
+              </button></template
+            >
+          </AppDisclosure>
           <div
             class="row wrap ai-model-features"
             role="group"
@@ -436,9 +475,9 @@ onMounted(() => void act(load));
         添加服务商
       </button>
       <section class="ai-detail">
-        <AppDisclosure title="全站资源点、调用限制与超时" default-open>
+        <AppDisclosure title="全站额度、调用限制与超时" default-open>
           <p class="tiny muted">
-            资源点费率对所有模型统一，修改后只影响新任务。每任务最多预占一次额度；自动切换不会额外扣用户资源点。超时及重试次数共同限制上游成本。
+            额度费率对所有模型统一，修改后只影响新任务。每任务最多预占一次额度；自动切换不会额外扣用户额度。超时及重试次数共同限制上游成本。
           </p>
           <div class="ai-admin-grid">
             <label v-for="[key, label, min, max] in fields" :key="key"

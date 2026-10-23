@@ -8,6 +8,7 @@ import AppSelect from "../components/AppSelect.vue";
 import AppDisclosure from "../components/AppDisclosure.vue";
 import AiEvaluation from "../components/AiEvaluation.vue";
 import AiRunMeta from "../components/AiRunMeta.vue";
+import MyAiCredits from "../components/MyAiCredits.vue";
 import Icon from "../components/Icon.vue";
 const route = useRoute(),
   router = useRouter();
@@ -189,12 +190,17 @@ onMounted(async () => {
     </div>
     <div class="ai-balance-strip">
       <div>
-        <span>可用资源点</span><strong>{{ ai.account.available }}</strong>
+        <span>{{ ai.account.exempt ? "免费资格生效" : "有效可用额度" }}</span
+        ><strong>{{
+          ai.account.exempt ? "免扣费" : ai.account.available
+        }}</strong>
       </div>
       <div>
         <span>预占中</span><strong>{{ ai.account.reserved }}</strong>
       </div>
-      <p>额度由管理员分配。调用按实际用量结算；用量待核对时保留预占。</p>
+      <p>
+        额度由管理员发放；成功调用按用量结算，免费用户免扣。失败调用释放预占。
+      </p>
     </div>
     <p v-if="!ai.configured" class="info-banner">
       AI 服务尚未配置，请联系管理员。<RouterLink
@@ -208,7 +214,7 @@ onMounted(async () => {
         v-for="[value, label] in [
           ['history', '调用历史'],
           ['interview', 'AI 面试官'],
-          ['ledger', '资源流水'],
+          ['ledger', '我的额度与流水'],
         ]"
         :key="value"
         :class="{ active: tab === value }"
@@ -284,7 +290,7 @@ onMounted(async () => {
                   ? "预占 " + item.reservedPoints
                   : item.chargedPoints
               }}
-              点</strong
+              额度</strong
             >
           </div>
         </button>
@@ -418,7 +424,11 @@ onMounted(async () => {
         </div>
         <button
           class="btn primary"
-          :disabled="loading || !ai.available || ai.account.available <= 0"
+          :disabled="
+            loading ||
+            !ai.available ||
+            (!ai.account.exempt && ai.account.available <= 0)
+          "
           @click="startInterview"
         >
           <Icon name="MessagesSquare" :size="17" />开始面试
@@ -515,54 +525,6 @@ onMounted(async () => {
         <p v-if="!sessions.length" class="ai-empty">还没有面试记录。</p>
       </section>
     </template>
-    <template v-if="tab === 'ledger'"
-      ><div class="ai-record-list">
-        <article
-          v-for="item in ledger.rows"
-          :key="item.id"
-          class="ai-record-row"
-        >
-          <div>
-            <strong>{{
-              {
-                grant: "管理员调整",
-                reserve: "额度预占",
-                settle: "调用结算",
-                reconcile: "人工核对",
-              }[item.kind] || item.kind
-            }}</strong>
-            <p>{{ item.note }}</p>
-            <span class="tiny muted">{{ dateLabel(item.createdAt) }}</span>
-          </div>
-          <div class="ai-record-usage">
-            <strong
-              >{{
-                item.kind === "reserve"
-                  ? "预占 " + item.reserved
-                  : (item.amount > 0 ? "+" : "") + item.amount
-              }}
-              点</strong
-            ><span>余额 {{ item.balance }} / 预占 {{ item.reserved }}</span>
-          </div>
-        </article>
-      </div>
-      <p v-if="!ledger.rows.length" class="ai-empty">还没有额度流水。</p>
-      <div class="ai-pagination">
-        <button
-          class="btn small"
-          :disabled="ledgerPage <= 1"
-          @click="ledgerPage--"
-        >
-          上一页</button
-        ><span>{{ ledgerPage }}</span
-        ><button
-          class="btn small"
-          :disabled="ledgerPage * 30 >= ledger.total"
-          @click="ledgerPage++"
-        >
-          下一页
-        </button>
-      </div></template
-    >
+    <MyAiCredits v-if="tab === 'ledger'" />
   </div>
 </template>

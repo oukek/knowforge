@@ -7,15 +7,11 @@ import AppSelect from "../components/AppSelect.vue";
 import AppDisclosure from "../components/AppDisclosure.vue";
 import AiRunMeta from "../components/AiRunMeta.vue";
 import AdminAiPool from "../components/AdminAiPool.vue";
+import AdminCredits from "../components/AdminCredits.vue";
+import AdminProducts from "../components/AdminProducts.vue";
 const tab = ref("config"),
   error = ref(""),
   busy = ref(false);
-const users = ref([]),
-  userQuery = ref(""),
-  selectedUser = ref(""),
-  amount = ref("1000"),
-  note = ref("学习体验额度"),
-  operationId = ref(crypto.randomUUID());
 const history = ref({ rows: [], total: 0 }),
   page = ref(1),
   feature = ref(""),
@@ -23,7 +19,10 @@ const history = ref({ rows: [], total: 0 }),
   selected = ref(null),
   reconcilePoints = ref("0"),
   reconcileNote = ref(""),
-  costNote = ref("");
+  costNote = ref(""),
+  costCny = ref("");
+const reverseNote = ref(""),
+  reverseId = ref(crypto.randomUUID());
 const summary = ref({ rows: [], audit: [] });
 async function act(callback) {
   busy.value = true;
@@ -35,35 +34,6 @@ async function act(callback) {
   } finally {
     busy.value = false;
   }
-}
-async function loadUsers() {
-  users.value = (
-    await request(
-      "/admin/ai/users?query=" + encodeURIComponent(userQuery.value),
-    )
-  ).users;
-}
-async function grant() {
-  await act(async () => {
-    await request("/admin/ai/credits", "POST", {
-      userId: selectedUser.value,
-      amount: Number(amount.value),
-      note: note.value,
-      operationId: operationId.value,
-    });
-    await loadUsers();
-    await refreshAi();
-    operationId.value = crypto.randomUUID();
-    toast("额度调整已记录");
-  });
-}
-async function block(user) {
-  await act(async () => {
-    await request("/admin/ai/users/" + user.id + "/block", "POST", {
-      blocked: !user.blocked,
-    });
-    await loadUsers();
-  });
 }
 async function loadHistory() {
   const query = new URLSearchParams({ page: page.value });
@@ -80,6 +50,9 @@ async function detail(id) {
     reconcilePoints.value = "0";
     reconcileNote.value = "";
     costNote.value = "";
+    costCny.value = "";
+    reverseNote.value = "";
+    reverseId.value = crypto.randomUUID();
   });
 }
 async function reconcile() {
@@ -87,7 +60,7 @@ async function reconcile() {
     await request(
       "/admin/ai/runs/" + selected.value.id + "/reconcile",
       "POST",
-      { points: Number(reconcilePoints.value), note: reconcileNote.value },
+      { points: reconcilePoints.value, note: reconcileNote.value },
     );
     selected.value = await request("/admin/ai/runs/" + selected.value.id);
     await loadHistory();
@@ -96,12 +69,27 @@ async function reconcile() {
     toast("人工结算已记录");
   });
 }
+async function reverse() {
+  await act(async () => {
+    await request("/admin/ai/runs/" + selected.value.id + "/reverse", "POST", {
+      note: reverseNote.value,
+      operationId: reverseId.value,
+    });
+    selected.value = await request("/admin/ai/runs/" + selected.value.id);
+    await Promise.all([loadHistory(), loadSummary(), refreshAi()]);
+    toast("额度冲正已记录");
+  });
+}
+watch(reverseNote, () => (reverseId.value = crypto.randomUUID()));
 async function reviewCosts() {
   await act(async () => {
     await request(
       "/admin/ai/runs/" + selected.value.id + "/cost-review",
       "POST",
-      { note: costNote.value },
+      {
+        note: costNote.value,
+        ...(costCny.value.trim() ? { costCny: costCny.value } : {}),
+      },
     );
     selected.value = await request("/admin/ai/runs/" + selected.value.id);
     await loadHistory();
@@ -109,10 +97,6 @@ async function reviewCosts() {
     toast("上游成本核对已记录，用户额度不变");
   });
 }
-watch(
-  [selectedUser, amount, note],
-  () => (operationId.value = crypto.randomUUID()),
-);
 watch([feature, status], () => {
   page.value = 1;
   void act(loadHistory);
@@ -121,7 +105,7 @@ watch(page, () => void act(loadHistory));
 onMounted(
   () =>
     void act(async () => {
-      await Promise.all([loadUsers(), loadHistory(), loadSummary()]);
+      await Promise.all([loadHistory(), loadSummary()]);
     }),
 );
 </script>
@@ -139,7 +123,6 @@ onMounted(
         @click="
           act(async () => {
             await loadHistory();
-            await loadUsers();
             await loadSummary();
           })
         "
@@ -152,6 +135,7 @@ onMounted(
         v-for="[value, label] in [
           ['config', '服务与模型'],
           ['users', '用户与额度'],
+          ['products', '资源包与预算'],
           ['history', '调用与核对'],
         ]"
         :key="value"
@@ -165,84 +149,13 @@ onMounted(
       {{ error }}
     </p>
     <AdminAiPool v-if="tab === 'config'" />
-    <template v-if="tab === 'users'">
-      <section class="ai-detail">
-        <h2>分配学习资源点</h2>
-        <p class="tiny muted">
-          新注册账号初始额度为
-          0。负数用于撤回可用额度，不会占用正在处理的预占额度。
-        </p>
-        <form class="ai-form-row" @submit.prevent="grant">
-          <AppSelect
-            v-model="selectedUser"
-            label="额度调整账号"
-            :options="[
-              { value: '', label: '选择账号' },
-              ...users.map((u) => ({
-                value: u.id,
-                label:
-                  (u.displayName || u.username) +
-                  ' · ' +
-                  u.publicId +
-                  ' (' +
-                  u.username +
-                  ')',
-              })),
-            ]"
-          /><AppField
-            v-model="amount"
-            type="number"
-            aria-label="调整资源点"
-            min="-1000000"
-            max="1000000"
-          /><AppField
-            v-model="note"
-            maxlength="300"
-            aria-label="额度调整原因"
-          /><button class="btn primary small" :disabled="busy || !selectedUser">
-            确认调整
-          </button>
-        </form>
-      </section>
-      <form class="ai-form-row" @submit.prevent="act(loadUsers)">
-        <AppField
-          v-model="userQuery"
-          maxlength="40"
-          aria-label="搜索账号"
-          placeholder="搜索用户 ID、账号或名称，最多显示 100 人"
-        /><button class="btn small" :disabled="busy">搜索账号</button>
-      </form>
-      <div class="ai-record-list">
-        <article v-for="user in users" :key="user.id" class="ai-record-row">
-          <div>
-            <strong
-              >{{ user.displayName || user.username }}
-              <span class="tiny muted">{{
-                user.role === "admin" ? "管理员" : "用户"
-              }}</span></strong
-            ><span class="tiny muted"
-              >ID {{ user.publicId }} · 登录账号 {{ user.username }}</span
-            ><span class="tiny muted"
-              >{{ user.blocked ? "AI 已暂停" : "AI 可用" }} · 可用
-              {{ user.balance - user.reserved }} / 预占
-              {{ user.reserved }}</span
-            >
-          </div>
-          <div class="row wrap">
-            <button class="text-btn" @click="selectedUser = user.id">
-              调整额度</button
-            ><button class="btn small" :disabled="busy" @click="block(user)">
-              {{ user.blocked ? "恢复 AI 使用" : "暂停 AI 使用" }}
-            </button>
-          </div>
-        </article>
-      </div>
-    </template>
+    <AdminCredits v-if="tab === 'users'" />
+    <AdminProducts v-if="tab === 'products'" />
     <template v-if="tab === 'history'">
       <section class="ai-detail">
-        <h2>近 24 小时用量</h2>
+        <h2>近 24 小时调用与额度</h2>
         <p class="tiny muted">
-          这里统计用户结算用量；自动切换产生的额外上游消耗与未知用量，请在调用详情中核对。
+          额度统计采用新的批次账本，显示净扣除及豁免；自动切换的完整上游消耗与采购成本可在调用详情核对。
         </p>
         <div class="ai-usage-summary">
           <article v-for="item in summary.rows" :key="item.feature">
@@ -253,7 +166,8 @@ onMounted(
               {{ item.outputTokens ?? 0 }} Token
             </p>
             <p>
-              已结算 {{ item.points ?? 0 }} 点 · 待核对 {{ item.pending }} 条
+              净扣除 {{ item.points ?? 0 }} 额度 · 豁免
+              {{ item.waivedPoints ?? 0 }} · 待核对 {{ item.pending }} 条
             </p>
           </article>
         </div>
@@ -312,7 +226,7 @@ onMounted(
                   ? "预占 " + item.reservedPoints
                   : item.chargedPoints
               }}
-              点</strong
+              额度</strong
             >
           </div>
         </button>
@@ -331,13 +245,37 @@ onMounted(
       </div>
       <article v-if="selected" class="ai-detail">
         <p v-if="selected.chargeCapped" class="ai-error">
-          服务商用量超过预占估算，本次按预占上限结算；请检查模型计量口径与费率。
+          服务商用量超过预占估算，未向用户追加扣款；请检查模型计量口径与费率。
         </p>
         <div class="section-line">
           <h2>调用明细</h2>
           <button class="text-btn" @click="selected = null">收起详情</button>
         </div>
         <AiRunMeta :run="selected" />
+        <div
+          v-if="
+            selected.billingStatus === 'settled' &&
+            Number(selected.chargedPoints) > 0
+          "
+          class="ai-reconcile"
+        >
+          <h3>退还本次额度</h3>
+          <p class="tiny muted">
+            冲正返回原扣费批次，已过期的部分进入过期额度；保留原消费及返还流水。
+          </p>
+          <form class="ai-form-row" @submit.prevent="reverse">
+            <AppField
+              v-model="reverseNote"
+              minlength="5"
+              maxlength="300"
+              aria-label="冲正原因"
+              placeholder="填写冲正原因，至少 5 个字符"
+              required
+            /><button class="btn small" :disabled="busy">
+              确认冲正本次扣费
+            </button>
+          </form>
+        </div>
         <section v-if="selected.attempts?.length" class="ai-attempts">
           <h3>上游调用链 · {{ selected.attempts.length }} 次尝试</h3>
           <p class="tiny muted">
@@ -388,14 +326,30 @@ onMounted(
             </p>
           </article>
           <div
-            v-if="selected.upstreamCostPending && selected.status !== 'running'"
+            v-if="
+              !selected.upstreamCostReview &&
+              selected.attempts?.length &&
+              selected.status !== 'running'
+            "
             class="ai-reconcile"
           >
             <h3>核对平台上游成本</h3>
             <p class="tiny muted">
-              记录未知尝试的账单核对结果，此操作不改变用户资源点。任务自身若为“用量待核对”，仍需另行结算预占额度。
+              已知预计采购成本 ¥{{ selected.estimatedCostCny || 0
+              }}{{
+                selected.costIncomplete ? " · 部分尝试未能估价" : ""
+              }}，仅供对账参考。
+            </p>
+            <p class="tiny muted">
+              记录上游账单核对结果，此操作不改变用户额度。任务自身若为“额度待核对”，仍需另行结算预占额度。
             </p>
             <form class="ai-form-row" @submit.prevent="reviewCosts">
+              <AppField
+                v-model="costCny"
+                inputmode="decimal"
+                aria-label="实际采购成本"
+                placeholder="实际账单人民币金额 · 可选"
+              />
               <AppField
                 v-model="costNote"
                 maxlength="300"
@@ -405,7 +359,13 @@ onMounted(
             </form>
           </div>
           <p v-if="selected.upstreamCostReview" class="tiny muted">
-            已核对：{{ selected.upstreamCostReview.note }} ·
+            已核对：{{ selected.upstreamCostReview.note }} · 实际成本
+            {{
+              selected.upstreamCostReview.actualCostCny === null
+                ? "未填"
+                : "¥" + selected.upstreamCostReview.actualCostCny
+            }}
+            ·
             {{ dateLabel(selected.upstreamCostReview.createdAt) }}
           </p>
           <AppDisclosure title="查看每次上游尝试的完整记录">
@@ -419,19 +379,17 @@ onMounted(
           {{ selected.upstreamRequestId || "未返回" }} ·
           {{ selected.actualModel || selected.config?.model }}
         </p>
-        <div v-if="selected.status === 'pending'" class="ai-reconcile">
+        <div v-if="selected.billingStatus === 'pending'" class="ai-reconcile">
           <h3>核对后结算</h3>
           <p class="tiny muted">
-            请依据服务商记录填写实际资源点。0
+            请依据服务商记录填写实际额度。0
             表示全部释放；此操作会记入审计，且不能重复执行。
           </p>
           <form class="ai-form-row" @submit.prevent="reconcile">
             <AppField
               v-model="reconcilePoints"
-              type="number"
-              min="0"
-              :max="selected.reservedPoints"
-              aria-label="核对结算点数"
+              inputmode="decimal"
+              aria-label="核对结算额度"
             /><AppField
               v-model="reconcileNote"
               maxlength="300"

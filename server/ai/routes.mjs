@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { AiService } from "./service.mjs";
 import { AiError, answerSchema, requestKey } from "./policy.mjs";
+import { grantSchema, userPolicySchema } from "./billing.mjs";
+import { micro, points } from "./amounts.mjs";
 const id = z.string().min(1).max(191);
 const historyQuery = z
   .object({
@@ -102,15 +104,28 @@ export async function installAi(app, store, auth, catalog, options) {
       return { question };
     }),
   );
+  route("get", "/api/ai/credits", (r) =>
+    ai.billing.details(
+      r.user.id,
+      z.coerce.number().int().min(1).max(10000).default(1).parse(r.query.page),
+    ),
+  );
+  route("get", "/api/ai/products", async () => ({
+    rows: await ai.billing.products(false),
+  }));
   route("get", "/api/ai/ledger", (r) => {
-    const { page } = z
-      .object({ page: z.coerce.number().int().min(1).max(10000).default(1) })
+    const input = z
+      .object({
+        page: z.coerce.number().int().min(1).max(10000).default(1),
+        legacy: z.enum(["1"]).optional(),
+      })
       .strict()
       .parse(r.query);
+    if (!input.legacy) return ai.billing.details(r.user.id, input.page);
     return ai.repo.read(async (db) => ({
       rows: await db.all(
         "SELECT * FROM ai_ledger WHERE userId=? ORDER BY createdAt DESC,id DESC LIMIT 30 OFFSET " +
-          (page - 1) * 30,
+          (input.page - 1) * 30,
         r.user.id,
       ),
       total: Number(
@@ -121,7 +136,8 @@ export async function installAi(app, store, auth, catalog, options) {
           )
         ).n,
       ),
-      page,
+      page: input.page,
+      legacy: true,
     }));
   });
   route("get", "/api/ai/interviews", async (r) => ({
@@ -246,25 +262,115 @@ export async function installAi(app, store, auth, catalog, options) {
   route(
     "post",
     "/api/admin/ai/credits",
+    (r) => ai.billing.grant(r.user.id, grantSchema.parse(r.body)),
+    true,
+  );
+  route(
+    "get",
+    "/api/admin/ai/users/:id/credits",
+    (r) =>
+      ai.billing.details(
+        z.string().uuid().parse(r.params.id),
+        z.coerce
+          .number()
+          .int()
+          .min(1)
+          .max(10000)
+          .default(1)
+          .parse(r.query.page),
+        true,
+      ),
+    true,
+  );
+  route(
+    "put",
+    "/api/admin/ai/users/:id/billing-policy",
+    (r) =>
+      ai.billing.policy(
+        r.user.id,
+        z.string().uuid().parse(r.params.id),
+        userPolicySchema.parse(r.body),
+      ),
+    true,
+  );
+  route(
+    "post",
+    "/api/admin/ai/users/:id/credits/:lotId/revoke",
     (r) => {
       const x = z
         .object({
-          userId: z.string().uuid(),
-          amount: z
-            .number()
-            .int()
-            .min(-1000000)
-            .max(1000000)
-            .refine((n) => n !== 0),
+          amount: z.union([z.string(), z.number()]),
           note: z.string().trim().min(3).max(300),
           operationId: requestKey,
         })
         .strict()
         .parse(r.body);
-      return ai.repo.grant(
+      return ai.billing.revoke(
         r.user.id,
-        x.userId,
+        z.string().uuid().parse(r.params.id),
+        id.parse(r.params.lotId),
         x.amount,
+        x.note,
+        x.operationId,
+      );
+    },
+    true,
+  );
+  route(
+    "get",
+    "/api/admin/ai/products",
+    async () => ({ rows: await ai.billing.products(true) }),
+    true,
+  );
+  route(
+    "post",
+    "/api/admin/ai/products",
+    (r) => ai.billing.saveProduct(r.user.id, r.body),
+    true,
+  );
+  route(
+    "post",
+    "/api/admin/ai/products/:id/publish",
+    (r) => {
+      const x = z
+        .object({ revision: requestKey, publish: z.boolean() })
+        .strict()
+        .parse(r.body);
+      return ai.billing.publishProduct(
+        r.user.id,
+        z.string().uuid().parse(r.params.id),
+        x.revision,
+        x.publish,
+      );
+    },
+    true,
+  );
+  route(
+    "get",
+    "/api/admin/ai/billing-settings",
+    () => ai.repo.read((db) => ai.billing.settings(db)),
+    true,
+  );
+  route(
+    "put",
+    "/api/admin/ai/billing-settings",
+    (r) => ai.billing.saveSettings(r.user.id, r.body),
+    true,
+  );
+  route(
+    "post",
+    "/api/admin/ai/runs/:id/reverse",
+    (r) => {
+      const x = z
+        .object({
+          note: z.string().trim().min(5).max(300),
+          operationId: requestKey,
+        })
+        .strict()
+        .parse(r.body);
+      return ai.billing.reverse(
+        r.user.id,
+        z.string().uuid().parse(r.params.id),
         x.note,
         x.operationId,
       );
@@ -297,15 +403,24 @@ export async function installAi(app, store, auth, catalog, options) {
   route(
     "post",
     "/api/admin/ai/runs/:id/cost-review",
-    (r) =>
-      ai.reviewCosts(
+    (r) => {
+      const x = z
+        .object({
+          note: z.string().trim().min(5).max(300),
+          costCny: z
+            .union([z.string(), z.number()])
+            .transform((v) => points(micro(v)))
+            .optional(),
+        })
+        .strict()
+        .parse(r.body);
+      return ai.reviewCosts(
         r.user.id,
         z.string().uuid().parse(r.params.id),
-        z
-          .object({ note: z.string().trim().min(5).max(300) })
-          .strict()
-          .parse(r.body).note,
-      ),
+        x.note,
+        x.costCny,
+      );
+    },
     true,
   );
   route(
@@ -314,7 +429,9 @@ export async function installAi(app, store, auth, catalog, options) {
     (r) => {
       const x = z
         .object({
-          points: z.number().int().min(0).max(1000000),
+          points: z
+            .union([z.string(), z.number()])
+            .transform((v) => points(micro(v))),
           note: z.string().trim().min(5).max(300),
         })
         .strict()
@@ -328,20 +445,6 @@ export async function installAi(app, store, auth, catalog, options) {
     },
     true,
   );
-  route(
-    "get",
-    "/api/admin/ai/summary",
-    () =>
-      ai.repo.read(async (db) => ({
-        rows: await db.all(
-          "SELECT feature,COUNT(*) AS calls,SUM(inputTokens) AS inputTokens,SUM(outputTokens) AS outputTokens,SUM(chargedPoints) AS points,SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending FROM ai_runs WHERE createdAt>=? GROUP BY feature",
-          new Date(Date.now() - 86400000).toISOString(),
-        ),
-        audit: await db.all(
-          "SELECT * FROM admin_audit ORDER BY createdAt DESC LIMIT 30",
-        ),
-      })),
-    true,
-  );
+  route("get", "/api/admin/ai/summary", () => ai.summary(), true);
   return ai;
 }

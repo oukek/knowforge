@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { AiRepository, decodeRun } from "./repository.mjs";
 import { createProvider } from "./provider.mjs";
 import { AiPool } from "./pool.mjs";
+import { AiBilling } from "./billing.mjs";
+import { micro, points, procurementCost, usageCharge } from "./amounts.mjs";
 import { ensureProfile } from "../account-profile.mjs";
 import {
   AiError,
@@ -16,8 +18,6 @@ import {
   interviewSchema,
   testSchema,
   checkedGrade,
-  reservation,
-  charge,
   taskInstructions,
 } from "./policy.mjs";
 
@@ -30,12 +30,14 @@ export class AiService {
     this.rootKey = options.encryptionKey ?? process.env.AI_ENCRYPTION_KEY;
     this.provider = options.provider || createProvider(options);
     this.pool = new AiPool(this.repo, this.provider, this.rootKey, options);
+    this.billing = new AiBilling(this.repo, options);
     this.jobs = new Map();
     this.ipLimits = new Map();
   }
   async init() {
     await this.pool.init();
     await this.repo.recoverExpired();
+    await this.billing.recovery();
     this.lastRecovery = Date.now();
   }
   keyReady() {
@@ -50,6 +52,7 @@ export class AiService {
     if (Date.now() - this.lastRecovery < 30000) return;
     this.lastRecovery = Date.now();
     await this.repo.recoverExpired();
+    await this.billing.recovery();
   }
   async question(userId, id, db = this.repo.store) {
     return (
@@ -72,34 +75,55 @@ export class AiService {
   }
   async status(userId) {
     await this.recover();
-    return this.repo.read(async (db) => {
+    return this.repo.transaction(async (db) => {
       const row = await this.pool.raw(db),
-        account = await this.repo.account(db, userId);
+        account = await this.billing.view(db, userId),
+        settings = await this.billing.settings(db);
       const configured = !!row?.providers.some(
         (p) => p.enabled && p.models.some((m) => m.enabled),
       );
       const unsettled = Number(
         (
           await db.get(
-            "SELECT COUNT(*) AS n FROM ai_runs WHERE userId=? AND status=? AND feature<>?",
+            "SELECT COUNT(*) AS n FROM ai_billing_units WHERE userId=? AND status=? AND mode=?",
             userId,
             "pending",
-            "models",
+            "paid",
           )
         ).n,
       );
       return {
         configured,
         available:
-          configured && this.keyReady() && !account.blocked && !unsettled,
+          configured &&
+          this.keyReady() &&
+          !account.blocked &&
+          !(unsettled && !account.exempt),
         reason: account.blocked
           ? "管理员已暂停该账号的 AI 使用"
-          : unsettled
-            ? "存在用量待核对的调用，请联系管理员处理"
+          : unsettled && !account.exempt
+            ? "存在额度待核对的调用，请联系管理员处理"
             : configured && !this.keyReady()
               ? "服务端加密配置不可用，请联系管理员"
               : "",
-        account: { ...account, available: account.balance - account.reserved },
+        account,
+        tariff: row
+          ? {
+              inputRate: row.policy.inputRate,
+              cachedRate: row.policy.cachedRate,
+              outputRate: row.policy.outputRate,
+              version: hash({
+                inputRate: row.policy.inputRate,
+                cachedRate: row.policy.cachedRate,
+                outputRate: row.policy.outputRate,
+              }),
+            }
+          : null,
+        budgets: {
+          maxTaskPoints: settings.maxTaskPoints,
+          dailyBudget: account.policy.dailyBudget || settings.dailyBudget,
+          pendingHours: settings.pendingHours,
+        },
         answerLimit: 3000,
       };
     });
@@ -392,15 +416,14 @@ export class AiService {
           ["succeeded", "running", "pending"].includes(cached.status)
         )
           return { run: cached, reused: true };
-        const account = await this.repo.account(db, user.id, true);
+        const account = await this.billing.view(db, user.id);
         if (account.blocked) throw new AiError(403, "该账号的 AI 使用已暂停");
         const since = new Date(Date.now() - 86400000).toISOString();
-        const billable = " AND feature<>? AND status<>?";
+        const billable = " AND feature<>?";
         const total = await db.get(
           "SELECT COUNT(*) AS n FROM ai_runs WHERE createdAt>=?" + billable,
           since,
           "models",
-          "released",
         );
         const personal = await db.get(
           "SELECT COUNT(*) AS n FROM ai_runs WHERE userId=? AND createdAt>=?" +
@@ -408,7 +431,6 @@ export class AiService {
           user.id,
           since,
           "models",
-          "released",
         );
         const active = await db.get(
           "SELECT COUNT(*) AS n FROM ai_runs WHERE userId=? AND (status=? OR status=?) AND feature<>?",
@@ -422,6 +444,18 @@ export class AiService {
           "running",
           "models",
         );
+        const outstanding = Number(
+          (
+            await db.get(
+              "SELECT COUNT(*) AS n FROM ai_billing_units WHERE userId=? AND status=? AND mode=?",
+              user.id,
+              "pending",
+              "paid",
+            )
+          ).n,
+        );
+        if (outstanding && !account.exempt)
+          throw new AiError(409, "已有额度待核对的任务，请先联系管理员处理");
         if (Number(active.n))
           throw new AiError(
             409,
@@ -436,12 +470,11 @@ export class AiService {
           throw new AiError(429, "已达到近 24 小时 AI 使用上限");
         if (feature === "grade") {
           const perQuestion = await db.get(
-            "SELECT COUNT(*) AS n FROM ai_runs WHERE userId=? AND questionId=? AND feature=? AND createdAt>=? AND status<>?",
+            "SELECT COUNT(*) AS n FROM ai_runs WHERE userId=? AND questionId=? AND feature=? AND createdAt>=?",
             user.id,
             input.questionId,
             feature,
             since,
-            "released",
           );
           if (Number(perQuestion.n) >= config.perQuestionRuns)
             throw new AiError(429, "本题近 24 小时 AI 评阅次数已达上限");
@@ -457,15 +490,6 @@ export class AiService {
           )
             throw new AiError(409, "面试状态已变化，请刷新");
         }
-        const reservedPoints = reservation(prepared.messages, config, feature);
-        if (account.balance - account.reserved < reservedPoints)
-          throw new AiError(
-            402,
-            "可用资源点不足，本次最多预占 " +
-              reservedPoints +
-              " 点，请联系管理员分配额度",
-            "AI_INSUFFICIENT_CREDIT",
-          );
         acquired = this.pool.acquire(targets);
         const id = randomUUID(),
           stamp = now();
@@ -485,21 +509,13 @@ export class AiService {
           messages: prepared.messages,
           config,
           templateVersion,
-          reservedPoints,
           chargedPoints: null,
           usage: null,
           attempts: [],
         };
-        account.reserved += reservedPoints;
-        await this.repo.saveAccount(db, account);
-        await this.repo.ledger(
-          db,
-          account,
-          id,
-          "reserve",
-          0,
-          "预占 " + reservedPoints + " 资源点",
-          id + ":reserve",
+        Object.assign(
+          run,
+          await this.billing.reserve(db, run, config, prepared.messages),
         );
         await this.repo.insertRun(db, run);
         if (session) {
@@ -710,8 +726,13 @@ export class AiService {
           attempt.responseText = response?.text || response?.refusal || "";
           attempt.usageUnknown = !attempt.usage && !attempt.noCharge;
           attempt.estimatedPoints = attempt.usage
-            ? charge(attempt.usage, operation.config)
+            ? points(usageCharge(attempt.usage, operation.config))
             : null;
+          attempt.estimatedCostCny = procurementCost(
+            attempt.usage,
+            target.procurement,
+          );
+          attempt.costBasis = target.procurement || null;
           await this.saveAttempts(operation.run.id, attempts);
           try {
             await this.pool.outcome(target, failure, lease.observed);
@@ -773,6 +794,14 @@ export class AiService {
           attempts.reduce((n, a) => n + (a.usage?.[key] || 0), 0),
         ]),
       );
+      run.estimatedCostCny = points(
+        attempts.reduce(
+          (n, a) =>
+            n + (a.estimatedCostCny == null ? 0n : micro(a.estimatedCostCny)),
+          0n,
+        ),
+      );
+      run.costIncomplete = attempts.some((a) => a.estimatedCostCny == null);
       await this.repo.saveRun(db, run);
     });
   }
@@ -780,7 +809,7 @@ export class AiService {
     await this.repo.transaction(async (db) => {
       const run = await this.repo.runRaw(id, db);
       if (!run || finalStates.has(run.status)) return;
-      const account = await this.repo.account(db, run.userId, true);
+
       run.responseText = response?.text || response?.refusal || "";
       run.upstreamRequestId = String(response?.requestId || "").slice(0, 191);
       run.actualModel = response?.actualModel || run.config.model;
@@ -798,38 +827,13 @@ export class AiService {
         run.errorCode = error.code;
         run.providerError = error.providerDetail || "";
       }
-      if (response?.usage || error?.noCharge) {
-        const calculated = response?.usage
-          ? charge(response.usage, run.config)
-          : 0;
-        run.chargedPoints = Math.min(run.reservedPoints, calculated);
-        run.chargeCapped = calculated > run.reservedPoints;
-        run.status = error
-          ? run.chargedPoints
-            ? "failed"
-            : "released"
-          : "succeeded";
-        account.reserved -= run.reservedPoints;
-        account.balance -= run.chargedPoints;
-        await this.repo.saveAccount(db, account);
-        await this.repo.ledger(
-          db,
-          account,
-          id,
-          "settle",
-          -run.chargedPoints,
-          "结算 " +
-            run.chargedPoints +
-            " 点，释放剩余预占 " +
-            (run.reservedPoints - run.chargedPoints) +
-            " 点",
-          id + ":settle",
-        );
-      } else {
-        run.status = "pending";
-        run.error ||= "服务商未提供有效用量，预占资源点待管理员核对";
-        run.errorCode ||= "AI_USAGE_UNKNOWN";
-      }
+      Object.assign(
+        run,
+        await this.billing.settle(db, run, response?.usage || null, !!result),
+      );
+      run.status = result ? "succeeded" : "released";
+      if (run.billingStatus === "pending")
+        run.billingNote = "服务商未提供有效用量，额度预占待管理员核对";
       await this.recordGrade(db, run);
       if (result && run.feature === "variants") {
         const lesson = this.catalog.lessons.find((l) => l.id === run.lessonId);
@@ -927,6 +931,14 @@ export class AiService {
       errorCode: run.errorCode,
       attemptId: run.attemptId,
       failoverCount: run.failoverCount || 0,
+      billingMode: run.billingMode,
+      billingStatus: run.billingStatus,
+      quotedPoints: run.quotedPoints,
+      duePoints: run.duePoints,
+      waivedPoints: run.waivedPoints,
+      refundedPoints: run.refundedPoints,
+      billingNote: run.billingNote,
+      chargeCapped: !!run.chargeCapped,
     };
     if (run.sessionId) {
       const session = await this.repo.read((db) =>
@@ -992,6 +1004,12 @@ export class AiService {
         ["status", filters.status],
       ])
         if (value) {
+          if (column === "status" && value === "pending") {
+            parts.push(
+              "id IN (SELECT id FROM ai_billing_units WHERE status='pending')",
+            );
+            continue;
+          }
           parts.push(column + "=?");
           args.push(value);
         }
@@ -1028,6 +1046,13 @@ export class AiService {
             model: run.actualModel || run.config?.model,
             durationMs: run.durationMs,
             failoverCount: run.failoverCount || 0,
+            billingMode: run.billingMode,
+            billingStatus: run.billingStatus,
+            quotedPoints: run.quotedPoints,
+            duePoints: run.duePoints,
+            waivedPoints: run.waivedPoints,
+            refundedPoints: run.refundedPoints,
+            billingNote: run.billingNote,
             ...(admin
               ? { upstreamCostPending: run.upstreamCostPending || false }
               : {}),
@@ -1047,14 +1072,23 @@ export class AiService {
     job.controller.abort();
     return { ok: true };
   }
-  async reviewCosts(actorId, id, note) {
+  async reviewCosts(actorId, id, note, costCny) {
     return this.repo.transaction(async (db) => {
       const run = await this.repo.runRaw(id, db);
       if (!run) throw new AiError(404, "AI 记录不存在");
-      if (run.status === "running" || !run.upstreamCostPending)
+      if (
+        run.status === "running" ||
+        run.upstreamCostReview ||
+        !run.attempts?.length
+      )
         throw new AiError(409, "没有待核对的上游成本");
       run.upstreamCostPending = false;
-      run.upstreamCostReview = { actorId, note, createdAt: now() };
+      run.upstreamCostReview = {
+        actorId,
+        note,
+        createdAt: now(),
+        actualCostCny: costCny === undefined ? null : points(micro(costCny)),
+      };
       await this.repo.saveRun(db, run);
       await this.repo.audit(db, actorId, "ai.upstream.cost.review", {
         runId: id,
@@ -1063,43 +1097,35 @@ export class AiService {
       return { ok: true };
     });
   }
-  async reconcile(actorId, id, points, note) {
+  async reconcile(actorId, id, value, note) {
+    await this.billing.recovery();
     return this.repo.transaction(async (db) => {
       const run = await this.repo.runRaw(id, db);
-      if (!run || run.status !== "pending")
-        throw new AiError(409, "仅待核对记录可人工结算");
-      if (points > run.reservedPoints)
-        throw new AiError(400, "结算不能超过预占资源点");
-      const account = await this.repo.account(db, run.userId, true);
-      account.reserved -= run.reservedPoints;
-      account.balance -= points;
-      run.chargedPoints = points;
-      run.status = run.result ? "succeeded" : points ? "failed" : "released";
+      if (!run) throw new AiError(404, "调用记录不存在");
+      await this.billing.ensure(db, run.userId);
+      const unit = await this.billing.unit(db, id);
+      if (!unit || unit.status !== "pending")
+        throw new AiError(409, "仅额度待核对记录可人工结算");
+      if (micro(value) > BigInt(unit.quoted))
+        throw new AiError(400, "结算不能超过预占额度");
+      if (!run.result && micro(value) > 0n)
+        throw new AiError(400, "未交付有效结果的调用不能向用户扣费");
+      Object.assign(
+        run,
+        await this.billing.settle(db, run, null, !!run.result, value),
+      );
+      run.status = run.result ? "succeeded" : "released";
       run.reconciliation = {
         actorId,
-        points,
+        points: String(value),
         note,
         at: now(),
         usageStillUnknown: !run.usage,
-        originalError: run.error || "",
       };
-      if (run.result) {
-        delete run.error;
-        delete run.errorCode;
-      }
-      await this.repo.saveAccount(db, account);
-      await this.repo.ledger(
-        db,
-        account,
-        run.id,
-        "reconcile",
-        -points,
-        note,
-        id + ":settle",
-      );
+      delete run.billingNote;
       await this.repo.audit(db, actorId, "ai.reconcile", {
         runId: id,
-        points,
+        points: String(value),
         note,
       });
       await this.recordGrade(db, run);
@@ -1133,10 +1159,12 @@ export class AiService {
       .slice(0, input.count)
       .map((x) => x.q);
     return this.repo.transaction(async (db) => {
-      if (!(await this.pool.raw(db)))
-        throw new AiError(503, "管理员尚未配置 AI 服务");
-      const account = await this.repo.account(db, userId);
-      if (account.blocked || account.balance <= account.reserved)
+      await this.pool.snapshot(db, "interview");
+      const account = await this.billing.view(db, userId);
+      if (
+        account.blocked ||
+        (!account.exempt && micro(account.available) <= 0n)
+      )
         throw new AiError(402, "可用资源点不足，请联系管理员");
       const active = await db.get(
         "SELECT COUNT(*) AS n FROM ai_sessions WHERE userId=? AND status=?",
@@ -1243,7 +1271,7 @@ export class AiService {
     );
   }
   async users(query = "") {
-    return this.repo.read(async (db) => {
+    return this.repo.transaction(async (db) => {
       const users = await db.all(
         "SELECT id,username,createdAt FROM auth_users WHERE username LIKE ? OR id IN (SELECT userId FROM auth_profiles WHERE publicId=? OR displayName LIKE ?) ORDER BY createdAt DESC LIMIT 100",
         "%" + query.toLowerCase() + "%",
@@ -1253,14 +1281,6 @@ export class AiService {
       if (!users.length) return [];
       const ids = users.map((u) => u.id),
         slots = ids.map(() => "?").join(",");
-      const accounts = new Map(
-        (
-          await db.all(
-            "SELECT * FROM ai_accounts WHERE userId IN (" + slots + ")",
-            ...ids,
-          )
-        ).map((x) => [x.userId, x]),
-      );
       const roles = new Map(
         (
           await db.all(
@@ -1271,13 +1291,52 @@ export class AiService {
       );
       const profiles = [];
       for (const user of users) profiles.push(await ensureProfile(db, user));
-      return profiles.map((user) => ({
-        ...user,
-        role: roles.get(user.id) || "user",
-        balance: Number(accounts.get(user.id)?.balance || 0),
-        reserved: Number(accounts.get(user.id)?.reserved || 0),
-        blocked: !!accounts.get(user.id)?.blocked,
-      }));
+      const result = [];
+      for (const user of profiles)
+        result.push({
+          ...user,
+          role: roles.get(user.id) || "user",
+          ...(await this.billing.view(db, user.id)),
+        });
+      return result;
+    });
+  }
+  async summary() {
+    return this.repo.read(async (db) => {
+      const since = new Date(Date.now() - 86400000).toISOString();
+      const rows = await db.all(
+        "SELECT feature,COUNT(*) AS calls,SUM(inputTokens) AS inputTokens,SUM(outputTokens) AS outputTokens FROM ai_runs WHERE createdAt>=? GROUP BY feature",
+        since,
+      );
+      const units = await db.all(
+        "SELECT feature,status,charged,due,waived FROM ai_billing_units WHERE createdAt>=?",
+        since,
+      );
+      for (const row of rows) {
+        const own = units.filter((u) => u.feature === row.feature);
+        for (const [field, key] of [
+          ["points", "charged"],
+          ["duePoints", "due"],
+          ["waivedPoints", "waived"],
+        ])
+          row[field] = points(
+            own.reduce(
+              (n, u) =>
+                n +
+                (key === "charged" && u.status === "reversed"
+                  ? 0n
+                  : BigInt(u[key] || 0)),
+              0n,
+            ),
+          );
+        row.pending = own.filter((u) => u.status === "pending").length;
+      }
+      return {
+        rows,
+        audit: await db.all(
+          "SELECT * FROM admin_audit ORDER BY createdAt DESC LIMIT 30",
+        ),
+      };
     });
   }
   async block(actorId, userId, blocked) {

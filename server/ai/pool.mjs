@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { AiError, encrypt, decrypt, now } from "./policy.mjs";
+import { micro, points } from "./amounts.mjs";
 
 const integer = (min, max, fallback) =>
   z.number().int().min(min).max(max).default(fallback);
@@ -39,6 +40,21 @@ const modelSchema = z
     tokenParameter: z
       .enum(["max_completion_tokens", "max_tokens"])
       .default("max_completion_tokens"),
+    procurement: z
+      .object({
+        input: z
+          .union([z.string(), z.number()])
+          .transform((v) => points(micro(v))),
+        cached: z
+          .union([z.string(), z.number()])
+          .transform((v) => points(micro(v))),
+        output: z
+          .union([z.string(), z.number()])
+          .transform((v) => points(micro(v))),
+      })
+      .strict()
+      .nullable()
+      .default(null),
   })
   .strict();
 export const poolSchema = z

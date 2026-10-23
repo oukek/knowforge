@@ -61,9 +61,11 @@ function variants() {
       管理员尚未配置 AI 服务。普通学习与自评可继续使用。
     </p>
     <p class="tiny muted" v-else>
-      可用
-      {{ ai.account.available }}
-      资源点。调用前预占额度，按实际模型用量结算；同一回答复用已有结果。
+      {{
+        ai.account.exempt
+          ? "免费资格生效，本次免扣个人额度"
+          : "可用 " + ai.account.available + " 额度"
+      }}。成功调用按用量结算；同一回答复用已有结果。
     </p>
     <p v-if="ai.reason" class="ai-error">{{ ai.reason }}</p>
     <div class="row wrap">
@@ -73,7 +75,7 @@ function variants() {
         :disabled="
           busy ||
           !ai.available ||
-          ai.account.available <= 0 ||
+          (!ai.account.exempt && ai.account.available <= 0) ||
           answer.trim().length < 10 ||
           answer.length > 3000
         "
@@ -85,7 +87,11 @@ function variants() {
       </button>
       <button
         class="btn small"
-        :disabled="busy || !ai.available || ai.account.available <= 0"
+        :disabled="
+          busy ||
+          !ai.available ||
+          (!ai.account.exempt && ai.account.available <= 0)
+        "
         @click="variants"
       >
         <Icon name="Lightbulb" :size="16" />举一反三 · 生成题目
@@ -127,7 +133,7 @@ function variants() {
     ></AppDisclosure>
     <p v-if="busy" class="tiny muted" role="status">
       任务正在后台处理，离开页面后可从 AI
-      历史查看。取消后，用量不明的请求会等待管理员核对。
+      历史查看。未成功完成的调用会释放用户预占，可能产生的上游消耗单独记录。
     </p>
     <p v-if="error" class="ai-error" role="alert">{{ error }}</p>
     <AiRunMeta :run="run" />

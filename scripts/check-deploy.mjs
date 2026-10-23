@@ -144,7 +144,7 @@ try {
   const aiStatus = await (
     await fetch(base + "/api/ai/status", { headers: { Cookie: cookie } })
   ).json();
-  assert.equal(aiStatus.account.balance, 0);
+  assert.equal(aiStatus.account.balance, "0");
   assert.equal(
     (
       await fetch(base + "/api/admin/ai/config", {

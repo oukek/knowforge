@@ -4,6 +4,8 @@ export const ai = reactive({
   loaded: false,
   configured: false,
   available: false,
+  tariff: null,
+  budgets: null,
   account: { balance: 0, reserved: 0, available: 0 },
   answerLimit: 3000,
 });
@@ -19,7 +21,7 @@ export const aiStateLabel = {
   succeeded: "已完成",
   failed: "调用失败",
   released: "已释放额度",
-  pending: "用量待核对",
+  pending: "额度待核对",
 };
 export async function refreshAi() {
   const userId = store.user?.id;
@@ -34,6 +36,8 @@ watch(
       loaded: false,
       configured: false,
       available: false,
+      tariff: null,
+      budgets: null,
       account: { balance: 0, reserved: 0, available: 0 },
     });
     if (id) void refreshAi().catch(() => {});
