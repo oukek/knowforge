@@ -124,7 +124,8 @@ try {
   });
   assert.equal(registration.status, 201);
   const cookie = registration.headers.get("set-cookie").split(";")[0];
-  const { csrfToken } = await registration.json();
+  const { csrfToken, user: registeredUser } = await registration.json();
+  assert.match(registeredUser.publicId, /^[1-9]\d{7}$/);
   const bootstrap = await (
     await fetch(`${base}/api/bootstrap`, { headers: { Cookie: cookie } })
   ).json();
@@ -154,7 +155,7 @@ try {
   };
   execFileSync(
     process.execPath,
-    ["server/admin.mjs", "promote", "smokecheck"],
+    ["server/admin.mjs", "promote", "--id", registeredUser.publicId],
     { cwd, env: cliEnv, timeout: 10000 },
   );
   assert.equal(
@@ -165,11 +166,15 @@ try {
     ).status,
     200,
   );
-  execFileSync(process.execPath, ["server/admin.mjs", "demote", "smokecheck"], {
-    cwd,
-    env: cliEnv,
-    timeout: 10000,
-  });
+  execFileSync(
+    process.execPath,
+    ["server/admin.mjs", "demote", "--id", registeredUser.id],
+    {
+      cwd,
+      env: cliEnv,
+      timeout: 10000,
+    },
+  );
   assert.equal(
     (
       await fetch(base + "/api/admin/ai/config", {
@@ -249,6 +254,44 @@ try {
       !output.includes("ExperimentalWarning: SQLite"),
       "MySQL production bundle must not load the SQLite adapter",
     );
+  const profileHeaders = {
+    "Content-Type": "application/json",
+    Cookie: cookie,
+    "X-CSRF-Token": csrfToken,
+  };
+  const profile = await fetch(base + "/api/auth/profile", {
+    method: "PUT",
+    headers: profileHeaders,
+    body: JSON.stringify({ displayName: "独立包个人中心" }),
+  });
+  assert.equal(profile.status, 200);
+  assert.equal((await profile.json()).user.publicId, registeredUser.publicId);
+  const password = await fetch(base + "/api/auth/password", {
+    method: "POST",
+    headers: profileHeaders,
+    body: JSON.stringify({
+      currentPassword: "production-smoke-check",
+      newPassword: "smoke-password-updated",
+    }),
+  });
+  assert.equal(password.status, 200);
+  const passwordResult = await password.json();
+  assert.notEqual(passwordResult.csrfToken, csrfToken);
+  const changedCookie = password.headers.get("set-cookie").split(";")[0];
+  assert.notEqual(changedCookie, cookie);
+  assert.equal(
+    (await fetch(base + "/api/bootstrap", { headers: { Cookie: cookie } }))
+      .status,
+    401,
+  );
+  assert.equal(
+    (
+      await fetch(base + "/api/bootstrap", {
+        headers: { Cookie: changedCookie },
+      })
+    ).status,
+    200,
+  );
   console.log(
     "Standalone backend smoke check passed: compiled entry, locked runtime dependencies, login, persistence, Workers and downloads; no frontend pages or source directories.",
   );

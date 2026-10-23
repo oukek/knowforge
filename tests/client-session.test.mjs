@@ -134,3 +134,48 @@ test("较早的初始化完成时不覆盖较新的账号初始化", async (t) =
   assert.equal(store.state.owner, "b");
   assert.equal(store.loading, false);
 });
+
+test("个人信息与改密响应仅更新当前会话，过期个人中心接口清空登录，错误密码保留登录", async (t) => {
+  const previous = globalThis.fetch;
+  t.after(() => (globalThis.fetch = previous));
+  const { store, updateProfile, changePassword, refreshProfile } = await load();
+  store.user = { id: "a", displayName: "旧名" };
+  store.csrfToken = "csrf-a";
+  globalThis.fetch = async (path, options) => {
+    assert.equal(path, "/api/auth/profile");
+    assert.equal(options.headers["X-CSRF-Token"], "csrf-a");
+    return response({
+      user: { id: "a", displayName: "新名" },
+      csrfToken: "csrf-a",
+    });
+  };
+  await updateProfile("新名");
+  assert.equal(store.user.displayName, "新名");
+  globalThis.fetch = async () =>
+    response({ user: { id: "a", displayName: "新名" }, csrfToken: "rotated" });
+  await changePassword("old-password", "new-password");
+  assert.equal(store.csrfToken, "rotated");
+  let finish;
+  globalThis.fetch = async () => new Promise((resolve) => (finish = resolve));
+  const old = updateProfile("A的新名");
+  store.user = { id: "b", displayName: "B" };
+  store.csrfToken = "csrf-b";
+  finish(
+    response({
+      user: { id: "a", displayName: "A的新名" },
+      csrfToken: "csrf-a",
+    }),
+  );
+  assert.equal(await old, null);
+  assert.equal(store.user.id, "b");
+  assert.equal(store.csrfToken, "csrf-b");
+  globalThis.fetch = async () => response({ error: "当前密码不正确" }, 400);
+  await assert.rejects(
+    changePassword("wrong-password", "new-password"),
+    /当前密码不正确/,
+  );
+  assert.equal(store.user.id, "b");
+  globalThis.fetch = async () => response({ error: "请先登录" }, 401);
+  await assert.rejects(refreshProfile(), /请先登录/);
+  assert.equal(store.user, null);
+});

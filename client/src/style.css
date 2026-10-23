@@ -5759,3 +5759,32 @@ button.ai-record-row:hover {
     padding: 16px;
   }
 }
+
+/* Account entry is present on every page, before the profile route loads. */
+.topbar .account-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  max-width: 160px;
+  color: var(--green-dark);
+}
+.topbar .account-name > svg {
+  flex-shrink: 0;
+}
+.topbar .account-name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topbar .account-name:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+@media (max-width: 767px) {
+  .topbar .account-name {
+    max-width: 96px;
+  }
+}

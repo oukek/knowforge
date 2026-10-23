@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { AiRepository, decodeRun } from "./repository.mjs";
 import { createProvider } from "./provider.mjs";
 import { AiPool } from "./pool.mjs";
+import { ensureProfile } from "../account-profile.mjs";
 import {
   AiError,
   hash,
@@ -1132,7 +1133,7 @@ export class AiService {
       .slice(0, input.count)
       .map((x) => x.q);
     return this.repo.transaction(async (db) => {
-      if (!(await this.repo.configRaw(db)))
+      if (!(await this.pool.raw(db)))
         throw new AiError(503, "管理员尚未配置 AI 服务");
       const account = await this.repo.account(db, userId);
       if (account.blocked || account.balance <= account.reserved)
@@ -1244,19 +1245,33 @@ export class AiService {
   async users(query = "") {
     return this.repo.read(async (db) => {
       const users = await db.all(
-        "SELECT id,username,createdAt FROM auth_users WHERE username LIKE ? ORDER BY createdAt DESC LIMIT 100",
+        "SELECT id,username,createdAt FROM auth_users WHERE username LIKE ? OR id IN (SELECT userId FROM auth_profiles WHERE publicId=? OR displayName LIKE ?) ORDER BY createdAt DESC LIMIT 100",
+        "%" + query.toLowerCase() + "%",
+        query,
         "%" + query + "%",
       );
+      if (!users.length) return [];
+      const ids = users.map((u) => u.id),
+        slots = ids.map(() => "?").join(",");
       const accounts = new Map(
-        (await db.all("SELECT * FROM ai_accounts")).map((x) => [x.userId, x]),
+        (
+          await db.all(
+            "SELECT * FROM ai_accounts WHERE userId IN (" + slots + ")",
+            ...ids,
+          )
+        ).map((x) => [x.userId, x]),
       );
       const roles = new Map(
-        (await db.all("SELECT * FROM auth_roles")).map((x) => [
-          x.userId,
-          x.role,
-        ]),
+        (
+          await db.all(
+            "SELECT * FROM auth_roles WHERE userId IN (" + slots + ")",
+            ...ids,
+          )
+        ).map((x) => [x.userId, x.role]),
       );
-      return users.map((user) => ({
+      const profiles = [];
+      for (const user of users) profiles.push(await ensureProfile(db, user));
+      return profiles.map((user) => ({
         ...user,
         role: roles.get(user.id) || "user",
         balance: Number(accounts.get(user.id)?.balance || 0),

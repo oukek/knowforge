@@ -10,6 +10,11 @@ const router = createRouter({
   },
   routes: [
     {
+      path: "/profile",
+      component: () => import("./views/Profile.vue"),
+      meta: { title: "个人中心" },
+    },
+    {
       path: "/ai",
       component: () => import("./views/AiWorkspace.vue"),
       meta: { title: "AI 学习与历史" },

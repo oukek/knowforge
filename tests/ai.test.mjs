@@ -1171,3 +1171,21 @@ test("尝试次数有硬上限，取消中途任务不触发后备调用，旧�
   await f.ai.pool.outcome(lease.target, upstreamError(503));
   assert(f.ai.pool.health.get(lease.target.providerId).manual);
 });
+
+test("新版服务池保存后不依赖旧 main 配置，也可正常创建模拟面试", async (t) => {
+  const f = await fixture(t);
+  await configurePool(f);
+  await f.grant();
+  assert.equal(
+    await f.ai.repo.read((db) => f.ai.repo.configRaw(db)),
+    undefined,
+  );
+  const session = await f.ai.startInterview(f.user.user.id, {
+    mode: "practice",
+    difficulty: "进阶",
+    count: 2,
+    moduleId: "",
+  });
+  assert.equal(session.status, "active");
+  assert.equal(session.questionIds.length, 2);
+});

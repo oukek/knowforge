@@ -7,6 +7,7 @@ import {
 } from "node:crypto";
 import { promisify } from "node:util";
 import { z } from "zod";
+import { ensureProfile } from "./account-profile.mjs";
 
 const derive = promisify(scrypt);
 const cookieName = "knowforge_session";
@@ -22,6 +23,25 @@ const credentials = z
       .regex(/^[A-Za-z0-9_-]+$/, "账号请使用字母、数字、下划线或短横线")
       .transform((s) => s.toLowerCase()),
     password: z.string().min(8, "密码至少 8 位").max(128, "密码最多 128 位"),
+  })
+  .strict();
+const profileSchema = z
+  .object({
+    displayName: z
+      .string()
+      .trim()
+      .min(1, "请填写显示名称")
+      .max(40, "名称最多 40 个字符")
+      .refine((s) => !/[\u0000-\u001f\u007f]/.test(s), "名称不能包含控制字符"),
+  })
+  .strict();
+const passwordSchema = z
+  .object({
+    currentPassword: z.string().min(1).max(128),
+    newPassword: z
+      .string()
+      .min(8, "新密码至少 8 位")
+      .max(128, "新密码最多 128 位"),
   })
   .strict();
 const digest = (token) => createHash("sha256").update(token).digest("hex");
@@ -54,8 +74,11 @@ async function verifyPassword(password, encoded) {
 }
 const publicUser = (user) => ({
   id: user.id,
+  publicId: user.publicId,
+  displayName: user.displayName || user.username,
   username: user.username,
   role: user.role || "user",
+  createdAt: user.createdAt,
 });
 
 export function createAuth(app, store, { secureCookies } = {}) {
@@ -100,11 +123,12 @@ export function createAuth(app, store, { secureCookies } = {}) {
       digest(token),
     );
     if (!session || session.expiresAt <= new Date().toISOString()) return null;
-    const user = await store.get(
-      "SELECT id,username FROM auth_users WHERE id=?",
+    let user = await store.get(
+      "SELECT id,username,createdAt FROM auth_users WHERE id=?",
       session.userId,
     );
     if (!user) return null;
+    user = await ensureProfile(store, user);
     user.role =
       (await store.get("SELECT role FROM auth_roles WHERE userId=?", user.id))
         ?.role || "user";
@@ -196,6 +220,7 @@ export function createAuth(app, store, { secureCookies } = {}) {
             user.passwordHash,
             user.createdAt,
           );
+        user = await ensureProfile(store, user);
         issued = await newSession(req, res, user);
         await store.exec("COMMIT");
       } catch (error) {
@@ -212,6 +237,83 @@ export function createAuth(app, store, { secureCookies } = {}) {
       res.status(action === "register" ? 201 : 200).json(issued.body);
     });
   }
+  function protectedRoute(method, path, handler) {
+    route(method, path, async (req, res) => {
+      const auth = await authenticate(req);
+      if (!auth) return res.status(401).json({ error: "请先登录" });
+      if (method !== "get" && !csrf(req, res, auth)) return;
+      return handler(req, res, auth);
+    });
+  }
+  protectedRoute("get", "/api/auth/profile", async (req, res, auth) => {
+    res.json({
+      user: publicUser(auth.user),
+      csrfToken: auth.session.csrfToken,
+    });
+  });
+  protectedRoute("put", "/api/auth/profile", async (req, res, auth) => {
+    const { displayName } = profileSchema.parse(req.body);
+    if (!allow("profile:user:" + auth.user.id, 30, 900000))
+      return res
+        .status(429)
+        .set("Retry-After", "900")
+        .json({ error: "修改过于频繁，请稍后重试" });
+    await store.run(
+      "UPDATE auth_profiles SET displayName=?,updatedAt=? WHERE userId=?",
+      displayName,
+      new Date().toISOString(),
+      auth.user.id,
+    );
+    res.json({
+      user: publicUser({ ...auth.user, displayName }),
+      csrfToken: auth.session.csrfToken,
+    });
+  });
+  protectedRoute("post", "/api/auth/password", async (req, res, auth) => {
+    if (
+      !allow("password:ip:" + req.ip, 40, 900000) ||
+      !allow("password:user:" + auth.user.id, 10, 900000)
+    )
+      return res
+        .status(429)
+        .set("Retry-After", "900")
+        .json({ error: "修改密码尝试过于频繁，请稍后重试" });
+    const { currentPassword, newPassword } = passwordSchema.parse(req.body);
+    if (currentPassword === newPassword)
+      return res.status(400).json({ error: "新密码不能与当前密码相同" });
+    const account = await store.get(
+      "SELECT passwordHash FROM auth_users WHERE id=?",
+      auth.user.id,
+    );
+    if (!(await verifyPassword(currentPassword, account?.passwordHash)))
+      return res.status(400).json({ error: "当前密码不正确" });
+    const passwordHash = await hashPassword(newPassword);
+    await store.exec("BEGIN");
+    let issued;
+    try {
+      // Compare-and-swap also rejects a concurrent password change in another process.
+      const changed = await store.run(
+        "UPDATE auth_users SET passwordHash=? WHERE id=? AND passwordHash=?",
+        passwordHash,
+        auth.user.id,
+        account.passwordHash,
+      );
+      if (Number(changed.changes ?? changed.affectedRows) !== 1) {
+        await store.exec("ROLLBACK");
+        return res
+          .status(409)
+          .json({ error: "账号凭据已经变化，请重新登录后操作" });
+      }
+      await store.run("DELETE FROM auth_sessions WHERE userId=?", auth.user.id);
+      issued = await newSession(req, res, auth.user);
+      await store.exec("COMMIT");
+    } catch (error) {
+      await store.exec("ROLLBACK");
+      throw error;
+    }
+    setCookie(req, res, issued.token);
+    res.json({ ...issued.body, message: "密码已修改，其他设备的登录已失效" });
+  });
   route("post", "/api/auth/logout", async (req, res) => {
     const auth = await authenticate(req);
     if (auth && !csrf(req, res, auth)) return;

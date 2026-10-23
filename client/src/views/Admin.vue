@@ -178,7 +178,16 @@ onMounted(
             label="额度调整账号"
             :options="[
               { value: '', label: '选择账号' },
-              ...users.map((u) => ({ value: u.id, label: u.username })),
+              ...users.map((u) => ({
+                value: u.id,
+                label:
+                  (u.displayName || u.username) +
+                  ' · ' +
+                  u.publicId +
+                  ' (' +
+                  u.username +
+                  ')',
+              })),
             ]"
           /><AppField
             v-model="amount"
@@ -198,19 +207,21 @@ onMounted(
       <form class="ai-form-row" @submit.prevent="act(loadUsers)">
         <AppField
           v-model="userQuery"
-          maxlength="32"
+          maxlength="40"
           aria-label="搜索账号"
-          placeholder="按账号搜索，最多显示 100 人"
+          placeholder="搜索用户 ID、账号或名称，最多显示 100 人"
         /><button class="btn small" :disabled="busy">搜索账号</button>
       </form>
       <div class="ai-record-list">
         <article v-for="user in users" :key="user.id" class="ai-record-row">
           <div>
             <strong
-              >{{ user.username }}
+              >{{ user.displayName || user.username }}
               <span class="tiny muted">{{
                 user.role === "admin" ? "管理员" : "用户"
               }}</span></strong
+            ><span class="tiny muted"
+              >ID {{ user.publicId }} · 登录账号 {{ user.username }}</span
             ><span class="tiny muted"
               >{{ user.blocked ? "AI 已暂停" : "AI 可用" }} · 可用
               {{ user.balance - user.reserved }} / 预占
@@ -331,9 +342,7 @@ onMounted(
           <h3>上游调用链 · {{ selected.attempts.length }} 次尝试</h3>
           <p class="tiny muted">
             已知上游输入 {{ selected.upstreamUsage?.input || 0 }} / 输出
-            {{
-              selected.upstreamUsage?.output || 0
-            }}
+            {{ selected.upstreamUsage?.output || 0 }}
             Token；含失败重试，可能大于用户结算用量。
           </p>
           <article

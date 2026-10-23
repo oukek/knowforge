@@ -236,7 +236,7 @@ export async function installAi(app, store, auth, catalog, options) {
     async (r) => ({
       users: await ai.users(
         z
-          .object({ query: z.string().max(32).default("") })
+          .object({ query: z.string().max(40).default("") })
           .strict()
           .parse(r.query).query,
       ),

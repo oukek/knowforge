@@ -3,6 +3,7 @@ import { aiTables, aiSchema } from "./ai/schema.mjs";
 export const accountTables = [
   "auth_users",
   "auth_sessions",
+  "auth_profiles",
   "user_progress",
   "user_notes",
   "user_bookmarks",
@@ -27,6 +28,7 @@ export function accountSchema(driver, prefix = "") {
   const definitions = {
     auth_users: `id ${uid} PRIMARY KEY,username ${mysql ? "VARCHAR(32)" : "TEXT"} NOT NULL UNIQUE,passwordHash ${mysql ? "VARCHAR(255)" : "TEXT"} NOT NULL,createdAt ${stamp} NOT NULL`,
     auth_sessions: `id ${mysql ? "VARCHAR(64)" : "TEXT"} PRIMARY KEY,userId ${uid} NOT NULL,csrfToken ${mysql ? "VARCHAR(64)" : "TEXT"} NOT NULL,expiresAt ${stamp} NOT NULL,createdAt ${stamp} NOT NULL`,
+    auth_profiles: `userId ${uid} PRIMARY KEY,publicId ${mysql ? "VARCHAR(8)" : "TEXT"} NOT NULL UNIQUE,displayName ${mysql ? "VARCHAR(40)" : "TEXT"} NOT NULL,updatedAt ${stamp} NOT NULL`,
     user_progress: `userId ${uid} NOT NULL,id ${text} NOT NULL,status ${text} NOT NULL,updatedAt ${stamp} NOT NULL,PRIMARY KEY(userId,id)`,
     user_notes: `userId ${uid} NOT NULL,id ${text} NOT NULL,content ${long} NOT NULL,updatedAt ${stamp} NOT NULL,PRIMARY KEY(userId,id)`,
     user_bookmarks: `userId ${uid} NOT NULL,id ${text} NOT NULL,createdAt ${stamp} NOT NULL,PRIMARY KEY(userId,id)`,

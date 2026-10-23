@@ -47,7 +47,9 @@ export async function request(path, method = "GET", body) {
   if (!response.ok) {
     if (
       userId === store.user?.id &&
-      ((response.status === 401 && !path.startsWith("/auth/")) ||
+      ((response.status === 401 &&
+        (!path.startsWith("/auth/") ||
+          ["/auth/profile", "/auth/password"].includes(path))) ||
         data.code === "SESSION_CHANGED")
     )
       clearSession();
@@ -88,6 +90,21 @@ export async function signOut() {
     toast(error.message);
   }
 }
+async function updateAccount(path, method, body) {
+  const id = store.user?.id,
+    generation = sessionGeneration;
+  const data = await request(path, method, body);
+  if (!id || id !== store.user?.id || generation !== sessionGeneration)
+    return null;
+  store.user = data.user;
+  if (data.csrfToken) store.csrfToken = data.csrfToken;
+  return data;
+}
+export const refreshProfile = () => updateAccount("/auth/profile", "GET");
+export const updateProfile = (displayName) =>
+  updateAccount("/auth/profile", "PUT", { displayName });
+export const changePassword = (currentPassword, newPassword) =>
+  updateAccount("/auth/password", "POST", { currentPassword, newPassword });
 export async function init() {
   const generation = ++sessionGeneration;
   store.loading = true;

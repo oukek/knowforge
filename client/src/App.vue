@@ -111,6 +111,9 @@ watch(
         /></RouterLink>
       </div>
       <div class="sidebar-bottom">
+        <RouterLink to="/profile" :class="{ active: active('/profile') }"
+          ><Icon name="UserRound" :size="18" />个人中心</RouterLink
+        >
         <RouterLink
           v-if="store.user?.role === 'admin'"
           :to="{ name: 'admin' }"
@@ -143,7 +146,15 @@ watch(
             <Icon name="Search" :size="17" /><span>搜索知识与题目</span
             ><kbd>⌘ K</kbd></button
           ><span class="top-date">{{ today }}</span
-          ><span class="account-name">{{ store.user?.username }}</span>
+          ><RouterLink
+            to="/profile"
+            class="account-name"
+            aria-label="个人中心"
+            :title="store.user?.displayName || store.user?.username"
+            ><Icon name="UserRound" :size="16" /><span>{{
+              store.user?.displayName || store.user?.username
+            }}</span></RouterLink
+          >
           <button v-if="store.user" class="btn small" @click="signOut">
             退出登录
           </button>
