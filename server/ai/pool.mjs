@@ -181,6 +181,12 @@ export class AiPool {
           JSON.parse(legacy.data),
           legacy.encryptedKey,
         );
+      if (!(await this.raw(db)))
+        await this.put(db, "pool", {
+          revision: randomUUID(),
+          providers: [],
+          policy: policySchema.parse({}),
+        });
       for (const row of await db.all("SELECT * FROM ai_health"))
         this.health.set(row.id, JSON.parse(row.data));
     });

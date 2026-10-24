@@ -70,6 +70,7 @@ test("扩展专题支持筛题、学习主线与新旧备份", async (t) => {
   let result = await api("/settings", "PUT", settings);
   assert.equal(result.status, 200);
   assert.equal(result.data.state.settings.trackId, "ai-application");
+  assert.deepEqual(result.data.state.settings.trackIds, ["ai-application"]);
   assert.equal(
     (await api("/settings", "PUT", { ...settings, trackId: "unknown" })).status,
     400,
@@ -515,4 +516,80 @@ test("开发代理只放行显式前端来源", async (t) => {
     ).status,
     403,
   );
+});
+
+test("注册计划引导一次持久化，多主线设置和备份均校验并保存", async (t) => {
+  const { api } = await fixture(t);
+  assert.equal(
+    (await api("/bootstrap")).data.state.settings.planOnboarding,
+    "pending",
+  );
+  let response = await api("/settings/onboarding", "PUT", {
+    status: "dismissed",
+  });
+  assert.equal(response.status, 200);
+  assert.equal(
+    (await api("/bootstrap")).data.state.settings.planOnboarding,
+    "dismissed",
+  );
+  assert.equal(
+    (await api("/settings/onboarding", "PUT", { status: "pending" })).status,
+    400,
+  );
+  const settings = {
+    dailyMinutes: 45,
+    planDays: 14,
+    startDate: "2026-10-24",
+    trackIds: ["frontend", "database-saas"],
+  };
+  response = await api("/settings", "PUT", settings);
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.data.state.settings.trackIds, settings.trackIds);
+  assert.equal(response.data.state.settings.planOnboarding, "configured");
+  for (const ids of [[], ["frontend", "frontend"], ["unknown"]])
+    assert.equal(
+      (await api("/settings", "PUT", { ...settings, trackIds: ids })).status,
+      400,
+    );
+  const backup = (await api("/export/backup")).data;
+  assert.equal((await api("/import", "POST", backup)).status, 200);
+  assert.deepEqual(
+    (await api("/bootstrap")).data.state.settings.trackIds,
+    settings.trackIds,
+  );
+  const legacyBackup = structuredClone(backup);
+  delete legacyBackup.state.settings.trackIds;
+  legacyBackup.state.settings.trackId = "python-data";
+  assert.equal((await api("/import", "POST", legacyBackup)).status, 200);
+  assert.deepEqual((await api("/bootstrap")).data.state.settings.trackIds, [
+    "python-data",
+  ]);
+  backup.state.settings.trackIds = ["unknown"];
+  assert.equal((await api("/import", "POST", backup)).status, 400);
+});
+
+test("ACM 学习记录仅接受完整扩展判题数量，旧四组不能冒充新提交", async (t) => {
+  const { api } = await fixture(t);
+  const lab = catalog.labs.find((l) => l.id === "acm-stairs");
+  const path = "/attempts/code-" + lab.id;
+  const incomplete = await api(path, "POST", {
+    answer: "// incomplete",
+    passedTests: 4,
+    totalTests: 4,
+  });
+  assert.equal(incomplete.status, 400);
+  const full = await api(path, "POST", {
+    answer: lab.solution,
+    passedTests: 29,
+    totalTests: 29,
+  });
+  assert.equal(full.status, 200);
+  assert.equal(full.data.result.passed, true);
+  const partial = await api(path, "POST", {
+    answer: "// partial",
+    passedTests: 4,
+    totalTests: 29,
+  });
+  assert.equal(partial.status, 200);
+  assert.equal(partial.data.result.passed, false);
 });

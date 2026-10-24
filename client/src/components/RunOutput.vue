@@ -9,6 +9,9 @@ const props = defineProps({
   stale: Boolean,
 });
 const rows = computed(() => props.result?.logs ?? props.logs);
+const customStdin = computed(
+  () => props.result?.mode === "stdin" && props.result.returned !== undefined,
+);
 </script>
 <template>
   <section class="run-output" aria-label="代码运行输出">
@@ -64,17 +67,24 @@ const rows = computed(() => props.result?.logs ?? props.logs);
       v-if="result?.returned !== null && result?.returned !== undefined"
       class="return-value"
     >
-      <span>返回值</span>
+      <span>{{ result.mode === "stdin" ? "标准输出" : "返回值" }}</span>
       <pre>{{ result.returned }}</pre>
     </div>
     <div v-if="result?.results" class="inline-tests">
       <div class="section-line">
-        <strong>用例验证</strong
+        <strong>{{ customStdin ? "自定义运行（不判题）" : "用例验证" }}</strong
         ><span
           class="badge"
           :class="{ danger: result.results.some((test) => !test.passed) }"
-          >{{ result.results.filter((test) => test.passed).length }} /
-          {{ result.results.length }} 通过</span
+          ><template v-if="customStdin">{{
+            result.results.every((test) => test.passed)
+              ? "执行完成"
+              : "执行失败"
+          }}</template
+          ><template v-else
+            >{{ result.results.filter((test) => test.passed).length }} /
+            {{ result.results.length }} 通过</template
+          ></span
         >
       </div>
       <div
@@ -87,6 +97,22 @@ const rows = computed(() => props.result?.logs ?? props.logs);
         <div>
           <strong>{{ test.name }}</strong>
           <pre v-if="test.error">{{ test.error }}</pre>
+          <div
+            v-if="!test.passed && test.expected !== undefined"
+            class="stdio-diff"
+          >
+            <template v-if="test.input !== undefined"
+              ><span>本组输入</span>
+              <pre>{{ test.input }}</pre>
+            </template>
+            <p v-if="test.truncated" class="tiny muted">
+              长内容仅显示前 10000 个字符；判题使用完整数据。
+            </p>
+            <span>预期输出</span>
+            <pre>{{ test.expected }}</pre>
+            <span>实际输出</span>
+            <pre>{{ test.actual || "（空输出）" }}</pre>
+          </div>
         </div>
       </div>
     </div>

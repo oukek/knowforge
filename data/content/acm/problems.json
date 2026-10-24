@@ -1,0 +1,848 @@
+[
+  {
+    "id": "acm-range-sum",
+    "lessonId": "algo-window-invariants",
+    "title": "区间账单求和",
+    "difficulty": "入门",
+    "prompt": "一份账单依次记录 n 天的净收入，允许为负数。接到 q 个闭区间查询，每次求第 l 天到第 r 天（含两端）的总收入。查询不会修改账单；每个查询独立，不是求最大子段。",
+    "inputFormat": "第一行 n q。第二行 n 个整数 a1…an。随后 q 行每行 l r，下标从 1 开始。",
+    "outputFormat": "每个查询输出一行整数和，不输出提示文字。",
+    "constraints": "1 ≤ n,q ≤ 100000；|ai| ≤ 10^6；1 ≤ l ≤ r ≤ n。所有和在 JS 安全整数范围内。",
+    "samples": [
+      {
+        "input": "5 3\n2 -1 4 0 3\n1 3\n2 5\n4 4\n",
+        "output": "5\n6\n0",
+        "explanation": "第一个区间 2+(-1)+4=5；第二个 -1+4+0+3=6；第三个只取第 4 天。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "5 3\n2 -1 4 0 3\n1 3\n2 5\n4 4\n",
+        "output": "5\n6\n0"
+      },
+      {
+        "name": "单点负值",
+        "input": "1 1\n-7\n1 1\n",
+        "output": "-7"
+      },
+      {
+        "name": "整段与末端",
+        "input": "3 2\n1 2 3\n1 3\n3 3\n",
+        "output": "6\n3"
+      },
+      {
+        "name": "抵消",
+        "input": "4 2\n-2 2 -2 2\n1 4\n2 3\n",
+        "output": "0\n0"
+      }
+    ],
+    "solution": "function solve(input) {\n const a=input.trim().split(/\\s+/).map(Number);let p=0;\n const n=a[p++],q=a[p++],prefix=new Array(n+1).fill(0);\n for(let i=1;i<=n;i++)prefix[i]=prefix[i-1]+a[p++];\n const out=[];for(let i=0;i<q;i++){const l=a[p++],r=a[p++];out.push(prefix[r]-prefix[l-1]);}\n return out.join('\\n');\n}",
+    "complexity": "O(n+q) 时间，O(n+q) 空间（含输出）。",
+    "analysis": "定义 prefix[i] 为前 i 个数之和，区间 [l,r] 等于 prefix[r]-prefix[l-1]。prefix[0]=0 消除从第 1 项开始的特判。负数不影响公式；逐查询扫描最坏 O(nq) 不满足规模。",
+    "hints": [
+      "先把闭区间画出来，分清 l-1 和 l。",
+      "预处理前缀，查询仅做一次减法。",
+      "用单点、整段、负数抵消验证。"
+    ]
+  },
+  {
+    "id": "acm-lower-bound",
+    "lessonId": "algo-search-dp",
+    "title": "批量查找不小于目标的位置",
+    "difficulty": "基础",
+    "prompt": "给定非递减整数数组，处理 q 个目标值 x。对每个 x 返回第一个 ai≥x 的位置；如果不存在返回 n+1。存在重复值时必须找最左侧。",
+    "inputFormat": "第一行 n q，第二行 n 个已排序整数，随后 q 行每行一个 x。",
+    "outputFormat": "每个查询输出一行 1-based 位置或 n+1。",
+    "constraints": "1 ≤ n,q ≤ 100000；数组及 x 的绝对值 ≤ 10^9。",
+    "samples": [
+      {
+        "input": "5 4\n1 3 3 7 9\n3\n4\n0\n10\n",
+        "output": "2\n4\n1\n6",
+        "explanation": "3 的最左位置是 2；第一个 ≥4 的是位置 4；10 超过全部元素，返回 6。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "5 4\n1 3 3 7 9\n3\n4\n0\n10\n",
+        "output": "2\n4\n1\n6"
+      },
+      {
+        "name": "全相同",
+        "input": "3 2\n5 5 5\n5\n6\n",
+        "output": "1\n4"
+      },
+      {
+        "name": "单点",
+        "input": "1 2\n-2\n-3\n0\n",
+        "output": "1\n2"
+      },
+      {
+        "name": "右边界",
+        "input": "2 1\n1 2\n2\n",
+        "output": "2"
+      }
+    ],
+    "solution": "function solve(input){\n const t=input.trim().split(/\\s+/).map(Number);let p=0;const n=t[p++],q=t[p++],a=t.slice(p,p+n);p+=n;const out=[];\n for(let k=0;k<q;k++){const x=t[p++];let l=0,r=n;while(l<r){const m=l+Math.floor((r-l)/2);if(a[m]>=x)r=m;else l=m+1;}out.push(l+1);}\n return out.join('\\n');\n}",
+    "complexity": "O(n+q log n) 时间，O(n+q) 空间。",
+    "analysis": "维护半开区间 [l,r)，答案可能为 n。a[m]≥x 时 m 仍可能是答案，应保留左半；否则答案严格在右侧。最终 l+1 转成题目的 1-based 位置。不要命中后立即返回，重复值要求最左。",
+    "hints": [
+      "确定不存在时返回什么。",
+      "二分不变量：答案在 [l,r] 中，r 可为 n。",
+      "避免使用 32 位位运算计算大整数业务边界。"
+    ]
+  },
+  {
+    "id": "acm-grid-bfs",
+    "lessonId": "algo-graph-heap",
+    "title": "仓库网格最少步数",
+    "difficulty": "基础",
+    "prompt": "仓库是 n×m 网格，S 为起点，T 为终点，# 是不可穿过的墙，. 为可走地面。每步只能上下左右移动一格，求从 S 到 T 的最少步数，无法到达输出 -1。起点不计步。",
+    "inputFormat": "第一行 n m；接下来 n 行，每行恰好 m 个字符，无空格；恰有一个 S 和一个 T。",
+    "outputFormat": "输出一个整数。",
+    "constraints": "1 ≤ n,m ≤ 500，2 ≤ n×m ≤ 200000。",
+    "samples": [
+      {
+        "input": "3 4\nS..#\n.#..\n...T\n",
+        "output": "5",
+        "explanation": "可从左侧向下到第三行，再向右到 T，共 5 步；墙不可经过。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "3 4\nS..#\n.#..\n...T\n",
+        "output": "5"
+      },
+      {
+        "name": "不可达",
+        "input": "1 3\nS#T\n",
+        "output": "-1"
+      },
+      {
+        "name": "相邻",
+        "input": "1 2\nST\n",
+        "output": "1"
+      },
+      {
+        "name": "绕行",
+        "input": "2 3\nS#T\n...\n",
+        "output": "4"
+      }
+    ],
+    "solution": "function solve(input){\n const lines=input.trim().split(/\\r?\\n/),[n,m]=lines[0].trim().split(/\\s+/).map(Number),g=lines.slice(1);let start=0,end=0;\n for(let r=0;r<n;r++)for(let c=0;c<m;c++){if(g[r][c]==='S')start=r*m+c;if(g[r][c]==='T')end=r*m+c;}\n const dist=new Int32Array(n*m).fill(-1),q=[start];dist[start]=0;\n for(let h=0;h<q.length;h++){const id=q[h];if(id===end)return String(dist[id]);const r=Math.floor(id/m),c=id%m;\n for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){const nr=r+dr,nc=c+dc,v=nr*m+nc;if(nr>=0&&nr<n&&nc>=0&&nc<m&&g[nr][nc]!=='#'&&dist[v]===-1){dist[v]=dist[id]+1;q.push(v);}}}\n return '-1';\n}",
+    "complexity": "O(nm) 时间与空间。",
+    "analysis": "无权图的 BFS 按距离递增扩展，第一次入队的距离就是最短距离。入队即标记可避免重复；队列用数组+头指针，避免反复 shift。DFS 能找到路径但不能用首次到达保证最短。",
+    "hints": [
+      "把格子编号为 r*m+c。",
+      "首次入队时记录距离，墙和边界先过滤。",
+      "不要把起点算作第 1 步。"
+    ]
+  },
+  {
+    "id": "acm-knapsack",
+    "lessonId": "algo-search-dp",
+    "title": "预算内选择项目",
+    "difficulty": "进阶",
+    "prompt": "有 n 个项目，每个耗费预算 wi、产生价值 vi，每项最多选一次。预算不超过 C，求最大总价值。允许不选，不能把一个项目重复计入。",
+    "inputFormat": "第一行 n C；随后 n 行 wi vi。",
+    "outputFormat": "输出一个整数表示最大总价值。",
+    "constraints": "1 ≤ n ≤ 200；1 ≤ C ≤ 10000；1 ≤ wi ≤ C；0 ≤ vi ≤ 10^6。",
+    "samples": [
+      {
+        "input": "3 5\n2 3\n3 4\n4 8\n",
+        "output": "8",
+        "explanation": "选预算 4 价值 8 的项目优于选前两项（价值 7）。剩余预算可以不用。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "3 5\n2 3\n3 4\n4 8\n",
+        "output": "8"
+      },
+      {
+        "name": "不可重复",
+        "input": "1 4\n2 3\n",
+        "output": "3"
+      },
+      {
+        "name": "恰好填满",
+        "input": "2 5\n2 4\n3 5\n",
+        "output": "9"
+      },
+      {
+        "name": "零价值",
+        "input": "2 2\n1 0\n2 0\n",
+        "output": "0"
+      }
+    ],
+    "solution": "function solve(input){\n const t=input.trim().split(/\\s+/).map(Number);let p=0;const n=t[p++],cap=t[p++],dp=new Array(cap+1).fill(0);\n for(let i=0;i<n;i++){const w=t[p++],v=t[p++];for(let c=cap;c>=w;c--)dp[c]=Math.max(dp[c],dp[c-w]+v);}\n return String(dp[cap]);\n}",
+    "complexity": "O(nC) 时间，O(C) 空间。",
+    "analysis": "dp[c] 表示已经处理的项目在预算不超过 c 时的最优值。逆序枚举预算，确保 dp[c-w] 尚未使用当前项目；正序会变成可重复选的完全背包。初始化全零对应允许不选，不是必须恰好花完。",
+    "hints": [
+      "先写二维“前 i 项”转移。",
+      "压一维后预算倒序，解释为何不能正序。",
+      "用一个项目但预算可买两次的反例检查。"
+    ]
+  },
+  {
+    "id": "acm-lcs",
+    "lessonId": "algo-search-dp",
+    "title": "两份记录的最长公共子序列",
+    "difficulty": "进阶",
+    "prompt": "给定两个仅包含小写字母的非空字符串，求最长公共子序列长度。子序列可以删除字符但不能改变保留字符的顺序，不要求连续；不是最长公共子串。",
+    "inputFormat": "两行分别为字符串 a、b。",
+    "outputFormat": "输出一个整数。",
+    "constraints": "1 ≤ |a|,|b| ≤ 1500。",
+    "samples": [
+      {
+        "input": "abcde\nace\n",
+        "output": "3",
+        "explanation": "a、c、e 在两串中顺序相同，虽然在第一串中不连续，长度为 3。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "abcde\nace\n",
+        "output": "3"
+      },
+      {
+        "name": "无公共",
+        "input": "abc\nxyz\n",
+        "output": "0"
+      },
+      {
+        "name": "重复",
+        "input": "aaaa\naa\n",
+        "output": "2"
+      },
+      {
+        "name": "同一字符串",
+        "input": "abc\nabc\n",
+        "output": "3"
+      }
+    ],
+    "solution": "function solve(input){\n const [a,b]=input.trim().split(/\\s+/);let prev=new Int32Array(b.length+1);\n for(let i=1;i<=a.length;i++){const cur=new Int32Array(b.length+1);for(let j=1;j<=b.length;j++)cur[j]=a[i-1]===b[j-1]?prev[j-1]+1:Math.max(prev[j],cur[j-1]);prev=cur;}\n return String(prev[b.length]);\n}",
+    "complexity": "O(|a||b|) 时间，O(|b|) 空间。",
+    "analysis": "dp[i][j] 为两个前缀的 LCS 长度，相等时从对角+1，否则丢弃一侧末尾取最大。按行滚动，仅保留上一行和当前行。这里输出长度，若要实际序列还需回溯信息或其他恢复策略。",
+    "hints": [
+      "先画前缀 DP 表，空前缀长度为 0。",
+      "相等走对角，不等走上或左。",
+      "不要误写成不等就清零的公共子串。"
+    ]
+  },
+  {
+    "id": "acm-window-max",
+    "lessonId": "algo-window-invariants",
+    "title": "滚动监控窗口最大值",
+    "difficulty": "进阶",
+    "prompt": "给出 n 个监控读数和窗口长度 k。窗口从最左开始每次右移一个位置，输出每个长度恰为 k 的连续窗口的最大值。",
+    "inputFormat": "第一行 n k；第二行 n 个整数。",
+    "outputFormat": "一行输出 n-k+1 个最大值，用空格分隔。",
+    "constraints": "1 ≤ k ≤ n ≤ 200000；|ai| ≤ 10^9。",
+    "samples": [
+      {
+        "input": "8 3\n1 3 -1 -3 5 3 6 7\n",
+        "output": "3 3 5 5 6 7",
+        "explanation": "前两个窗口最大值是 3；第三个窗口 [-1,-3,5] 最大为 5。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "8 3\n1 3 -1 -3 5 3 6 7\n",
+        "output": "3 3 5 5 6 7"
+      },
+      {
+        "name": "k 为 1",
+        "input": "3 1\n-1 4 2\n",
+        "output": "-1 4 2"
+      },
+      {
+        "name": "重复",
+        "input": "4 2\n5 5 5 5\n",
+        "output": "5 5 5"
+      },
+      {
+        "name": "递减整窗",
+        "input": "4 4\n4 3 2 1\n",
+        "output": "4"
+      }
+    ],
+    "solution": "function solve(input){\n const t=input.trim().split(/\\s+/).map(Number),n=t[0],k=t[1],a=t.slice(2),q=[],out=[];let head=0;\n for(let i=0;i<n;i++){while(head<q.length&&q[head]<=i-k)head++;while(head<q.length&&a[q.at(-1)]<=a[i])q.pop();q.push(i);if(i>=k-1)out.push(a[q[head]]);}\n return out.join(' ');\n}",
+    "complexity": "O(n) 时间，O(n) 空间（本实现保留数组头部及输出；活跃队列 O(k)）。",
+    "analysis": "队列保存下标且对应值单调递减。新值淘汰左侧更小且更早过期的值，队首过期时弹出。每个下标最多进出一次，摊还 O(n)，不是每次维护都 O(1)。",
+    "hints": [
+      "队列存下标才能判断过期。",
+      "新值更大时旧小值不可能再成为后续窗口最大。",
+      "注意 head 后的活跃区，不能误弹已经过期的部分。"
+    ]
+  },
+  {
+    "id": "acm-histogram",
+    "lessonId": "algo-graph-heap",
+    "title": "仓储柱状图最大矩形",
+    "difficulty": "进阶",
+    "prompt": "有 n 根相邻柱子，每根宽度为 1，高度为非负整数。选择一段连续柱子，在其下方放一个不超过每根柱高的矩形，求最大面积。",
+    "inputFormat": "第一行 n；第二行 n 个高度。",
+    "outputFormat": "输出最大面积，一个整数。",
+    "constraints": "1 ≤ n ≤ 200000；0 ≤ hi ≤ 10^9；面积 ≤ 2×10^14，可用 Number 精确表示。",
+    "samples": [
+      {
+        "input": "6\n2 1 5 6 2 3\n",
+        "output": "10",
+        "explanation": "选择第 3、4 根，高度 5，宽 2，面积 10；不能把不相邻柱子拼在一起。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "6\n2 1 5 6 2 3\n",
+        "output": "10"
+      },
+      {
+        "name": "全零",
+        "input": "3\n0 0 0\n",
+        "output": "0"
+      },
+      {
+        "name": "递增",
+        "input": "4\n1 2 3 4\n",
+        "output": "6"
+      },
+      {
+        "name": "等高",
+        "input": "3\n5 5 5\n",
+        "output": "15"
+      }
+    ],
+    "solution": "function solve(input){\n const t=input.trim().split(/\\s+/).map(Number),n=t[0],h=t.slice(1),stack=[];let best=0;\n for(let i=0;i<=n;i++){const cur=i===n?0:h[i];while(stack.length&&h[stack.at(-1)]>cur){const height=h[stack.pop()],left=stack.length?stack.at(-1):-1;best=Math.max(best,height*(i-left-1));}stack.push(i);}\n return String(best);\n}",
+    "complexity": "O(n) 时间，O(n) 空间。",
+    "analysis": "当遇到更矮柱时，被弹出的柱高的右边界确定为 i-1，左边界在弹栈后的栈顶之后。宽度为 i-left-1。末尾补零哨兵清栈；相等柱的处理要与边界公式一致。",
+    "hints": [
+      "固定最矮柱高，矩形能向两侧延伸多远？",
+      "用递增栈等右侧更矮值。",
+      "递增序列会一直留栈，末尾必须清理。"
+    ]
+  },
+  {
+    "id": "acm-connectivity",
+    "lessonId": "algo-graph-heap",
+    "title": "动态连通关系查询",
+    "difficulty": "基础",
+    "prompt": "n 台机器初始互不连接，处理 q 条操作。U a b 表示建立连接，Q a b 询问二者是否经已有连接连通；连接可传递，重复连接不改变结果。",
+    "inputFormat": "第一行 n q，随后 q 行：U a b 或 Q a b。机器编号 1…n。",
+    "outputFormat": "每条 Q 操作输出 YES 或 NO 一行；U 不输出。",
+    "constraints": "1 ≤ n,q ≤ 200000。",
+    "samples": [
+      {
+        "input": "4 5\nQ 1 2\nU 1 2\nU 2 3\nQ 1 3\nQ 1 4\n",
+        "output": "NO\nYES\nNO",
+        "explanation": "1 与 3 经 2 间接连通；4 仍独立。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "4 5\nQ 1 2\nU 1 2\nU 2 3\nQ 1 3\nQ 1 4\n",
+        "output": "NO\nYES\nNO"
+      },
+      {
+        "name": "同一点",
+        "input": "1 1\nQ 1 1\n",
+        "output": "YES"
+      },
+      {
+        "name": "重复合并",
+        "input": "2 3\nU 1 2\nU 1 2\nQ 1 2\n",
+        "output": "YES"
+      },
+      {
+        "name": "未连接",
+        "input": "3 1\nQ 2 3\n",
+        "output": "NO"
+      }
+    ],
+    "solution": "function solve(input){\n const t=input.trim().split(/\\s+/);let p=0;const n=+t[p++],q=+t[p++],parent=Array.from({length:n+1},(_,i)=>i),size=new Array(n+1).fill(1),out=[];\n function find(x){while(parent[x]!==x){parent[x]=parent[parent[x]];x=parent[x];}return x;}\n for(let i=0;i<q;i++){const op=t[p++],a=find(+t[p++]),b=find(+t[p++]);if(op==='Q')out.push(a===b?'YES':'NO');else if(a!==b){if(size[a]<size[b]){parent[a]=b;size[b]+=size[a];}else{parent[b]=a;size[a]+=size[b];}}}\n return out.join('\\n');\n}",
+    "complexity": "O((n+q)α(n)) 摊还时间，O(n+q) 空间含输出。",
+    "analysis": "并查集用根代表连通分量，合并根并按大小连接，查询比较根。路径压缩加按大小合并获得近常数摊还代价。普通并查集不支持删边，不能将此方案直接用于动态删除。",
+    "hints": [
+      "用父指针找根。",
+      "合并根而不是随便改 a 的父节点。",
+      "重复合并与自查询都要正确。"
+    ]
+  },
+  {
+    "id": "acm-dijkstra",
+    "lessonId": "algo-graph-heap",
+    "title": "配送网络最短路线",
+    "difficulty": "进阶",
+    "prompt": "有 n 个站点和 m 条有向路线，每条耗时为非负整数。从站点 s 出发，求到所有站点的最短耗时。允许重边、自环、权重为 0；无法到达输出 -1。",
+    "inputFormat": "第一行 n m s；接下来 m 行 u v w，表示 u→v 耗时 w。站点从 1 编号。",
+    "outputFormat": "一行 n 个整数按站点 1…n 输出。",
+    "constraints": "1 ≤ n ≤ 50000；0 ≤ m ≤ 100000；0 ≤ w ≤ 10^9；最短路在安全整数范围内。",
+    "samples": [
+      {
+        "input": "4 4 1\n1 2 5\n1 3 1\n3 2 2\n2 4 1\n",
+        "output": "0 3 1 4",
+        "explanation": "到 2 应走 1→3→2，耗时 3；到 4 再加 1，不能只取直接路线。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "4 4 1\n1 2 5\n1 3 1\n3 2 2\n2 4 1\n",
+        "output": "0 3 1 4"
+      },
+      {
+        "name": "不可达",
+        "input": "3 1 1\n1 2 0\n",
+        "output": "0 0 -1"
+      },
+      {
+        "name": "重边和过期堆项",
+        "input": "2 3 1\n1 2 9\n1 2 2\n2 2 0\n",
+        "output": "0 2"
+      },
+      {
+        "name": "无边",
+        "input": "1 0 1\n",
+        "output": "0"
+      }
+    ],
+    "solution": "class MinHeap {\n constructor(){this.a=[];}\n push(item){const a=this.a;a.push(item);let i=a.length-1;while(i>0){const p=Math.floor((i-1)/2);if(a[p][0]<=item[0])break;a[i]=a[p];i=p;}a[i]=item;}\n pop(){const a=this.a,top=a[0],last=a.pop();if(!a.length)return top;let i=0;while(i*2+1<a.length){let c=i*2+1;if(c+1<a.length&&a[c+1][0]<a[c][0])c++;if(a[c][0]>=last[0])break;a[i]=a[c];i=c;}a[i]=last;return top;}\n get size(){return this.a.length;}\n}\nfunction solve(input){\n const t=input.trim().split(/\\s+/).map(Number);let p=0;const n=t[p++],m=t[p++],s=t[p++]-1,g=Array.from({length:n},()=>[]);\n for(let i=0;i<m;i++){const u=t[p++]-1,v=t[p++]-1,w=t[p++];g[u].push([v,w]);}\n const dist=new Array(n).fill(Infinity),heap=new MinHeap();dist[s]=0;heap.push([0,s]);\n while(heap.size){const [d,u]=heap.pop();if(d!==dist[u])continue;for(const [v,w]of g[u])if(d+w<dist[v]){dist[v]=d+w;heap.push([dist[v],v]);}}\n return dist.map(d=>Number.isFinite(d)?d:-1).join(' ');\n}",
+    "complexity": "O((n+m) log(m+1)) 时间，O(n+m) 空间。",
+    "analysis": "非负边保证当前最小暂定距离可确定。使用小根堆避免每次 O(n) 找最小点；更新距离后入新堆项，取出时跳过过期项。负权图不满足证明前提，不能直接套本题。",
+    "hints": [
+      "有向边只添加 u→v。",
+      "松弛：dist[v] > dist[u]+w。",
+      "用 d!==dist[u] 跳过旧堆项。"
+    ]
+  },
+  {
+    "id": "acm-mst",
+    "lessonId": "algo-graph-heap",
+    "title": "最低成本连通所有机房",
+    "difficulty": "进阶",
+    "prompt": "有 n 个机房和 m 条可建设的无向线路，每条有成本。选择若干线路使所有机房互相连通且总成本最小；不可能连通输出 -1。允许重边和自环。",
+    "inputFormat": "第一行 n m；接下来 m 行 u v w。",
+    "outputFormat": "输出最小总成本或 -1。",
+    "constraints": "1 ≤ n ≤ 50000；0 ≤ m ≤ 100000；0 ≤ w ≤ 10^9。",
+    "samples": [
+      {
+        "input": "4 5\n1 2 3\n2 3 1\n3 4 2\n1 4 10\n1 3 5\n",
+        "output": "6",
+        "explanation": "选 2–3、3–4、1–2 三条，共 1+2+3=6；不是分别从 1 到每点最短路径的总和。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "4 5\n1 2 3\n2 3 1\n3 4 2\n1 4 10\n1 3 5\n",
+        "output": "6"
+      },
+      {
+        "name": "不连通",
+        "input": "3 1\n1 2 1\n",
+        "output": "-1"
+      },
+      {
+        "name": "单点",
+        "input": "1 0\n",
+        "output": "0"
+      },
+      {
+        "name": "重边",
+        "input": "2 3\n1 1 0\n1 2 9\n1 2 2\n",
+        "output": "2"
+      }
+    ],
+    "solution": "function solve(input){\n const t=input.trim().split(/\\s+/).map(Number);let p=0;const n=t[p++],m=t[p++],edges=[];\n for(let i=0;i<m;i++)edges.push([t[p++]-1,t[p++]-1,t[p++]]);\n edges.sort((a,b)=>a[2]-b[2]);const parent=Array.from({length:n},(_,i)=>i),size=new Array(n).fill(1);\n function find(x){while(parent[x]!==x){parent[x]=parent[parent[x]];x=parent[x];}return x;}\n let count=0,total=0;for(const [u,v,w]of edges){let a=find(u),b=find(v);if(a===b)continue;if(size[a]<size[b])[a,b]=[b,a];parent[b]=a;size[a]+=size[b];count++;total+=w;}\n return String(count===n-1?total:-1);\n}",
+    "complexity": "O(m log m+n) 时间，O(n+m) 空间。",
+    "analysis": "Kruskal 按边权从小到大尝试，连接不同分量的边加入，否则形成环而跳过。割性质支持安全选择。n 个点连通需 n-1 条有效边；自环永不帮助连接，重边可正常参与排序。",
+    "hints": [
+      "先辨别最小生成树与最短路的目标不同。",
+      "用并查集判断是否形成环。",
+      "最后必须检查有效边是否 n-1。"
+    ]
+  },
+  {
+    "id": "acm-fenwick",
+    "lessonId": "algo-window-invariants",
+    "title": "账单修改与区间查询",
+    "difficulty": "进阶",
+    "prompt": "有 n 个账户初值，随后在线处理操作：A i delta 将第 i 项增加 delta；S l r 查询当前闭区间 [l,r] 的总和。修改立即影响后续查询，不是把第 i 项设置为 delta。",
+    "inputFormat": "第一行 n q；第二行 n 个初值；随后 q 行 A i delta 或 S l r。",
+    "outputFormat": "每条 S 输出一行整数。",
+    "constraints": "1 ≤ n,q ≤ 100000；初值、delta 绝对值 ≤ 10^6；1 ≤ l ≤ r ≤ n。",
+    "samples": [
+      {
+        "input": "4 4\n1 2 3 4\nS 1 4\nA 2 -5\nS 1 2\nS 2 4\n",
+        "output": "10\n-2\n4",
+        "explanation": "修改后数组为 [1,-3,3,4]，所以前两项和 -2，后三项和 4。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "4 4\n1 2 3 4\nS 1 4\nA 2 -5\nS 1 2\nS 2 4\n",
+        "output": "10\n-2\n4"
+      },
+      {
+        "name": "单点重复改",
+        "input": "1 3\n5\nA 1 2\nA 1 -1\nS 1 1\n",
+        "output": "6"
+      },
+      {
+        "name": "负数",
+        "input": "2 1\n-2 -3\nS 1 2\n",
+        "output": "-5"
+      },
+      {
+        "name": "右端更新",
+        "input": "2 2\n0 0\nA 2 4\nS 2 2\n",
+        "output": "4"
+      }
+    ],
+    "solution": "function solve(input){\n const t=input.trim().split(/\\s+/);let p=0;const n=+t[p++],q=+t[p++],bit=new Array(n+1).fill(0),out=[];\n function add(i,v){for(;i<=n;i+=i&-i)bit[i]+=v;}\n function sum(i){let s=0;for(;i>0;i-=i&-i)s+=bit[i];return s;}\n for(let i=1;i<=n;i++)add(i,+t[p++]);\n for(let k=0;k<q;k++){const op=t[p++],a=+t[p++],b=+t[p++];if(op==='A')add(a,b);else out.push(sum(b)-sum(a-1));}\n return out.join('\\n');\n}",
+    "complexity": "O((n+q) log n) 时间，O(n+q) 空间含输出。",
+    "analysis": "静态前缀和每次更新需 O(n)，树状数组按 lowbit 管理若干区间，单点增加和前缀查询各 O(log n)。下标从 1 开始，i=0 更新会死循环；闭区间和仍用 prefix(r)-prefix(l-1)。",
+    "hints": [
+      "静态前缀和为什么不够？",
+      "lowbit(i)=i&-i，更新往上跳、查询往下跳。",
+      "注意增加与赋值是两种不同操作。"
+    ]
+  },
+  {
+    "id": "acm-kmp",
+    "lessonId": "algo-search-dp",
+    "title": "日志模式的全部匹配位置",
+    "difficulty": "进阶",
+    "prompt": "给定日志文本 text 和模式 pattern，找出 pattern 在 text 中的所有起始位置（从 1 开始），允许重叠。两串仅含小写字母。",
+    "inputFormat": "第一行 text，第二行 pattern，均非空。",
+    "outputFormat": "无匹配输出 -1；否则一行升序输出所有起始位置，空格分隔。",
+    "constraints": "1 ≤ |text| ≤ 200000；1 ≤ |pattern| ≤ 100000。",
+    "samples": [
+      {
+        "input": "aaaaa\naaa\n",
+        "output": "1 2 3",
+        "explanation": "长度 3 的模式可以在位置 1、2、3 开始，匹配可重叠，不能匹配后跳过整个模式。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "aaaaa\naaa\n",
+        "output": "1 2 3"
+      },
+      {
+        "name": "无匹配",
+        "input": "abc\nd\n",
+        "output": "-1"
+      },
+      {
+        "name": "模式更长",
+        "input": "ab\nabc\n",
+        "output": "-1"
+      },
+      {
+        "name": "回退",
+        "input": "abababac\nababac\n",
+        "output": "3"
+      }
+    ],
+    "solution": "function solve(input){\n const [text,pattern]=input.trim().split(/\\s+/),pi=new Int32Array(pattern.length),out=[];\n for(let i=1,j=0;i<pattern.length;i++){while(j>0&&pattern[i]!==pattern[j])j=pi[j-1];if(pattern[i]===pattern[j])j++;pi[i]=j;}\n for(let i=0,j=0;i<text.length;i++){while(j>0&&text[i]!==pattern[j])j=pi[j-1];if(text[i]===pattern[j])j++;if(j===pattern.length){out.push(i-pattern.length+2);j=pi[j-1];}}\n return out.length?out.join(' '):'-1';\n}",
+    "complexity": "O(|text|+|pattern|) 时间，O(|pattern|+匹配数) 空间。",
+    "analysis": "前缀函数 pi[i] 表示到 i 为止的前缀中最长真前后缀长度。失配沿 pi 回退，不回退文本位置；匹配成功后也沿 pi 回退保留重叠。返回下标需从零基 i-m+1 转成一基 i-m+2。",
+    "hints": [
+      "不能暴力截取每个长度 m 的窗口。",
+      "先用 ababaca 手算 pi。",
+      "完整匹配后 j=pi[j-1] 才保留重叠。"
+    ]
+  },
+  {
+    "id": "acm-meeting-rooms",
+    "lessonId": "algo-graph-heap",
+    "title": "同时进行的任务槽位",
+    "difficulty": "基础",
+    "prompt": "每个任务占用半开时间区间 [start,end)，一台机器同一时间只能运行一个任务。所有任务都必须按给定时间运行，求至少需要多少台机器。一个任务结束时间等于另一个开始时间时，可以复用机器。",
+    "inputFormat": "第一行 n；随后 n 行 start end。",
+    "outputFormat": "输出最少机器数。",
+    "constraints": "1 ≤ n ≤ 100000；0 ≤ start < end ≤ 10^9。",
+    "samples": [
+      {
+        "input": "3\n0 10\n5 8\n8 12\n",
+        "output": "2",
+        "explanation": "时间 5 到 8 有两个任务；在 8 时第二个结束、第三个开始，可复用同一台。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "3\n0 10\n5 8\n8 12\n",
+        "output": "2"
+      },
+      {
+        "name": "完全相邻",
+        "input": "3\n1 2\n2 3\n3 4\n",
+        "output": "1"
+      },
+      {
+        "name": "相同开始",
+        "input": "3\n0 1\n0 2\n0 3\n",
+        "output": "3"
+      },
+      {
+        "name": "单个",
+        "input": "1\n0 1\n",
+        "output": "1"
+      }
+    ],
+    "solution": "function solve(input){\n const t=input.trim().split(/\\s+/).map(Number),n=t[0],events=[];for(let i=0;i<n;i++){events.push([t[1+2*i],1],[t[2+2*i],-1]);}\n events.sort((a,b)=>a[0]-b[0]||a[1]-b[1]);let active=0,best=0;for(const [,delta]of events){active+=delta;best=Math.max(best,active);}return String(best);\n}",
+    "complexity": "O(n log n) 时间，O(n) 空间。",
+    "analysis": "扫描线把开始记 +1、结束记 -1，同一时间先处理结束体现半开区间可复用。答案是最大同时活跃数，既是必要下界，也可通过空闲机器复用达到。闭区间版本的同时间规则不同。",
+    "hints": [
+      "求最大重叠数量，不是最多选择几个不冲突任务。",
+      "排序事件时同时间 -1 在 +1 前。",
+      "用完全相邻区间检查边界。"
+    ]
+  },
+  {
+    "id": "acm-capacity",
+    "lessonId": "algo-search-dp",
+    "title": "按顺序运输的最小载重",
+    "difficulty": "进阶",
+    "prompt": "有 n 个包裹，必须按给定顺序装运。每天装连续的一段，不能拆包裹，最多使用 D 天，求每天相同运力的最小整数载重。允许提前完成或某天不用。",
+    "inputFormat": "第一行 n D；第二行 n 个正整数重量。",
+    "outputFormat": "输出最小载重。",
+    "constraints": "1 ≤ D ≤ n ≤ 100000；1 ≤ wi ≤ 10^6。",
+    "samples": [
+      {
+        "input": "5 3\n1 2 3 4 5\n",
+        "output": "6",
+        "explanation": "可分 [1,2,3]、[4]、[5]，载重 6；载重 5 时至少需要 4 天。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "5 3\n1 2 3 4 5\n",
+        "output": "6"
+      },
+      {
+        "name": "一天",
+        "input": "3 1\n2 3 4\n",
+        "output": "9"
+      },
+      {
+        "name": "每天一个",
+        "input": "3 3\n2 3 4\n",
+        "output": "4"
+      },
+      {
+        "name": "单件",
+        "input": "1 1\n7\n",
+        "output": "7"
+      }
+    ],
+    "solution": "function solve(input){\n const t=input.trim().split(/\\s+/).map(Number),n=t[0],D=t[1],a=t.slice(2);let lo=0,hi=0;for(const w of a){lo=Math.max(lo,w);hi+=w;}\n function feasible(cap){let days=1,load=0;for(const w of a){if(load+w>cap){days++;load=0;}load+=w;}return days<=D;}\n while(lo<hi){const mid=lo+Math.floor((hi-lo)/2);if(feasible(mid))hi=mid;else lo=mid+1;}return String(lo);\n}",
+    "complexity": "O(n log(sum(w)-max(w)+1)) 时间，O(n) 空间。",
+    "analysis": "容量越大，需要天数不会更多，形成单调判定。给定容量按顺序尽量装满可最小化使用天数；二分第一个可行容量，下界最大单件、上界总重量。不能按重量重排，题目要求原顺序。",
+    "hints": [
+      "先回答给定载重是否能完成。",
+      "载重可行性单调，二分答案。",
+      "总重量可能超过 32 位，不能用位移取中点。"
+    ]
+  },
+  {
+    "id": "acm-dag-paths",
+    "lessonId": "algo-graph-heap",
+    "title": "有向无环依赖中的路径数量",
+    "difficulty": "进阶",
+    "prompt": "给定一张保证无环的有向图，求从 1 到 n 的不同路径数，对 1000000007 取模。无重边，无法到达时为 0。n=1 时空路径计为 1。",
+    "inputFormat": "第一行 n m；随后 m 行 u v 表示 u→v。",
+    "outputFormat": "输出一个整数。",
+    "constraints": "1 ≤ n ≤ 100000；0 ≤ m ≤ 200000；保证是 DAG。",
+    "samples": [
+      {
+        "input": "4 4\n1 2\n1 3\n2 4\n3 4\n",
+        "output": "2",
+        "explanation": "两条路径分别为 1→2→4 和 1→3→4，不是最短路条数。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "4 4\n1 2\n1 3\n2 4\n3 4\n",
+        "output": "2"
+      },
+      {
+        "name": "无路径",
+        "input": "3 1\n2 3\n",
+        "output": "0"
+      },
+      {
+        "name": "空路径",
+        "input": "1 0\n",
+        "output": "1"
+      },
+      {
+        "name": "跨边",
+        "input": "3 3\n1 2\n2 3\n1 3\n",
+        "output": "2"
+      }
+    ],
+    "solution": "function solve(input){\n const t=input.trim().split(/\\s+/).map(Number);let p=0;const n=t[p++],m=t[p++],g=Array.from({length:n},()=>[]),indeg=new Int32Array(n),dp=new Array(n).fill(0),q=[];\n for(let i=0;i<m;i++){const u=t[p++]-1,v=t[p++]-1;g[u].push(v);indeg[v]++;}dp[0]=1;\n for(let i=0;i<n;i++)if(!indeg[i])q.push(i);\n for(let h=0;h<q.length;h++){const u=q[h];for(const v of g[u]){dp[v]=(dp[v]+dp[u])%1000000007;if(--indeg[v]===0)q.push(v);}}\n return String(dp[n-1]);\n}",
+    "complexity": "O(n+m) 时间与空间。",
+    "analysis": "拓扑序保证处理 u 时其所有前驱已完成。dp[v] 累加 dp[u]，每次加法立即取模，值小于 2×模数避免精度问题。先拓扑再传播，与在一般有环图中数路径不同，后者可能有无限多走法。",
+    "hints": [
+      "路径数初始只有 dp[1]=1。",
+      "对整图拓扑，入度为 0 的非起点仍需处理。",
+      "每次加法取模，不等全累积后再取。"
+    ]
+  },
+  {
+    "id": "acm-tree-diameter",
+    "lessonId": "algo-graph-heap",
+    "title": "通信树的最长距离",
+    "difficulty": "进阶",
+    "prompt": "n 台设备用 n-1 条无向边连接成一棵树，每条边长度 1。求任意两点之间最长的最短路径长度，即树的直径，按边数计。",
+    "inputFormat": "第一行 n；随后 n-1 行 u v。",
+    "outputFormat": "输出一个整数；n=1 输出 0。",
+    "constraints": "1 ≤ n ≤ 200000；输入保证为树。",
+    "samples": [
+      {
+        "input": "5\n1 2\n2 3\n2 4\n4 5\n",
+        "output": "3",
+        "explanation": "最长可走 3→2→4→5，共 3 条边；按点数计会错误输出 4。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "5\n1 2\n2 3\n2 4\n4 5\n",
+        "output": "3"
+      },
+      {
+        "name": "单点",
+        "input": "1\n",
+        "output": "0"
+      },
+      {
+        "name": "链",
+        "input": "4\n1 2\n2 3\n3 4\n",
+        "output": "3"
+      },
+      {
+        "name": "星形",
+        "input": "4\n1 2\n1 3\n1 4\n",
+        "output": "2"
+      }
+    ],
+    "solution": "function solve(input){\n const t=input.trim().split(/\\s+/).map(Number);let p=0;const n=t[p++],g=Array.from({length:n},()=>[]);\n for(let i=0;i<n-1;i++){const u=t[p++]-1,v=t[p++]-1;g[u].push(v);g[v].push(u);}\n function farthest(s){const d=new Int32Array(n).fill(-1),q=[s];d[s]=0;let best=s;for(let h=0;h<q.length;h++){const u=q[h];if(d[u]>d[best])best=u;for(const v of g[u])if(d[v]===-1){d[v]=d[u]+1;q.push(v);}}return [best,d[best]];}\n return String(farthest(farthest(0)[0])[1]);\n}",
+    "complexity": "O(n) 时间与空间。",
+    "analysis": "树上任意两点有唯一简单路径，从任意点找最远端点，再从该端点找最远距离得到直径。这个两次搜索结论依赖树结构，不能直接套一般图。用迭代 BFS 避免长链递归爆栈。",
+    "hints": [
+      "区分边数和点数。",
+      "第一次找直径的一端，第二次找长度。",
+      "输入到 20 万点，避免深递归。"
+    ]
+  },
+  {
+    "id": "acm-tsp",
+    "lessonId": "algo-search-dp",
+    "title": "小规模巡检的最短闭环",
+    "difficulty": "挑战",
+    "prompt": "有 n 个站点和完整有向费用矩阵。从站点 1 出发，恰好访问其他每个站点一次，再返回 1，求最小总费用。费用不必满足对称或三角不等式；n=1 费用为 0。",
+    "inputFormat": "第一行 n；接下来 n 行每行 n 个整数 cij，对角为 0。",
+    "outputFormat": "输出最小总费用。",
+    "constraints": "1 ≤ n ≤ 15；0 ≤ cij ≤ 10^6。",
+    "samples": [
+      {
+        "input": "3\n0 2 9\n4 0 3\n1 6 0\n",
+        "output": "6",
+        "explanation": "走 1→2→3→1，费用 2+3+1=6；顺序不能贪心选每步最便宜并忘记回程。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "3\n0 2 9\n4 0 3\n1 6 0\n",
+        "output": "6"
+      },
+      {
+        "name": "单点",
+        "input": "1\n0\n",
+        "output": "0"
+      },
+      {
+        "name": "非对称",
+        "input": "2\n0 7\n2 0\n",
+        "output": "9"
+      },
+      {
+        "name": "等权",
+        "input": "3\n0 1 1\n1 0 1\n1 1 0\n",
+        "output": "3"
+      }
+    ],
+    "solution": "function solve(input){\n const t=input.trim().split(/\\s+/).map(Number),n=t[0];if(n===1)return '0';const a=t.slice(1),states=1<<n,dp=new Float64Array(states*n).fill(Infinity);dp[n]=0;\n for(let mask=1;mask<states;mask+=2)for(let u=0;u<n;u++){const current=dp[mask*n+u];if(!Number.isFinite(current))continue;for(let v=1;v<n;v++)if(!(mask&(1<<v))){const next=(mask|(1<<v))*n+v;dp[next]=Math.min(dp[next],current+a[u*n+v]);}}\n let best=Infinity;for(let u=1;u<n;u++)best=Math.min(best,dp[(states-1)*n+u]+a[u*n]);return String(best);\n}",
+    "complexity": "O(2^n n²) 时间，O(2^n n) 空间。",
+    "analysis": "dp[mask][u] 表示从 1 出发访问集合 mask、末尾在 u 的最小费用。初态 mask=1,u=0；向未访问点转移，最后加回到 1 的费用。把过去压成集合与末尾足以决定未来，这是状态压缩成立的原因；n 大时指数复杂度不可扩展。",
+    "hints": [
+      "排列枚举是 n!，先识别重复子问题。",
+      "状态必须同时含访问集合和末尾点。",
+      "最终别漏回程，位运算仅在本题小 n 范围内使用。"
+    ]
+  },
+  {
+    "id": "acm-fast-fibonacci",
+    "lessonId": "algo-search-dp",
+    "title": "超大编号的递推计数",
+    "difficulty": "挑战",
+    "prompt": "定义 F0=0、F1=1、Fn=F(n-1)+F(n-2)。给一个很大的非负整数 n，求 Fn 对 1000000007 的余数。n 以十进制字符串输入，不能先转换成 Number 导致精度丢失。",
+    "inputFormat": "一行整数 n。",
+    "outputFormat": "输出一个十进制整数，不带 n 后缀。",
+    "constraints": "0 ≤ n ≤ 10^18。",
+    "samples": [
+      {
+        "input": "10\n",
+        "output": "55",
+        "explanation": "F10=55。该输入范围不适合逐项循环到 n，需要对数时间。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "10\n",
+        "output": "55"
+      },
+      {
+        "name": "零",
+        "input": "0\n",
+        "output": "0"
+      },
+      {
+        "name": "一",
+        "input": "1\n",
+        "output": "1"
+      },
+      {
+        "name": "取模",
+        "input": "50\n",
+        "output": "586268941"
+      }
+    ],
+    "solution": "function solve(input){\n const n=BigInt(input.trim()),mod=1000000007n;\n function fib(k){if(k===0n)return [0n,1n];const [a,b]=fib(k/2n),c=a*((2n*b-a+mod)%mod)%mod,d=(a*a+b*b)%mod;return k%2n?[d,(c+d)%mod]:[c,d];}\n return fib(n)[0].toString();\n}",
+    "complexity": "O(log n) 次模运算，O(log n) 递归栈；这里整数位数有界。",
+    "analysis": "快速倍增同时求 (Fk,F(k+1))：F(2k)=Fk(2F(k+1)-Fk)，F(2k+1)=Fk²+F(k+1)²。乘积可超过 Number 安全范围，所以使用 BigInt，并修正减法模数。返回字符串避免输出 BigInt 的调试后缀。",
+    "hints": [
+      "先确认 n 超过 Number 安全整数。",
+      "同时返回相邻两项，按奇偶组合。",
+      "取模乘法也要用 BigInt，最后转字符串。"
+    ]
+  }
+]

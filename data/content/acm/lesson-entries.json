@@ -1,0 +1,349 @@
+[
+  {
+    "id": "algo-solving-basics",
+    "title": "算法起步：读懂题意、输入规模和验证边界",
+    "keywords": [
+      "ACM",
+      "复杂度",
+      "边界",
+      "暴力对照",
+      "输入输出"
+    ],
+    "code": "const input=\"3 2\\n10 -1 4\\n1 2\\n2 3\";\nconst tokens=input.trim().split(/\\s+/).map(Number);\nconst n=tokens[0],q=tokens[1],values=tokens.slice(2,2+n);\nconsole.log({n,q,values});\nconsole.log(values.reduce((sum,value)=>sum+value,0));",
+    "logs": [
+      "{\"n\":3,\"q\":2,\"values\":[10,-1,4]}",
+      "13"
+    ],
+    "questions": [
+      {
+        "prompt": "一个最大子数组程序在全正数组都正确，输入 [-5,-2,-7] 却返回 0，你如何定位而不是继续随机调代码？",
+        "answer": "先核对非空约束，0 可能来自把全局最优或当前结尾初始化成空区间。用单元素负数缩小反例，再对照枚举所有非空区间的基线。把状态和初始化修正为首元素，加入全负、单点、零值回归。",
+        "rubric": [
+          "非空契约",
+          "最小反例",
+          "初始化"
+        ]
+      },
+      {
+        "prompt": "双层循环的代码是否必然 O(n²)，你怎样分析两指针窗口的总工作量？",
+        "answer": "看总执行次数而非语法层数。若 left 与 right 都只向前且各最多走 n 次，则内部收缩的总次数有线性上界；若每轮又从头扫描或复制整个窗口，代价可能恢复到平方。分别计算推进、容器操作与输出成本。",
+        "rubric": [
+          "摊还计数",
+          "单调推进",
+          "隐藏复制成本"
+        ]
+      }
+    ],
+    "fill": {
+      "prompt": "补全闭区间求和函数，题目 l、r 从 1 开始。",
+      "signature": "function rangeSum(a, l, r)",
+      "starter": "function rangeSum(a, l, r) {\n  // 只累加 [l,r]，不能累加整数组。\n}",
+      "solution": "function rangeSum(a,l,r){let total=0;for(let i=l-1;i<r;i++)total+=a[i];return total;}",
+      "tests": [
+        [
+          "单点",
+          "equal(fn([2,-1,4],2,2),-1);"
+        ],
+        [
+          "整段",
+          "equal(fn([2,-1,4],1,3),5);"
+        ],
+        [
+          "中间段",
+          "equal(fn([1,2,3,4],2,3),5);"
+        ]
+      ],
+      "hint": "题目 1-based 闭区间对应数组索引 l-1 到 r-1。"
+    }
+  },
+  {
+    "id": "algo-sorting-foundations",
+    "title": "排序入门：比较器、稳定性与有序合并",
+    "keywords": [
+      "排序",
+      "稳定性",
+      "比较器",
+      "插入排序",
+      "归并"
+    ],
+    "code": "function insertion(rows){const a=rows.map(row=>({...row}));for(let i=1;i<a.length;i++){const current=a[i];let j=i-1;while(j>=0&&a[j].score>current.score){a[j+1]=a[j];j--;}a[j+1]=current;}return a;}\nconst rows=[{score:2,name:'A'},{score:1,name:'B'},{score:2,name:'C'}];\nconsole.log(insertion(rows).map(row=>row.name));\nconsole.log([10,2,1].sort());\nconsole.log([10,2,1].sort((a,b)=>a-b));",
+    "logs": [
+      "[\"B\",\"A\",\"C\"]",
+      "[1,10,2]",
+      "[1,2,10]"
+    ],
+    "questions": [
+      {
+        "prompt": "成绩排序中“相同分数按姓名排”与“相同分数保持报名顺序”是同一要求吗？",
+        "answer": "不是。前者引入姓名作为次关键字，后者要求保留输入序，即稳定性。构造同分且姓名逆字典序的两条记录区分，按输入下标作为次关键字可显式实现稳定业务规则。测试还应确认记录没有丢失或重复。",
+        "rubric": [
+          "稳定定义",
+          "反例区分",
+          "输入位置"
+        ]
+      },
+      {
+        "prompt": "两份十万项的名单都已排序，为何可以不用再做一遍完整排序？",
+        "answer": "最小未输出项必定位于两个头部之一，比较后取小者，每个指针最多推进各自长度。总 O(n+m)，一方结束后接余项。输出需要保留重复值，相等时的取值顺序应与稳定性约定一致。",
+        "rubric": [
+          "有序信息",
+          "双指针",
+          "重复保留"
+        ]
+      }
+    ],
+    "fill": {
+      "prompt": "合并两份非递减数组，保留重复值，不修改输入。",
+      "signature": "function merge(a, b)",
+      "starter": "function merge(a,b){\n  // 使用两个头指针。\n}",
+      "solution": "function merge(a,b){const out=[];let i=0,j=0;while(i<a.length&&j<b.length)out.push(a[i]<=b[j]?a[i++]:b[j++]);return out.concat(a.slice(i),b.slice(j));}",
+      "tests": [
+        [
+          "交错",
+          "equal(fn([1,3],[2,4]),[1,2,3,4]);"
+        ],
+        [
+          "重复",
+          "equal(fn([1],[1]),[1,1]);"
+        ],
+        [
+          "空边",
+          "equal(fn([],[2]),[2]);"
+        ]
+      ],
+      "hint": "一方耗尽后不要漏掉另一方的尾部。"
+    }
+  },
+  {
+    "id": "algo-sorting-divide",
+    "title": "排序进阶：分治、逆序对与第 K 项",
+    "keywords": [
+      "分治",
+      "逆序对",
+      "Quickselect",
+      "三路划分",
+      "复杂度"
+    ],
+    "code": "function inversions(a){let count=0;const pairs=[];for(let i=0;i<a.length;i++)for(let j=i+1;j<a.length;j++)if(a[i]>a[j]){count++;pairs.push([a[i],a[j]]);}return {count,pairs};}\nconsole.log(inversions([2,4,1,3,5]));\nconsole.log(200000*199999/2);\nconsole.log('3'+'30' > '30'+'3');",
+    "logs": [
+      "{\"count\":3,\"pairs\":[[2,1],[4,1],[4,3]]}",
+      "19999900000",
+      "true"
+    ],
+    "questions": [
+      {
+        "prompt": "逆序对归并时，把左值等于右值的情况也加到答案，会产生哪种错误？",
+        "answer": "题目只统计严格大于，相等不构成逆序。左右都含 2 时应先取左项并不增加计数，否则同值跨段会被误计。用 [2,2,1] 核对答案 2，再用全相同数组确认是 0。",
+        "rubric": [
+          "严格关系",
+          "合并边界",
+          "重复反例"
+        ]
+      },
+      {
+        "prompt": "第 K 小的三路划分后等值段覆盖目标，为什么可以不继续递归？",
+        "answer": "小于 pivot 的元素已全部在左边，大于者在右边，等值段任意位置的值都为 pivot。若 k 落在这段，其排名对应值已确定；只在 k 落到左右段时继续，并确保区间严格缩小。",
+        "rubric": [
+          "分区不变量",
+          "排名定位",
+          "严格缩小"
+        ]
+      }
+    ],
+    "fill": {
+      "prompt": "用独立暴力法统计严格逆序对，供小数据对照。",
+      "signature": "function countPairs(a)",
+      "starter": "function countPairs(a){\n  // 枚举 i<j。\n}",
+      "solution": "function countPairs(a){let n=0;for(let i=0;i<a.length;i++)for(let j=i+1;j<a.length;j++)if(a[i]>a[j])n++;return n;}",
+      "tests": [
+        [
+          "严格",
+          "equal(fn([2,2,1]),2);"
+        ],
+        [
+          "同值",
+          "equal(fn([4,4]),0);"
+        ],
+        [
+          "逆序",
+          "equal(fn([3,2,1]),3);"
+        ]
+      ],
+      "hint": "必须同时满足 i<j 与 a[i]>a[j]。"
+    }
+  },
+  {
+    "id": "algo-greedy-foundations",
+    "title": "贪心入门：局部选择、交换论证和反例",
+    "keywords": [
+      "贪心",
+      "交换论证",
+      "区间",
+      "双指针",
+      "最优性"
+    ],
+    "code": "const meetings=[[0,10],[1,2],[2,3],[3,4]];\nconst ordered=[...meetings].sort((a,b)=>a[1]-b[1]);\nconst chosen=[];let end=-Infinity;\nfor(const [start,finish]of ordered)if(start>=end){chosen.push([start,finish]);end=finish;}\nconsole.log(chosen);\nconsole.log(chosen.length);\nconsole.log({greedyCoins:[4,1,1],betterCoins:[3,3]});",
+    "logs": [
+      "[[1,2],[2,3],[3,4]]",
+      "3",
+      "{\"greedyCoins\":[4,1,1],\"betterCoins\":[3,3]}"
+    ],
+    "questions": [
+      {
+        "prompt": "无权会议按最早结束选正确，给会议加收益后为什么不一定成立？",
+        "answer": "交换第一场不再保证收益不下降：短早结束会议可能收益 1，覆盖它的长会议可能收益 100。场数目标的交换证明只保数量，不保收益；可改成带权区间调度 DP，比较跳过与选取后的兼容前缀收益。",
+        "rubric": [
+          "目标变化",
+          "交换前提",
+          "带权 DP"
+        ]
+      },
+      {
+        "prompt": "救生艇每船最多两人时的双指针证明，改成最多三人能直接用吗？",
+        "answer": "不能。两人时最重者最多只有一个同伴，最轻者是否可配即可决定关键分支；三人时同伴组合会影响总装载与后续安排，原交换论证不足。应构造小规模反例、明确新问题约束并重新选算法。",
+        "rubric": [
+          "容量前提",
+          "组合影响",
+          "重做证明"
+        ]
+      }
+    ],
+    "fill": {
+      "prompt": "按半开区间安排最多场会议，结束相等允许接下一场。",
+      "signature": "function meetings(a)",
+      "starter": "function meetings(a){\n  // 复制后按结束时间排序。\n}",
+      "solution": "function meetings(a){let end=-Infinity,n=0;for(const[s,e]of [...a].sort((x,y)=>x[1]-y[1]))if(s>=end){n++;end=e;}return n;}",
+      "tests": [
+        [
+          "长会议反例",
+          "equal(fn([[0,10],[1,2],[2,3]]),2);"
+        ],
+        [
+          "可交接",
+          "equal(fn([[0,1],[1,2]]),2);"
+        ],
+        [
+          "冲突",
+          "equal(fn([[0,3],[1,3]]),1);"
+        ]
+      ],
+      "hint": "当前选中的结束时间只在真正接受会议时更新。"
+    }
+  },
+  {
+    "id": "algo-dp-foundations",
+    "title": "动态规划起步：状态、转移、初始化和手推表",
+    "keywords": [
+      "动态规划",
+      "状态",
+      "转移",
+      "初始化",
+      "滚动数组"
+    ],
+    "code": "const values=[2,7,9,3,1],dp=[0];\nfor(let i=0;i<values.length;i++)dp[i+1]=Math.max(dp[i],(i?dp[i-1]:0)+values[i]);\nconsole.log(dp);\nconsole.log(dp.at(-1));\nconst negatives=[-5,-2,-7];let ending=negatives[0],best=ending;\nfor(const value of negatives.slice(1)){ending=Math.max(value,ending+value);best=Math.max(best,ending);}\nconsole.log(best);",
+    "logs": [
+      "[0,2,7,11,11,12]",
+      "12",
+      "-2"
+    ],
+    "questions": [
+      {
+        "prompt": "“前 i 项最优收益”和“必须以第 i 项结尾的最优连续和”能共用同一个转移吗？",
+        "answer": "不能。前缀最优可以不取当前项，结尾状态必须包含当前元素且维持连续。最大子数组应比较当前元素与旧结尾加当前值，再另设全局最优；混用会把不连续片段拼起来或错误返回空区间。",
+        "rubric": [
+          "状态约束",
+          "连续性",
+          "全局与结尾"
+        ]
+      },
+      {
+        "prompt": "DP 的样例都过了，但空目标计数返回 0、全负最大和返回 0，应该先检查哪里？",
+        "answer": "先检查初始化与题意。空组合可能应计 1，而非空最大和不允许空选，应以首项或不可达状态初始化。逐项推一个最小反例，再验证转移需要的基例，不应先靠加 if 特判掩盖不一致状态定义。",
+        "rubric": [
+          "基例含义",
+          "非空条件",
+          "最小手推"
+        ]
+      }
+    ],
+    "fill": {
+      "prompt": "求非负收益数组不选相邻项的最大和，允许空选。",
+      "signature": "function rob(a)",
+      "starter": "function rob(a){\n  // 先计算当前值，再更新前两项状态。\n}",
+      "solution": "function rob(a){let a2=0,a1=0;for(const x of a){const cur=Math.max(a1,a2+x);a2=a1;a1=cur;}return a1;}",
+      "tests": [
+        [
+          "典型",
+          "equal(fn([2,7,9,3,1]),12);"
+        ],
+        [
+          "空",
+          "equal(fn([]),0);"
+        ],
+        [
+          "隔位",
+          "equal(fn([2,1,2]),4);"
+        ]
+      ],
+      "hint": "选当前值只能接前两项最优，不能接前一项。"
+    }
+  },
+  {
+    "id": "algo-dp-knapsack",
+    "title": "动态规划进阶：背包循环、序列与区间依赖",
+    "keywords": [
+      "0/1 背包",
+      "完全背包",
+      "组合计数",
+      "区间 DP",
+      "序列"
+    ],
+    "code": "function pack(descending){const dp=Array(5).fill(0);if(descending){for(let c=4;c>=2;c--)dp[c]=Math.max(dp[c],dp[c-2]+3);}else{for(let c=2;c<=4;c++)dp[c]=Math.max(dp[c],dp[c-2]+3);}return dp;}\nconsole.log(pack(true));\nconsole.log(pack(false));\nconst coins=[1,2],dp=[1,0,0,0];for(const c of coins)for(let s=c;s<=3;s++)dp[s]+=dp[s-c];\nconsole.log(dp[3]);",
+    "logs": [
+      "[0,0,3,3,3]",
+      "[0,0,3,3,6]",
+      "2"
+    ],
+    "questions": [
+      {
+        "prompt": "一维 0/1 背包为什么要容量逆序，这和代码是否“更快”有关吗？",
+        "answer": "方向决定读取的是上一轮还是当前轮，关系是语义而不是常数优化。逆序保证当前物品未重复使用；正序会把刚更新的小容量结果再次利用。用一项重量 2、价值 3、容量 4 说明正确值 3 与错误值 6。",
+        "rubric": [
+          "轮次语义",
+          "重复使用",
+          "最小反例"
+        ]
+      },
+      {
+        "prompt": "面额 [1,2] 凑 3，为什么两份 DP 分别输出 2 和 3，哪份一定错？",
+        "answer": "先看题目是组合还是排列。忽略顺序时为两个组合，区分先后时有三条序列；两者转移枚举与循环顺序不同。不能只看一个数字判断正确，要确认状态计数对象、空方案基例以及每个解是否重复计算。",
+        "rubric": [
+          "组合与排列",
+          "循环对象",
+          "计数去重"
+        ]
+      }
+    ],
+    "fill": {
+      "prompt": "不同正面额无限使用，求不计顺序的组合数量；本练习输入很小无需取模。",
+      "signature": "function combinations(coins, amount)",
+      "starter": "function combinations(coins,amount){\n  // 面额外层，金额正序。\n}",
+      "solution": "function combinations(coins,amount){const dp=Array(amount+1).fill(0);dp[0]=1;for(const c of coins)for(let s=c;s<=amount;s++)dp[s]+=dp[s-c];return dp[amount];}",
+      "tests": [
+        [
+          "顺序不重复",
+          "equal(fn([1,2],3),2);"
+        ],
+        [
+          "空目标",
+          "equal(fn([2],0),1);"
+        ],
+        [
+          "不可达",
+          "equal(fn([2],3),0);"
+        ]
+      ],
+      "hint": "外层按面额推进，避免把不同顺序重复计为组合。"
+    }
+  }
+]

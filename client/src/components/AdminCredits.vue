@@ -1,10 +1,11 @@
 <script setup>
-import { ref, watch, onMounted, nextTick } from "vue";
+import { ref, watch, onMounted } from "vue";
 import { request, toast, dateLabel } from "../store.js";
 import { refreshAi } from "../ai.js";
 import AppField from "./AppField.vue";
 import AppSelect from "./AppSelect.vue";
 import AppDisclosure from "./AppDisclosure.vue";
+import AppDialog from "./AppDialog.vue";
 const users = ref([]),
   query = ref(""),
   selected = ref(""),
@@ -68,10 +69,6 @@ async function loadDetail() {
 async function select(user) {
   selected.value = user.id;
   await act(loadDetail);
-  await nextTick();
-  document
-    .querySelector(".ai-credit-admin .ai-detail")
-    ?.scrollIntoView({ block: "start" });
 }
 async function grant() {
   await act(async () => {
@@ -211,230 +208,247 @@ const sourceLabel = {
       </article>
     </div>
     <p v-if="!users.length" class="ai-empty">没有找到匹配用户。</p>
-    <template v-if="detail">
-      <section class="ai-detail">
-        <div class="section-line">
-          <h2>
-            {{
-              users.find((u) => u.id === selected)?.displayName ||
-              users.find((u) => u.id === selected)?.username
-            }}
-            · 权益明细
-          </h2>
-          <button class="text-btn" @click="act(loadDetail)">刷新明细</button>
-        </div>
-        <div class="ai-usage-summary">
-          <article
-            v-for="[key, label] in [
-              ['available', '有效可用'],
-              ['reserved', '预占'],
-              ['consumed', '净消费'],
-              ['expired', '已过期'],
-              ['revoked', '已收回'],
-            ]"
-            :key="key"
-          >
-            <span class="tiny muted">{{ label }}</span
-            ><strong>{{ detail.account[key] }}</strong>
-          </article>
-        </div>
-      </section>
-      <form class="ai-detail ai-admin-form" @submit.prevent="savePolicy">
-        <h2>免费资格与预算</h2>
-        <p class="tiny muted">
-          免费资格免扣个人资源包，仍受频率、并发和预算限制。资格变化只影响新调用；已有资源包按原日期到期。
-        </p>
-        <div class="ai-admin-grid">
-          <label
-            >用户计费模式<AppSelect
-              v-model="mode"
-              label="用户计费模式"
-              :options="[
-                { value: 'paid', label: '普通计费' },
-                { value: 'exempt', label: '免费 · 免扣额度' },
-              ]"
-          /></label>
-          <label v-if="mode === 'exempt'"
-            >免费资格有效期<AppSelect
-              v-model="freeValidity"
-              label="免费资格有效期"
-              :options="[
-                { value: 'days', label: '从保存起指定天数' },
-                { value: 'permanent', label: '永久' },
-              ]"
-          /></label>
-          <label v-if="mode === 'exempt' && freeValidity === 'days'"
-            >免费天数<AppField
-              v-model="freeDays"
-              type="number"
-              min="1"
-              max="3650"
-              required
-          /></label>
-          <label
-            >近 24 小时预算 · 留空继承全站<AppField
-              v-model="dailyBudget"
-              inputmode="decimal"
-              placeholder="例如 1000"
-          /></label>
-          <label class="ai-wide"
-            >资格调整原因<AppField
-              v-model="policyNote"
-              maxlength="300"
-              minlength="3"
-              required
-          /></label>
-        </div>
-        <p v-if="detail.account.policy.freeUntil" class="tiny muted">
-          当前免费资格截止：{{ dateLabel(detail.account.policy.freeUntil)
-          }}{{ detail.account.exempt ? "" : " · 已到期或已关闭" }}
-        </p>
-        <button class="btn primary small" :disabled="busy">保存用户资格</button>
-      </form>
-      <form class="ai-detail ai-admin-form" @submit.prevent="grant">
-        <h2>发放额度</h2>
-        <p class="tiny muted">
-          新注册用户初始额度为
-          0。每次发放生成独立批次；按资源包发放属于人工赠送，不产生支付订单。
-        </p>
-        <div class="ai-admin-grid">
-          <label
-            >发放方式<AppSelect
-              v-model="template"
-              label="资源包发放模板"
-              :options="[
-                { value: '', label: '手动填写额度' },
-                ...products
-                  .filter((p) => p.published)
-                  .map((p) => ({
-                    value: p.published.versionId,
-                    label:
-                      p.published.name +
-                      ' · v' +
-                      p.published.version +
-                      ' · ' +
-                      p.published.credits +
-                      ' + ' +
-                      p.published.bonus +
-                      ' 额度',
-                  })),
-              ]"
-          /></label>
-          <label v-if="!template"
-            >赠送额度<AppField v-model="amount" inputmode="decimal" required
-          /></label>
-          <label
-            >发放来源<AppSelect
-              v-model="source"
-              label="额度发放来源"
-              :options="[
-                { value: 'gift', label: '手动赠送' },
-                { value: 'compensation', label: '人工补偿' },
-              ]"
-          /></label>
-          <label
-            >额度有效期<AppSelect
-              v-model="validity"
-              label="赠送额度有效期"
-              :options="[
-                ...(template
-                  ? [{ value: 'inherit', label: '使用商品版本有效期' }]
-                  : []),
-                { value: 'permanent', label: '永久有效' },
-                { value: 'days', label: '指定有效天数' },
-              ]"
-          /></label>
-          <label v-if="validity === 'days'"
-            >有效天数<AppField
-              v-model="validDays"
-              type="number"
-              min="1"
-              max="3650"
-              required
-          /></label>
-          <label class="ai-wide"
-            >发放原因<AppField
-              v-model="note"
-              maxlength="300"
-              minlength="3"
-              required
-          /></label>
-        </div>
-        <button class="btn primary small" :disabled="busy">确认发放额度</button>
-      </form>
-      <section class="ai-detail">
-        <h2>额度批次</h2>
-        <p v-if="!detail.lots.length" class="ai-empty">还没有额度批次。</p>
-        <div class="ai-record-list">
-          <article
-            v-for="lot in detail.lots"
-            :key="lot.id"
-            class="ai-audit-row"
-          >
-            <strong
-              >{{ lot.title }}
-              <span class="tiny muted">{{
-                sourceLabel[lot.source] || lot.source
-              }}</span></strong
-            >
-            <p class="tiny">
-              可用 {{ lot.available }} · 预占 {{ lot.reserved }} · 已消费
-              {{ lot.consumed }} · 过期 {{ lot.expired }} · 收回
-              {{ lot.revoked }}
-            </p>
-            <p class="tiny muted">
+    <AppDialog
+      :open="!!detail"
+      title="用户资格与额度管理"
+      :busy="busy"
+      :width="920"
+      @close="detail = null"
+    >
+      <p v-if="error" class="ai-error" role="alert">{{ error }}</p>
+      <template v-if="detail">
+        <section class="ai-detail">
+          <div class="section-line">
+            <h2>
               {{
-                lot.expiresAt ? "到期 " + dateLabel(lot.expiresAt) : "永久有效"
+                users.find((u) => u.id === selected)?.displayName ||
+                users.find((u) => u.id === selected)?.username
               }}
-              · 发放 {{ dateLabel(lot.createdAt) }}
-            </p>
-            <AppDisclosure title="查看批次来源与快照">
-              <pre class="ai-json">{{ JSON.stringify(lot.data, null, 2) }}</pre>
-            </AppDisclosure>
-          </article>
-        </div>
-      </section>
-      <form
-        v-if="detail.lots.some((l) => Number(l.available) > 0)"
-        class="ai-detail ai-admin-form"
-        @submit.prevent="revoke"
-      >
-        <h2>收回未使用额度</h2>
-        <p class="tiny muted">
-          仅可收回所选批次的有效可用部分，不能收回预占或已消费的额度。
-        </p>
-        <div class="ai-admin-grid">
-          <label
-            >收回批次<AppSelect
-              v-model="revokeLot"
-              label="收回额度批次"
-              :options="[
-                { value: '', label: '选择批次' },
-                ...detail.lots
-                  .filter((l) => Number(l.available) > 0)
-                  .map((l) => ({
-                    value: l.id,
-                    label: l.title + ' · 可用 ' + l.available,
-                  })),
-              ]" /></label
-          ><label
-            >收回数量<AppField
-              v-model="revokeAmount"
-              inputmode="decimal"
-              required /></label
-          ><label class="ai-wide"
-            >收回原因<AppField
-              v-model="revokeNote"
-              minlength="3"
-              maxlength="300"
-              required
-          /></label>
-        </div>
-        <button class="btn small" :disabled="busy || !revokeLot">
-          确认收回
-        </button>
-      </form>
-    </template>
+              · 权益明细
+            </h2>
+            <button class="text-btn" @click="act(loadDetail)">刷新明细</button>
+          </div>
+          <div class="ai-usage-summary">
+            <article
+              v-for="[key, label] in [
+                ['available', '有效可用'],
+                ['reserved', '预占'],
+                ['consumed', '净消费'],
+                ['expired', '已过期'],
+                ['revoked', '已收回'],
+              ]"
+              :key="key"
+            >
+              <span class="tiny muted">{{ label }}</span
+              ><strong>{{ detail.account[key] }}</strong>
+            </article>
+          </div>
+        </section>
+        <form class="ai-detail ai-admin-form" @submit.prevent="savePolicy">
+          <h2>免费资格与预算</h2>
+          <p class="tiny muted">
+            免费资格免扣个人资源包，仍受频率、并发和预算限制。资格变化只影响新调用；已有资源包按原日期到期。
+          </p>
+          <div class="ai-admin-grid">
+            <label
+              >用户计费模式<AppSelect
+                v-model="mode"
+                label="用户计费模式"
+                :options="[
+                  { value: 'paid', label: '普通计费' },
+                  { value: 'exempt', label: '免费 · 免扣额度' },
+                ]"
+            /></label>
+            <label v-if="mode === 'exempt'"
+              >免费资格有效期<AppSelect
+                v-model="freeValidity"
+                label="免费资格有效期"
+                :options="[
+                  { value: 'days', label: '从保存起指定天数' },
+                  { value: 'permanent', label: '永久' },
+                ]"
+            /></label>
+            <label v-if="mode === 'exempt' && freeValidity === 'days'"
+              >免费天数<AppField
+                v-model="freeDays"
+                type="number"
+                min="1"
+                max="3650"
+                required
+            /></label>
+            <label
+              >近 24 小时预算 · 留空继承全站<AppField
+                v-model="dailyBudget"
+                inputmode="decimal"
+                placeholder="例如 1000"
+            /></label>
+            <label class="ai-wide"
+              >资格调整原因<AppField
+                v-model="policyNote"
+                maxlength="300"
+                minlength="3"
+                required
+            /></label>
+          </div>
+          <p v-if="detail.account.policy.freeUntil" class="tiny muted">
+            当前免费资格截止：{{ dateLabel(detail.account.policy.freeUntil)
+            }}{{ detail.account.exempt ? "" : " · 已到期或已关闭" }}
+          </p>
+          <button class="btn primary small" :disabled="busy">
+            保存用户资格
+          </button>
+        </form>
+        <form class="ai-detail ai-admin-form" @submit.prevent="grant">
+          <h2>发放额度</h2>
+          <p class="tiny muted">
+            新注册用户初始额度为
+            0。每次发放生成独立批次；按资源包发放属于人工赠送，不产生支付订单。
+          </p>
+          <div class="ai-admin-grid">
+            <label
+              >发放方式<AppSelect
+                v-model="template"
+                label="资源包发放模板"
+                :options="[
+                  { value: '', label: '手动填写额度' },
+                  ...products
+                    .filter((p) => p.published)
+                    .map((p) => ({
+                      value: p.published.versionId,
+                      label:
+                        p.published.name +
+                        ' · v' +
+                        p.published.version +
+                        ' · ' +
+                        p.published.credits +
+                        ' + ' +
+                        p.published.bonus +
+                        ' 额度',
+                    })),
+                ]"
+            /></label>
+            <label v-if="!template"
+              >赠送额度<AppField v-model="amount" inputmode="decimal" required
+            /></label>
+            <label
+              >发放来源<AppSelect
+                v-model="source"
+                label="额度发放来源"
+                :options="[
+                  { value: 'gift', label: '手动赠送' },
+                  { value: 'compensation', label: '人工补偿' },
+                ]"
+            /></label>
+            <label
+              >额度有效期<AppSelect
+                v-model="validity"
+                label="赠送额度有效期"
+                :options="[
+                  ...(template
+                    ? [{ value: 'inherit', label: '使用商品版本有效期' }]
+                    : []),
+                  { value: 'permanent', label: '永久有效' },
+                  { value: 'days', label: '指定有效天数' },
+                ]"
+            /></label>
+            <label v-if="validity === 'days'"
+              >有效天数<AppField
+                v-model="validDays"
+                type="number"
+                min="1"
+                max="3650"
+                required
+            /></label>
+            <label class="ai-wide"
+              >发放原因<AppField
+                v-model="note"
+                maxlength="300"
+                minlength="3"
+                required
+            /></label>
+          </div>
+          <button class="btn primary small" :disabled="busy">
+            确认发放额度
+          </button>
+        </form>
+        <section class="ai-detail">
+          <h2>额度批次</h2>
+          <p v-if="!detail.lots.length" class="ai-empty">还没有额度批次。</p>
+          <div class="ai-record-list">
+            <article
+              v-for="lot in detail.lots"
+              :key="lot.id"
+              class="ai-audit-row"
+            >
+              <strong
+                >{{ lot.title }}
+                <span class="tiny muted">{{
+                  sourceLabel[lot.source] || lot.source
+                }}</span></strong
+              >
+              <p class="tiny">
+                可用 {{ lot.available }} · 预占 {{ lot.reserved }} · 已消费
+                {{ lot.consumed }} · 过期 {{ lot.expired }} · 收回
+                {{ lot.revoked }}
+              </p>
+              <p class="tiny muted">
+                {{
+                  lot.expiresAt
+                    ? "到期 " + dateLabel(lot.expiresAt)
+                    : "永久有效"
+                }}
+                · 发放 {{ dateLabel(lot.createdAt) }}
+              </p>
+              <AppDisclosure title="查看批次来源与快照">
+                <pre class="ai-json">{{
+                  JSON.stringify(lot.data, null, 2)
+                }}</pre>
+              </AppDisclosure>
+            </article>
+          </div>
+        </section>
+        <form
+          v-if="detail.lots.some((l) => Number(l.available) > 0)"
+          class="ai-detail ai-admin-form"
+          @submit.prevent="revoke"
+        >
+          <h2>收回未使用额度</h2>
+          <p class="tiny muted">
+            仅可收回所选批次的有效可用部分，不能收回预占或已消费的额度。
+          </p>
+          <div class="ai-admin-grid">
+            <label
+              >收回批次<AppSelect
+                v-model="revokeLot"
+                label="收回额度批次"
+                :options="[
+                  { value: '', label: '选择批次' },
+                  ...detail.lots
+                    .filter((l) => Number(l.available) > 0)
+                    .map((l) => ({
+                      value: l.id,
+                      label: l.title + ' · 可用 ' + l.available,
+                    })),
+                ]" /></label
+            ><label
+              >收回数量<AppField
+                v-model="revokeAmount"
+                inputmode="decimal"
+                required /></label
+            ><label class="ai-wide"
+              >收回原因<AppField
+                v-model="revokeNote"
+                minlength="3"
+                maxlength="300"
+                required
+            /></label>
+          </div>
+          <button class="btn small" :disabled="busy || !revokeLot">
+            确认收回
+          </button>
+        </form>
+      </template>
+    </AppDialog>
   </div>
 </template>
 <style scoped>

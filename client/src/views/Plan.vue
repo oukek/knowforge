@@ -2,34 +2,24 @@
 import AppDatePicker from "../components/AppDatePicker.vue";
 import AppSelect from "../components/AppSelect.vue";
 import { ref, computed } from "vue";
-import {
-  store,
-  lessons,
-  modules,
-  doneCount,
-  mutate,
-  localDay,
-  toast,
-  moduleFor,
-} from "../store";
+import { store, lessons, mutate, localDay, toast, moduleFor } from "../store";
 import Icon from "../components/Icon.vue";
+import TrackPicker from "../components/TrackPicker.vue";
+import { selectedTracks, plannedLessons } from "../../../shared/study-plan.mjs";
 const dailyMinutes = ref(store.state.settings.dailyMinutes || 45),
   planDays = ref(store.state.settings.planDays || 21),
   startDate = ref(store.state.settings.startDate || localDay()),
   selected = ref(0),
-  trackId = ref(store.state.settings.trackId || "all"),
+  trackIds = ref(selectedTracks(store.state.settings, store.catalog.tracks)),
   busy = ref(false);
-const ordered = computed(() => {
-  const track = store.catalog.tracks.find((t) => t.id === trackId.value);
-  const priority = track?.moduleIds ?? modules.value.map((m) => m.id);
-  return lessons.value
-    .filter((l) => priority.includes(l.moduleId))
-    .sort(
-      (a, b) =>
-        priority.indexOf(a.moduleId) - priority.indexOf(b.moduleId) ||
-        a.order - b.order,
-    );
-});
+const ordered = computed(() =>
+  plannedLessons(lessons.value, trackIds.value, store.catalog.tracks),
+);
+const selectedDone = computed(
+  () =>
+    ordered.value.filter((l) => store.state.progress[l.id]?.status === "done")
+      .length,
+);
 const allocation = computed(() => {
   const validStart = /^\d{4}-\d{2}-\d{2}$/.test(startDate.value)
     ? startDate.value
@@ -64,7 +54,6 @@ const current = computed(
 const totalMinutes = computed(() =>
   ordered.value.reduce((s, l) => s + l.estimatedMinutes, 0),
 );
-const capacity = computed(() => dailyMinutes.value * planDays.value);
 const overflow = computed(() => allocation.value.backlog.length > 0);
 async function save() {
   busy.value = true;
@@ -72,7 +61,7 @@ async function save() {
     dailyMinutes: dailyMinutes.value,
     planDays: planDays.value,
     startDate: startDate.value,
-    trackId: trackId.value,
+    trackIds: trackIds.value,
   });
   busy.value = false;
   if (data) toast("学习计划已保存");
@@ -88,25 +77,19 @@ async function save() {
           以知识点和练习产出安排进度。计划是时间估计，真实掌握需要独立检验。
         </p>
       </div>
-      <span class="badge">已完成 {{ doneCount }} / {{ lessons.length }}</span>
+      <span class="badge"
+        >已完成 {{ selectedDone }} / {{ ordered.length }}</span
+      >
     </div>
+    <TrackPicker
+      v-model="trackIds"
+      :tracks="store.catalog.tracks"
+      @update:model-value="selected = 0"
+    />
+    <p v-if="!trackIds.length" class="info-banner">
+      请选择至少一条学习主线，按目标安排内容；资料库仍可自由访问全部专题。
+    </p>
     <section class="plan-settings">
-      <div>
-        <label class="field-label" for="plan-track">学习主线</label
-        ><AppSelect
-          id="plan-track"
-          v-model="trackId"
-          label="学习主线"
-          :options="[
-            { value: 'all', label: '全部专题' },
-            ...store.catalog.tracks.map((track) => ({
-              value: track.id,
-              label: track.title,
-            })),
-          ]"
-          @change="selected = 0"
-        />
-      </div>
       <div>
         <label class="field-label" for="daily-time">每日可用时间</label
         ><AppSelect
@@ -140,7 +123,11 @@ async function save() {
         <label class="field-label" for="start-date">开始日期</label
         ><AppDatePicker id="start-date" v-model="startDate" label="开始日期" />
       </div>
-      <button class="btn primary" @click="save" :disabled="busy || !startDate">
+      <button
+        class="btn primary"
+        @click="save"
+        :disabled="busy || !startDate || !trackIds.length"
+      >
         {{ busy ? "保存中…" : "保存计划" }}
       </button>
     </section>
@@ -246,9 +233,7 @@ async function save() {
         <div class="plan-tip">
           <Icon name="Lightbulb" :size="18" />
           <p>
-            如果时间有限：优先 JS
-            异步、网络安全、小程序机制和你真实项目中的薄弱项。AI
-            和跨端按岗位与简历需要取舍。
+            优先安排目标岗位必需的机制与项目薄弱项。多条主线取并集，不会重复排课；完成记录不会因调整主线而清空。
           </p>
         </div>
       </section>

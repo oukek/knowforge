@@ -12,6 +12,7 @@ import {
   moduleFor,
 } from "../store";
 import Icon from "../components/Icon.vue";
+import { selectedTracks, plannedLessons } from "../../../shared/study-plan.mjs";
 const stats = computed(() => {
   const attempts = store.state.attempts,
     objective = attempts.filter((x) => x.kind === "objective");
@@ -34,17 +35,15 @@ const percent = computed(() =>
   Math.round((doneCount.value / lessons.value.length) * 100),
 );
 const nextLesson = computed(() => {
-  const track = store.catalog.tracks.find(
-    (t) => t.id === store.state.settings.trackId,
-  );
-  const candidates = track
-    ? lessons.value.filter((l) => track.moduleIds.includes(l.moduleId))
+  const trackIds = selectedTracks(store.state.settings, store.catalog.tracks);
+  const candidates = trackIds.length
+    ? plannedLessons(lessons.value, trackIds, store.catalog.tracks)
     : lessons.value;
   return (
     candidates.find((l) => store.state.progress[l.id]?.status === "learning") ||
     candidates.find((l) => store.state.progress[l.id]?.status !== "done") ||
     candidates[0] ||
-    lessons.value[0]
+    (trackIds.length ? null : lessons.value[0])
   );
 });
 const week = computed(() =>
@@ -92,6 +91,30 @@ const recent = computed(() =>
       <RouterLink to="/plan" class="btn"
         ><Icon name="CalendarDays" :size="17" />我的学习计划</RouterLink
       >
+    </div>
+    <div class="info-banner">
+      <Icon name="BookOpenText" :size="20" />
+      <p>
+        新增近期面试专题：<RouterLink
+          to="/learn?collection=interview-engineering"
+          >20 篇深度资料</RouterLink
+        >
+        ·
+        <RouterLink to="/practice?source=friend">22 道朋友面试记录</RouterLink>
+        ·
+        <RouterLink to="/practice?source=inferred">60 道延伸追问</RouterLink> ·
+        <RouterLink to="/labs">ACM 标准输入输出训练</RouterLink>
+      </p>
+    </div>
+    <div class="info-banner">
+      <Icon name="Code" :size="20" />
+      <p>
+        算法从基础练起：<RouterLink to="/learn?collection=algorithm-foundations"
+          >6 节排序、贪心与动态规划入门资料</RouterLink
+        >
+        ·
+        <RouterLink to="/labs">42 道 ACM 题，每题实际验证 29 组数据</RouterLink>
+      </p>
     </div>
     <section class="dashboard-top">
       <div class="study-hero">

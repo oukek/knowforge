@@ -221,6 +221,11 @@ export function createAuth(app, store, { secureCookies } = {}) {
             user.createdAt,
           );
         user = await ensureProfile(store, user);
+        if (action === "register")
+          await store.forUser(user.id).upsert("settings", {
+            key: "planOnboarding",
+            value: JSON.stringify("pending"),
+          });
         issued = await newSession(req, res, user);
         await store.exec("COMMIT");
       } catch (error) {

@@ -36,6 +36,7 @@ const filtered = computed(() =>
   lessons.value
     .filter(
       (l) =>
+        (!route.query.collection || l.collection === route.query.collection) &&
         (!depth.value || l.depth === depth.value) &&
         (!moduleId.value || l.moduleId === moduleId.value) &&
         (!priority.value || l.priority === priority.value) &&
@@ -102,6 +103,31 @@ watch(
       <a :href="apiUrl('/export/handbook')" class="btn"
         ><Icon name="Download" :size="17" />下载完整手册</a
       >
+    </div>
+    <div
+      class="info-banner"
+      v-if="route.query.collection === 'interview-engineering'"
+    >
+      <Icon name="MessagesSquare" :size="20" />
+      <p>
+        近期面试专题：数据库、AI / Agent、SaaS 与交付。共 20
+        篇详细资料，附朋友原题、参考回答与延伸追问。<RouterLink to="/learn"
+          >查看全部资料</RouterLink
+        >
+      </p>
+    </div>
+    <div
+      v-if="route.query.collection === 'algorithm-foundations'"
+      class="info-banner"
+    >
+      <Icon name="BookOpen" :size="20" />
+      <p>
+        算法入门路线：读懂题意与规模 → 排序入门 → 排序分治 → 贪心与反例 →
+        动态规划起步 → 背包与区间状态。6
+        节资料配手推、可运行示例和补全练习。<RouterLink to="/labs"
+          >进入 42 道 ACM 训练</RouterLink
+        >
+      </p>
     </div>
     <div class="module-strip">
       <button :class="{ active: !moduleId }" @click="router.push('/learn')">

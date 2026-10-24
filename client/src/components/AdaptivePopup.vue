@@ -1,6 +1,8 @@
 <script setup>
 import { ref, nextTick, onMounted, onBeforeUnmount, watch, useId } from "vue";
 import Icon from "./Icon.vue";
+import { lockModal, unlockModal } from "../composables/modal-lock.js";
+const modalOwner = Symbol("popup");
 const props = defineProps({
   open: Boolean,
   anchor: Object,
@@ -12,24 +14,9 @@ const id = `popup-${useId()}`,
   panel = ref(null),
   sheet = ref(false),
   position = ref({});
-let media,
-  overflow,
-  inert,
-  locked = false;
+let media;
 function lock(value) {
-  const app = document.getElementById("app");
-  if (value && !locked) {
-    overflow = document.body.style.overflow;
-    inert = app?.inert;
-    document.body.style.overflow = "hidden";
-    if (app) app.inert = true;
-    locked = true;
-  }
-  if (!value && locked) {
-    document.body.style.overflow = overflow;
-    if (app) app.inert = inert;
-    locked = false;
-  }
+  value ? lockModal(modalOwner) : unlockModal(modalOwner);
 }
 function place() {
   if (!props.open || !props.anchor || sheet.value) return;
@@ -118,7 +105,9 @@ onBeforeUnmount(() => {
       <div
         class="adaptive-backdrop"
         aria-hidden="true"
-        @pointerdown.prevent="close"
+        @pointerdown.stop
+        @pointerup.stop
+        @click.stop.prevent="close"
       ></div>
       <section
         ref="panel"

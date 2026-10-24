@@ -1,0 +1,158 @@
+{
+  "window-distinct": {
+    "prompt": "监控字符串中连续出现的字符，找出不含重复字符的最长连续片段长度。必须连续，不能任意删除字符；按 Unicode 码点计数，不按 UTF-16 代码单元或用户感知字素簇计数。",
+    "inputFormat": "函数接收一个字符串 text，可为空，可能含 emoji。",
+    "outputFormat": "返回一个非负整数，表示最长片段的码点数。",
+    "constraints": "建议输入长度不超过 200000 码点；不能用二重枚举每个子串。",
+    "samples": [
+      {
+        "input": "longestDistinct(\"a😀b😀c\")",
+        "output": "3",
+        "explanation": "片段 a😀b 和 b😀c 都长度 3；整个串中 😀 重复。"
+      }
+    ]
+  },
+  "prefix-count": {
+    "prompt": "统计整数数组中元素和恰好为 target 的连续非空子数组数量。允许负数和零，不是找一组任意元素，也不是只返回最长长度。相同数值但下标不同的区间分别计数。",
+    "inputFormat": "nums 为整数数组，target 为整数。",
+    "outputFormat": "返回符合条件的区间数量。",
+    "constraints": "建议 n≤100000，元素与 target 在安全整数范围内，所有前缀和也必须安全；负数存在时不能用只会向前缩的普通正数窗口。",
+    "samples": [
+      {
+        "input": "countSubarrays([1,-1,1],1)",
+        "output": "3",
+        "explanation": "区间下标 [0,0]、[2,2]、[0,2] 的和都为 1。"
+      }
+    ]
+  },
+  "minimum-cover": {
+    "prompt": "在字符串 text 中寻找最短连续片段，使它包含 need 中所有码点及其重复次数。允许额外字符；找不到返回空串，多个同样短的答案返回最早开始的一个。",
+    "inputFormat": "两个字符串 text、need，按 Unicode 码点处理。",
+    "outputFormat": "返回 text 的最短覆盖子串；need 为空返回空串。",
+    "constraints": "建议两串总码点数≤200000；覆盖要比较频次，不是只比较字符集合。",
+    "samples": [
+      {
+        "input": "minimumCover(\"ADOBECODEBANC\",\"ABC\")",
+        "output": "\"BANC\"",
+        "explanation": "BANC 含 A/B/C 各一次，长度 4；ABC 不要求连续也不要求顺序。"
+      }
+    ]
+  },
+  "binary-lower-bound": {
+    "prompt": "在非递减数组中找第一个不小于目标值的位置。重复元素要取最左；所有元素都更小时返回数组长度。注意本题函数返回零基位置，与 ACM 题的一基输出不同。",
+    "inputFormat": "sorted 为已排序整数数组，target 为整数。",
+    "outputFormat": "返回 0…sorted.length 的整数。",
+    "constraints": "数组可以为空，建议 n≤1000000；应为 O(log n) 搜索，不修改输入。",
+    "samples": [
+      {
+        "input": "lowerBound([1,3,3,7],3)",
+        "output": "1",
+        "explanation": "值 3 位于索引 1、2，取 1；查询 9 则返回 4。"
+      }
+    ]
+  },
+  "heap-kth": {
+    "prompt": "从未排序数组中找第 k 大元素。重复元素计入排名，例如 [5,5,1] 的第 2 大仍是 5。目标是维护大小为 k 的小根堆，不是维护去重集合。",
+    "inputFormat": "nums 为数字数组，k 为整数。",
+    "outputFormat": "返回第 k 大数；非法 k 按现有函数契约抛异常。",
+    "constraints": "1≤k≤n，建议 n≤200000；目标 O(n log k) 时间、O(k) 额外空间。",
+    "samples": [
+      {
+        "input": "kthLargest([3,2,1,5,6,4],2)",
+        "output": "5",
+        "explanation": "降序是 6,5,4,3,2,1，所以第 2 大是 5。"
+      }
+    ]
+  },
+  "graph-topological": {
+    "prompt": "课程依赖构成有向图，返回一种让每条边 u→v 都满足 u 出现在 v 前面的顶点排列。有环就无法安排，返回 null；孤立点也必须出现，答案不一定唯一。",
+    "inputFormat": "n 为顶点数，顶点为 0…n-1；edges 为 [u,v] 数组。",
+    "outputFormat": "返回长度 n 的顶点数组或 null；用例验证顺序合法性而非强制唯一排列。",
+    "constraints": "建议 n+m≤300000；空图返回 []，自环属于环；不修改输入。",
+    "samples": [
+      {
+        "input": "topologicalOrder(3,[[0,2],[1,2]])",
+        "output": "[0,1,2]（或 [1,0,2]）",
+        "explanation": "0 与 1 都必须在 2 之前；0 与 1 的相对次序不限。"
+      }
+    ]
+  },
+  "dp-coin-change": {
+    "prompt": "有若干种正整数面值，每种可无限使用，求凑出 amount 最少需要几枚硬币。不能凑出返回 -1。求数量而不是组合个数，也不能假定每次选最大面值就最优。",
+    "inputFormat": "coins 为正整数面值数组，amount 为非负整数。",
+    "outputFormat": "返回最少硬币数；amount=0 返回 0。",
+    "constraints": "建议 amount≤100000、面值种类≤100；相同面值不影响最优结果。",
+    "samples": [
+      {
+        "input": "minimumCoins([1,3,4],6)",
+        "output": "2",
+        "explanation": "用 3+3 共两枚；贪心 4+1+1 需要三枚。"
+      }
+    ]
+  },
+  "dp-lis-length": {
+    "prompt": "从数组中按原顺序选择若干元素（可以跳过），使其严格递增，求最多可选多少个。不是连续子数组，等值不能延长严格递增序列。",
+    "inputFormat": "nums 为数字数组，可为空。",
+    "outputFormat": "返回最长严格递增子序列长度，不要求返回具体序列。",
+    "constraints": "建议 n≤200000，目标 O(n log n)；不能先排序改变相对顺序。",
+    "samples": [
+      {
+        "input": "lisLength([10,9,2,5,3,7,101,18])",
+        "output": "4",
+        "explanation": "可选 2,3,7,18；不要求在原数组中连续。"
+      }
+    ]
+  },
+  "dp-edit-distance": {
+    "prompt": "把Unicode 码点串 a 转成 b，每次可插入一个Unicode 码点、删除一个Unicode 码点或替换一个Unicode 码点，三种操作成本都为 1，求最小总代价。",
+    "inputFormat": "a、b 为字符串，均按 Unicode 码点处理，emoji 不拆成 UTF-16 代理单元。",
+    "outputFormat": "返回非负整数编辑距离。",
+    "constraints": "建议 |a|×|b|≤4000000；空串转另一串需插入其长度次。",
+    "samples": [
+      {
+        "input": "editDistance(\"kitten\",\"sitting\")",
+        "output": "3",
+        "explanation": "k→s、e→i，末尾插入 g，总共 3 次。"
+      }
+    ]
+  },
+  "interval-merge": {
+    "prompt": "给定闭区间集合，把有交集的区间合并成互不重叠且按起点递增的结果。端点相等也算有交集；输入可能无序，不能修改原始嵌套数组。",
+    "inputFormat": "intervals 为 [start,end] 数组，每项 start≤end。",
+    "outputFormat": "返回新的区间数组。",
+    "constraints": "建议区间数≤100000，端点为有限数；空输入返回 []。",
+    "samples": [
+      {
+        "input": "mergeClosed([[1,3],[2,6],[8,10],[10,12]])",
+        "output": "[[1,6],[8,12]]",
+        "explanation": "前两段重叠；[8,10] 与 [10,12] 在 10 相交，应合并。"
+      }
+    ]
+  },
+  "graph-components": {
+    "prompt": "n 个顶点之间给出无向边，求有多少个连通分量。相同顶点经任意条边能互相到达就属于一组；孤立点单独算一组。",
+    "inputFormat": "n 为顶点数，0…n-1；edges 为 [u,v] 数组。",
+    "outputFormat": "返回连通分量数。",
+    "constraints": "建议 n+m≤300000；重复边和自环不能错误减少分量数；n=0 时返回 0。",
+    "samples": [
+      {
+        "input": "componentCount(5,[[0,1],[1,2],[3,4]])",
+        "output": "2",
+        "explanation": "{0,1,2} 一组，{3,4} 一组，共 2 组。"
+      }
+    ]
+  },
+  "weighted-schedule": {
+    "prompt": "有若干带收益任务，每个占用半开区间 [start,end)。选择互不冲突的任务使收益总和最大，结束时间等于下个开始时间允许衔接，允许一个也不选。",
+    "inputFormat": "jobs 为含 start、end、profit 的对象数组，profit 为非负数。",
+    "outputFormat": "返回最大总收益，不必返回任务集合。",
+    "constraints": "建议 n≤100000，start<end；收益为非负，可不选，目标 O(n log n)。",
+    "samples": [
+      {
+        "input": "maxJobProfit([{start:1,end:3,profit:5},{start:2,end:4,profit:9},{start:3,end:5,profit:5}])",
+        "output": "10",
+        "explanation": "选第一和第三个可衔接，收益 10，大于只选第二个的 9。"
+      }
+    ]
+  }
+}

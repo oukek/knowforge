@@ -2,6 +2,12 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { AiError, hash, now } from "./policy.mjs";
 import { SCALE, MAX, micro, points, quote, usageCharge } from "./amounts.mjs";
+import {
+  BILLING_DEFAULTS,
+  BILLING_DEFAULTS_VERSION,
+  DEFAULT_PRODUCTS,
+  INTERNAL_CNY_PER_CREDIT,
+} from "./defaults.mjs";
 
 const amount = z
   .union([z.string(), z.number()])
@@ -83,6 +89,73 @@ export class AiBilling {
     this.repo = repo;
     this.clock = options.clock || Date.now;
   }
+  async init() {
+    await this.repo.transaction(async (db) => {
+      const marker = await db.get(
+        "SELECT id FROM ai_config WHERE id=?",
+        BILLING_DEFAULTS_VERSION,
+      );
+      if (marker) return;
+      const stamp = this.time();
+      if (!(await db.get("SELECT id FROM ai_config WHERE id=?", "billing")))
+        await db.run(
+          "INSERT INTO ai_config(id,data,encryptedKey,updatedAt) VALUES(?,?,?,?)",
+          "billing",
+          JSON.stringify({ ...BILLING_DEFAULTS, revision: randomUUID() }),
+          "",
+          stamp,
+        );
+      const added = [];
+      for (const preset of DEFAULT_PRODUCTS) {
+        if (
+          await db.get("SELECT id FROM ai_products WHERE code=?", preset.code)
+        )
+          continue;
+        const id = randomUUID(),
+          versionId = randomUUID();
+        const data = {
+          ...preset,
+          id,
+          priceFen: String(micro(preset.price) / 10000n),
+        };
+        await db.run(
+          "INSERT INTO ai_products(id,code,status,revision,publishedId,data,createdAt,updatedAt) VALUES(?,?,?,?,?,?,?,?)",
+          id,
+          preset.code,
+          "published",
+          randomUUID(),
+          versionId,
+          JSON.stringify(data),
+          stamp,
+          stamp,
+        );
+        await db.run(
+          "INSERT INTO ai_product_versions(id,productId,version,data,createdAt) VALUES(?,?,?,?,?)",
+          versionId,
+          id,
+          1,
+          JSON.stringify(data),
+          stamp,
+        );
+        added.push(preset.code);
+      }
+      await db.run(
+        "INSERT INTO ai_config(id,data,encryptedKey,updatedAt) VALUES(?,?,?,?)",
+        BILLING_DEFAULTS_VERSION,
+        JSON.stringify({
+          version: 1,
+          added,
+          internalCnyPerCredit: INTERNAL_CNY_PER_CREDIT,
+        }),
+        "",
+        stamp,
+      );
+      await this.repo.audit(db, "system", "billing.defaults", {
+        version: BILLING_DEFAULTS_VERSION,
+        added,
+      });
+    });
+  }
   time() {
     return new Date(this.clock()).toISOString();
   }
@@ -91,9 +164,7 @@ export class AiBilling {
       "SELECT data FROM ai_config WHERE id=?",
       "billing",
     );
-    return row
-      ? JSON.parse(row.data)
-      : { maxTaskPoints: "90", dailyBudget: "1000", pendingHours: 24 };
+    return row ? JSON.parse(row.data) : { ...BILLING_DEFAULTS };
   }
   async saveSettings(actor, input) {
     const settings = settingsSchema.parse(input);

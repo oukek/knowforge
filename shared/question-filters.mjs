@@ -8,10 +8,19 @@ export function matchesQuestionSource(
     (!origin ||
       (origin === "public"
         ? publicReport
-        : origin === "editorial"
-          ? !publicReport && question.provenance !== "ai-generated"
-          : origin === "ai"
-            ? question.provenance === "ai-generated"
-            : false))
+        : origin === "friend"
+          ? question.provenance === "user-reported"
+          : origin === "inferred"
+            ? question.provenance === "editorial-inference"
+            : origin === "editorial"
+              ? !publicReport &&
+                ![
+                  "ai-generated",
+                  "user-reported",
+                  "editorial-inference",
+                ].includes(question.provenance)
+              : origin === "ai"
+                ? question.provenance === "ai-generated"
+                : false))
   );
 }

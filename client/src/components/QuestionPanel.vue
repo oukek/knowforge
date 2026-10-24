@@ -77,6 +77,20 @@ async function submit(selfRating) {
       </button>
     </div>
     <h2 class="question-title">{{ q.prompt }}</h2>
+    <aside
+      v-if="['user-reported', 'editorial-inference'].includes(q.provenance)"
+      class="interview-context"
+    >
+      <span class="badge subtle">{{
+        q.provenance === "user-reported"
+          ? "朋友面试记录 · 用户转述"
+          : "原创延伸 · 根据考点推演"
+      }}</span>
+      <p>{{ q.origin.adaptation }}</p>
+      <p v-if="q.origin.recordedAt">
+        收录日期：{{ q.origin.recordedAt }}（不是已核实的面试日期）
+      </p>
+    </aside>
     <InterviewContext
       v-if="q.origin?.kind === 'public-report-adapted'"
       :question="q"

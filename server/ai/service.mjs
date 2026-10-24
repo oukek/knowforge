@@ -36,6 +36,7 @@ export class AiService {
   }
   async init() {
     await this.pool.init();
+    await this.billing.init();
     await this.repo.recoverExpired();
     await this.billing.recovery();
     this.lastRecovery = Date.now();

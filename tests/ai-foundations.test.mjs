@@ -39,7 +39,7 @@ test("AI 入门包含独立的二十四课、基本术语与递进关联", () =>
     data.lessons.filter((l) =>
       ["aibasics", "ai", "llmapp", "agents", "fde"].includes(l.moduleId),
     ).length,
-    88,
+    103,
   );
 });
 test("AI 词条具有中文解释、辨析与有效课程，离线手册保留全文", () => {

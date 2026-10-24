@@ -8,6 +8,7 @@ export function useCodeRunner() {
     initialization = ref(null);
   let worker,
     timer,
+    caseTimer,
     settle,
     generation = 0;
   function event(text, level = "info") {
@@ -41,6 +42,7 @@ export function useCodeRunner() {
       } else if (value.cancelled) event("已取消 Python 环境加载");
     }
     clearTimeout(timer);
+    clearTimeout(caseTimer);
     worker?.terminate();
     worker = null;
     running.value = false;
@@ -120,6 +122,22 @@ export function useCodeRunner() {
         };
         worker.onmessage = ({ data }) => {
           if (token !== generation || !running.value) return;
+          if (data.type === "case-start") {
+            phase.value = `验证 ${data.index + 1} / ${data.total}：${data.name}`;
+            clearTimeout(caseTimer);
+            caseTimer = setTimeout(
+              () =>
+                finish(
+                  {
+                    error: `用例“${data.name}”超过 ${(payload.caseTimeLimitMs || 3000) / 1000} 秒，已终止。请检查复杂度或无限循环。`,
+                    timeout: true,
+                  },
+                  token,
+                ),
+              payload.caseTimeLimitMs || 3000,
+            );
+            return;
+          }
           if (data.type === "status") {
             phase.value = data.text;
             if (initialization.value?.status === "loading") {

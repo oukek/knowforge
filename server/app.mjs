@@ -5,6 +5,7 @@ import { createAuth } from "./auth.mjs";
 import { installAi } from "./ai/routes.mjs";
 import express from "express";
 import { compareOutput } from "../shared/output.mjs";
+import { selectedTracks } from "../shared/study-plan.mjs";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -55,7 +56,11 @@ export function gradeQuestion(q, input) {
     z.object({ valid: z.literal(true) }).parse({
       valid:
         passedTests <= totalTests &&
-        totalTests === catalog.labs.find((l) => l.id === q.labId).tests.length,
+        totalTests ===
+          (() => {
+            const lab = catalog.labs.find((l) => l.id === q.labId);
+            return lab.judge?.caseCount ?? lab.tests.length;
+          })(),
     });
     return {
       kind: "coding",
@@ -383,6 +388,12 @@ export async function createApp({
       .object({
         dailyMinutes: z.number().int().min(10).max(480),
         trackId: z.enum(["all", ...catalog.tracks.map((t) => t.id)]).optional(),
+        trackIds: z
+          .array(z.enum(catalog.tracks.map((t) => t.id)))
+          .min(1)
+          .max(catalog.tracks.length)
+          .refine((ids) => new Set(ids).size === ids.length)
+          .optional(),
         planDays: z.union([
           z.literal(7),
           z.literal(14),
@@ -394,11 +405,27 @@ export async function createApp({
       .parse(req.body);
     if (!Number.isFinite(Date.parse(data.startDate)))
       return res.status(400).json({ error: "日期无效" });
+    if (!data.trackIds && data.trackId)
+      data.trackIds = selectedTracks(data, catalog.tracks);
     for (const [key, value] of Object.entries(data))
       await personal().upsert("settings", {
         key: key,
         value: JSON.stringify(value),
       });
+    await personal().upsert("settings", {
+      key: "planOnboarding",
+      value: JSON.stringify("configured"),
+    });
+    await ok(res);
+  });
+  api.put("/api/settings/onboarding", async (req, res) => {
+    z.object({ status: z.literal("dismissed") })
+      .strict()
+      .parse(req.body);
+    await personal().upsert("settings", {
+      key: "planOnboarding",
+      value: JSON.stringify("dismissed"),
+    });
     await ok(res);
   });
   api.post("/api/exams", async (req, res) => {
@@ -651,7 +678,13 @@ export async function createApp({
             attempt.createdAt,
           );
       }
-      for (const [key, value] of Object.entries(s.settings))
+      const importedSettings = { ...s.settings };
+      if (!importedSettings.trackIds && importedSettings.trackId)
+        importedSettings.trackIds = selectedTracks(
+          importedSettings,
+          catalog.tracks,
+        );
+      for (const [key, value] of Object.entries(importedSettings))
         await personal().upsert("settings", {
           key: key,
           value: JSON.stringify(value),
@@ -830,6 +863,13 @@ const backupSchema = z.object({
     settings: z.object({
       dailyMinutes: z.number().int().min(10).max(480).optional(),
       trackId: z.enum(["all", ...catalog.tracks.map((t) => t.id)]).optional(),
+      trackIds: z
+        .array(z.enum(catalog.tracks.map((t) => t.id)))
+        .min(1)
+        .max(catalog.tracks.length)
+        .refine((ids) => new Set(ids).size === ids.length)
+        .optional(),
+      planOnboarding: z.enum(["pending", "dismissed", "configured"]).optional(),
       planDays: z
         .union([z.literal(7), z.literal(14), z.literal(21), z.literal(30)])
         .optional(),

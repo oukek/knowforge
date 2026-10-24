@@ -1,24 +1,34 @@
 <script setup>
-import { ref, reactive, onMounted, watch } from "vue";
+import { ref, reactive, computed, onMounted, watch } from "vue";
 import { request, toast } from "../store.js";
 import { refreshAi, useAiTask } from "../ai.js";
+import AppDialog from "./AppDialog.vue";
 import AppField from "./AppField.vue";
 import AppSelect from "./AppSelect.vue";
-import AppDisclosure from "./AppDisclosure.vue";
+import AppChoice from "./AppChoice.vue";
 import AiRunMeta from "./AiRunMeta.vue";
 const busy = ref(false),
   error = ref(""),
-  encryptionReady = ref(false);
-const pool = reactive({ revision: undefined, providers: [], policy: {} });
-const health = ref([]),
+  formError = ref(""),
+  encryptionReady = ref(false),
+  dialog = ref("");
+const pool = reactive({ revision: undefined, providers: [], policy: {} }),
+  health = ref([]),
   models = reactive({});
-const task = useAiTask();
-const featureOptions = [
+const draft = ref({}),
+  providerId = ref(""),
+  editingId = ref(""),
+  removeTarget = ref(null),
+  testTarget = ref(null),
+  costEnabled = ref(false);
+const task = useAiTask(),
+  clone = (x) => JSON.parse(JSON.stringify(x));
+const features = [
   ["grade", "主观评阅"],
   ["variants", "举一反三"],
   ["interview", "模拟面试"],
 ];
-const booleanOptions = [
+const enabledOptions = [
   { value: true, label: "启用" },
   { value: false, label: "停用" },
 ];
@@ -34,6 +44,16 @@ const fields = [
   ["attemptTimeoutMs", "单次上游超时（毫秒）", 10000, 60000],
   ["totalTimeoutMs", "任务总超时（毫秒）", 10000, 90000],
 ];
+const title = computed(
+  () =>
+    ({
+      provider: editingId.value ? "编辑服务商" : "添加服务商",
+      model: editingId.value ? "编辑模型" : "添加模型",
+      policy: "配置费率、调用限制与超时",
+      remove: "确认移除配置",
+      test: "测试已保存模型",
+    })[dialog.value] || "服务配置",
+);
 function accept(data) {
   pool.revision = data.revision;
   pool.policy = { ...data.policy };
@@ -45,12 +65,14 @@ function accept(data) {
   health.value = data.health || [];
 }
 async function act(fn) {
+  if (busy.value) return;
   busy.value = true;
   error.value = "";
+  formError.value = "";
   try {
     await fn();
   } catch (e) {
-    error.value = e.message;
+    (dialog.value ? formError : error).value = e.message;
   } finally {
     busy.value = false;
   }
@@ -62,63 +84,139 @@ async function load() {
 }
 async function refreshHealth() {
   const data = await request("/admin/ai/pool");
-  health.value = data.pool.health;
+  health.value = data.pool.health || [];
 }
-function addProvider() {
-  pool.providers.push({
-    id: crypto.randomUUID(),
-    name: "新服务商",
-    baseUrl: "https://api.openai.com/v1",
-    protocol: "chat",
-    enabled: true,
-    maxConcurrent: 3,
-    apiKey: "",
-    hasKey: false,
-    models: [],
+async function persist(providers, policy = pool.policy) {
+  const body = providers.map(({ hasKey, apiKey, ...p }) => ({
+    ...p,
+    maxConcurrent: Number(p.maxConcurrent),
+    ...(apiKey ? { apiKey } : {}),
+    models: p.models.map((m) => ({
+      ...m,
+      weight: Number(m.weight),
+      priority: Number(m.priority),
+      maxConcurrent: Number(m.maxConcurrent),
+    })),
+  }));
+  const data = await request("/admin/ai/pool", "PUT", {
+    revision: pool.revision,
+    providers: body,
+    policy: Object.fromEntries(
+      Object.entries(policy).map(([k, v]) => [k, Number(v)]),
+    ),
   });
+  accept(data.pool);
+  await refreshAi();
 }
-function addModel(p) {
-  p.models.push({
-    id: crypto.randomUUID(),
-    model: "",
-    enabled: true,
-    features: ["grade", "variants", "interview"],
-    priority: 0,
-    weight: 1,
-    maxConcurrent: 3,
-    format: "schema",
-    tokenParameter: "max_completion_tokens",
-    procurement: null,
-  });
+function openProvider(p) {
+  editingId.value = p?.id || "";
+  providerId.value = "";
+  draft.value = p
+    ? clone(p)
+    : {
+        id: crypto.randomUUID(),
+        name: "",
+        baseUrl: "https://api.openai.com/v1",
+        protocol: "chat",
+        enabled: true,
+        maxConcurrent: 3,
+        apiKey: "",
+        hasKey: false,
+        models: [],
+      };
+  formError.value = "";
+  dialog.value = "provider";
 }
-function toggleFeature(m, f) {
-  if (m.features.includes(f)) m.features = m.features.filter((x) => x !== f);
-  else m.features.push(f);
+function openModel(p, m) {
+  providerId.value = p.id;
+  editingId.value = m?.id || "";
+  draft.value = m
+    ? clone(m)
+    : {
+        id: crypto.randomUUID(),
+        model: "",
+        enabled: true,
+        features: ["grade", "variants", "interview"],
+        priority: 0,
+        weight: 1,
+        maxConcurrent: 3,
+        format: "schema",
+        tokenParameter: "max_completion_tokens",
+        procurement: null,
+      };
+  costEnabled.value = !!draft.value.procurement;
+  if (!draft.value.procurement)
+    draft.value.procurement = { input: "", cached: "", output: "" };
+  formError.value = "";
+  dialog.value = "model";
+}
+function openPolicy() {
+  draft.value = clone(pool.policy);
+  formError.value = "";
+  dialog.value = "policy";
+}
+function close() {
+  if (busy.value) return;
+  dialog.value = "";
+  draft.value = {};
+  formError.value = "";
+}
+function askRemove(p, m) {
+  removeTarget.value = {
+    providerId: p.id,
+    modelId: m?.id,
+    name: m?.model || p.name,
+  };
+  formError.value = "";
+  dialog.value = "remove";
 }
 async function save() {
   await act(async () => {
-    const providers = pool.providers.map(({ hasKey, apiKey, ...p }) => ({
-      ...p,
-      maxConcurrent: Number(p.maxConcurrent),
-      ...(apiKey ? { apiKey } : {}),
-      models: p.models.map((m) => ({
-        ...m,
-        weight: Number(m.weight),
-        priority: Number(m.priority),
-        maxConcurrent: Number(m.maxConcurrent),
-      })),
-    }));
-    const policy = Object.fromEntries(
-      Object.entries(pool.policy).map(([k, v]) => [k, Number(v)]),
-    );
-    const data = await request("/admin/ai/pool", "PUT", {
-      revision: pool.revision,
-      policy,
-      providers,
-    });
-    accept(data.pool);
-    await refreshAi();
-    toast("服务池配置已保存，新的调用将自动调度");
+    const next = clone(pool.providers);
+    if (dialog.value === "provider") {
+      const p = draft.value;
+      if (
+        !p.name.trim() ||
+        !p.baseUrl.trim() ||
+        (!p.hasKey && !p.apiKey.trim())
+      )
+        throw new Error("请填写名称、Base URL 和 API Key。");
+      const i = next.findIndex((x) => x.id === editingId.value);
+      if (i >= 0) next[i] = { ...p, models: next[i].models };
+      else next.push(p);
+      await persist(next);
+    } else if (dialog.value === "model") {
+      if (!draft.value.model.trim() || !draft.value.features.length)
+        throw new Error("请填写模型 ID，并至少选择一种用途。");
+      const p = next.find((x) => x.id === providerId.value);
+      if (!p) throw new Error("服务商已变化，请刷新后重试。");
+      const m = clone(draft.value);
+      m.procurement = costEnabled.value ? m.procurement : null;
+      if (
+        costEnabled.value &&
+        Object.values(m.procurement).some((v) => v === "")
+      )
+        throw new Error("请填写三项采购价；真实免费项目可明确填写 0。");
+      const i = p.models.findIndex((x) => x.id === editingId.value);
+      if (i >= 0) p.models[i] = m;
+      else p.models.push(m);
+      await persist(next);
+    } else if (dialog.value === "policy") await persist(next, draft.value);
+    else if (dialog.value === "remove") {
+      const t = removeTarget.value;
+      await persist(
+        t.modelId
+          ? next.map((p) =>
+              p.id === t.providerId
+                ? { ...p, models: p.models.filter((m) => m.id !== t.modelId) }
+                : p,
+            )
+          : next.filter((p) => p.id !== t.providerId),
+      );
+    }
+    dialog.value = "";
+    draft.value = {};
+    toast("配置已保存，仅影响新的调用");
   });
 }
 async function loadModels(p) {
@@ -131,9 +229,10 @@ async function loadModels(p) {
 }
 async function reset(id) {
   await act(async () => {
-    const data = await request("/admin/ai/health/" + id + "/reset", "POST", {});
-    health.value = data.health;
-    toast("已恢复参与调度，下次调用将重新验证");
+    health.value = (
+      await request("/admin/ai/health/" + id + "/reset", "POST", {})
+    ).health;
+    toast("已恢复参与调度");
   });
 }
 function state(id) {
@@ -141,21 +240,24 @@ function state(id) {
 }
 function stateText(id) {
   const h = state(id);
-  if (!h) return "尚未保存";
-  const name = {
-    healthy: "可用",
-    disabled: "暂停 · 需修正后恢复",
-    cooldown: "冷却中",
-    "half-open": "等待恢复探测",
-  }[h.state];
-  return (
-    name +
-    (h.state === "cooldown"
-      ? " · 至 " + new Date(h.until).toLocaleTimeString()
-      : "") +
-    " · 正在调用 " +
-    h.active
-  );
+  return h
+    ? {
+        healthy: "可用",
+        disabled: "已暂停",
+        cooldown: "冷却中",
+        "half-open": "等待恢复探测",
+      }[h.state] +
+        " · 调用中 " +
+        h.active
+    : "尚未调用";
+}
+function test(m) {
+  task.stop();
+  task.run.value = null;
+  task.error.value = "";
+  testTarget.value = m;
+  formError.value = "";
+  dialog.value = "test";
 }
 watch(
   () => task.run.value?.status,
@@ -167,358 +269,385 @@ onMounted(() => void act(load));
 </script>
 <template>
   <div class="ai-pool">
-    <p v-if="error || task.error.value" class="ai-error" role="alert">
-      {{ error || task.error.value }}
-    </p>
+    <p v-if="error" class="ai-error" role="alert">{{ error }}</p>
     <p v-if="!encryptionReady" class="info-banner">
       请先在服务器配置 AI_ENCRYPTION_KEY，服务商 Key 将加密保存。
     </p>
     <section class="ai-detail">
       <div class="section-line">
-        <h2>服务池与故障切换</h2>
-        <button
-          type="button"
-          class="btn small"
-          :disabled="busy"
-          @click="act(refreshHealth)"
-        >
-          刷新健康状态
-        </button>
-      </div>
-      <p class="tiny muted">
-        先选择优先级数字最小的可用模型，同级按权重和当前并发分配。故障、限流会自动避让并尝试其他模型；备用模型可设置更大的优先级数字。连接测试只测试指定模型。
-      </p>
-      <p class="tiny muted">
-        切换成功后只按最终有效结果结算一次；未交付有效结果不扣用户额度。有效结果缺少用量时，预占额度等待核对。每次上游尝试都会记录，超时可能产生的平台额外费用会标记待核对。当前协议支持
-        OpenAI 兼容 Chat Completions 和 Responses。
-      </p>
-      <AiRunMeta :run="task.run.value" />
-    </section>
-    <form class="ai-admin-form" @submit.prevent="save">
-      <article
-        v-for="(p, pi) in pool.providers"
-        :key="p.id"
-        class="ai-detail ai-pool-provider"
-      >
-        <div class="section-line">
-          <h2>服务商 {{ pi + 1 }} · {{ p.name }}</h2>
-          <button
-            type="button"
-            class="text-btn"
-            :disabled="busy"
-            @click="pool.providers.splice(pi, 1)"
-          >
-            移除服务商
-          </button>
-        </div>
-        <p class="ai-health" :data-state="state(p.id)?.state">
-          {{ stateText(p.id)
-          }}<span v-if="state(p.id)?.reason"> · {{ state(p.id).reason }}</span>
-        </p>
-        <div class="ai-admin-grid">
-          <label
-            >服务商名称<AppField v-model="p.name" maxlength="80" required
-          /></label>
-          <label
-            >参与调度<AppSelect
-              v-model="p.enabled"
-              :options="booleanOptions"
-              label="服务商启用状态"
-          /></label>
-          <label
-            >接口协议<AppSelect
-              v-model="p.protocol"
-              :options="[
-                { value: 'chat', label: 'OpenAI 兼容 Chat Completions' },
-                { value: 'responses', label: 'OpenAI Responses' },
-              ]"
-              label="服务商接口协议"
-          /></label>
-          <label
-            >服务商最大并发<AppField
-              v-model="p.maxConcurrent"
-              type="number"
-              min="1"
-              max="10"
-              required
-          /></label>
-          <label class="ai-wide"
-            >Base URL<AppField
-              v-model="p.baseUrl"
-              type="url"
-              placeholder="https://api.example.com/v1"
-              maxlength="500"
-              required
-          /></label>
-          <label class="ai-wide"
-            >API Key · {{ p.hasKey ? "已加密保存，留空保留" : "首次保存必填"
-            }}<AppField
-              v-model="p.apiKey"
-              type="password"
-              autocomplete="new-password"
-              maxlength="1000"
-              :required="!p.hasKey"
-          /></label>
+        <div>
+          <h2>服务商与模型</h2>
+          <p class="tiny muted">
+            同级按权重和并发调度，故障自动避让；配置保存后生效。
+          </p>
         </div>
         <div class="row wrap">
           <button
-            type="button"
-            class="btn small"
-            :disabled="busy || !p.hasKey"
-            @click="loadModels(p)"
-          >
-            读取该服务商 models 列表
-          </button>
-          <button
-            v-if="state(p.id) && state(p.id).state !== 'healthy'"
-            type="button"
             class="btn small"
             :disabled="busy"
-            @click="reset(p.id)"
+            @click="act(refreshHealth)"
           >
-            恢复该服务商
+            刷新健康状态</button
+          ><button
+            class="btn primary small"
+            :disabled="busy || pool.providers.length >= 12"
+            @click="openProvider()"
+          >
+            添加服务商
           </button>
         </div>
-        <p class="tiny muted">
-          首次先保存连接，再读取模型。修改连接或 Key
-          后需保存，测试与读取列表使用已保存配置。
-        </p>
-        <article v-for="(m, mi) in p.models" :key="m.id" class="ai-pool-model">
-          <div class="section-line">
-            <h3>模型 {{ mi + 1 }} · {{ m.model || "待填写" }}</h3>
-            <button
-              type="button"
-              class="text-btn"
-              :disabled="busy"
-              @click="p.models.splice(mi, 1)"
-            >
-              移除模型
-            </button>
-          </div>
-          <p class="ai-health" :data-state="state(m.id)?.state">
-            {{ stateText(m.id)
-            }}<span v-if="state(m.id)?.reason">
-              · {{ state(m.id).reason }}</span
-            >
+      </div>
+      <div class="ai-config-summary">
+        <span
+          >输入 {{ pool.policy.inputRate }} / 缓存
+          {{ pool.policy.cachedRate }} / 输出
+          {{ pool.policy.outputRate }} 额度／千 Token</span
+        ><button class="text-btn" :disabled="busy" @click="openPolicy">
+          配置费率与限制
+        </button>
+      </div>
+      <p class="tiny muted">
+        用户费率统一，不随模型采购价与自动切换变化。未交付有效结果不扣用户额度，各次上游成本独立记录。
+      </p>
+    </section>
+    <article
+      v-for="p in pool.providers"
+      :key="p.id"
+      class="ai-detail ai-provider-summary"
+    >
+      <div class="section-line">
+        <div>
+          <h2>
+            {{ p.name }}
+            <span class="badge subtle">{{
+              p.enabled ? "已启用" : "已停用"
+            }}</span>
+          </h2>
+          <p class="tiny muted">
+            {{ p.protocol === "chat" ? "Chat Completions" : "Responses" }} ·
+            {{ p.models.length }} 个模型 · 并发 {{ p.maxConcurrent }} · Key
+            {{ p.hasKey ? "已保存" : "未配置" }}
           </p>
-          <div class="ai-admin-grid">
-            <label
-              >模型 ID<AppField
-                v-model="m.model"
-                maxlength="160"
-                placeholder="服务商提供的模型 ID"
-                required
-            /></label>
-            <label v-if="models[p.id]?.length"
-              >从 models 列表选择<AppSelect
-                v-model="m.model"
-                :options="
-                  models[p.id].map((value) => ({ value, label: value }))
-                "
-                label="服务商模型列表"
-            /></label>
-            <label
-              >参与调度<AppSelect
-                v-model="m.enabled"
-                :options="booleanOptions"
-                label="模型启用状态"
-            /></label>
-            <label
-              >优先级 · 数字越小越优先<AppField
-                v-model="m.priority"
-                type="number"
-                min="0"
-                max="10"
-                required
-            /></label>
-            <label
-              >调度权重<AppField
-                v-model="m.weight"
-                type="number"
-                min="1"
-                max="100"
-                required
-            /></label>
-            <label
-              >模型最大并发<AppField
-                v-model="m.maxConcurrent"
-                type="number"
-                min="1"
-                max="10"
-                required
-            /></label>
-            <label
-              >输出格式<AppSelect
-                v-model="m.format"
-                label="模型输出格式"
-                :options="[
-                  { value: 'schema', label: '严格 JSON Schema' },
-                  { value: 'json', label: 'JSON 对象模式' },
-                  { value: 'prompt', label: '提示词 JSON · 兼容模式' },
-                ]"
-            /></label>
-            <label v-if="p.protocol === 'chat'"
-              >输出上限参数<AppSelect
-                v-model="m.tokenParameter"
-                label="输出 Token 参数"
-                :options="[
-                  {
-                    value: 'max_completion_tokens',
-                    label: 'max_completion_tokens',
-                  },
-                  { value: 'max_tokens', label: 'max_tokens' },
-                ]"
-            /></label>
-          </div>
-          <AppDisclosure title="模型采购成本 · 可选">
-            <p class="tiny muted">
-              填写折算人民币后的每百万 Token
-              采购价，仅用于平台预计成本，不改变用户费率；最终费用以服务商账单为准。
-            </p>
-            <button
-              v-if="!m.procurement"
-              type="button"
-              class="text-btn"
-              @click="m.procurement = { input: '0', cached: '0', output: '0' }"
-            >
-              配置采购价
-            </button>
-            <template v-else
-              ><div class="ai-admin-grid">
-                <label
-                  >每百万输入 Token 成本（元）<AppField
-                    v-model="m.procurement.input"
-                    inputmode="decimal" /></label
-                ><label
-                  >每百万缓存 Token 成本（元）<AppField
-                    v-model="m.procurement.cached"
-                    inputmode="decimal" /></label
-                ><label
-                  >每百万输出 Token 成本（元）<AppField
-                    v-model="m.procurement.output"
-                    inputmode="decimal"
-                /></label>
-              </div>
-              <button
-                type="button"
-                class="text-btn"
-                @click="m.procurement = null"
-              >
-                移除采购价
-              </button></template
-            >
-          </AppDisclosure>
-          <div
-            class="row wrap ai-model-features"
-            role="group"
-            aria-label="模型用途"
+        </div>
+        <div class="row wrap">
+          <button class="btn small" :disabled="busy" @click="openProvider(p)">
+            编辑服务商</button
+          ><button
+            class="btn small"
+            :disabled="busy || p.models.length >= 16"
+            @click="openModel(p)"
           >
-            <button
-              v-for="[f, label] in featureOptions"
-              :key="f"
-              type="button"
-              class="btn small"
-              :class="{ primary: m.features.includes(f) }"
-              :aria-pressed="m.features.includes(f)"
-              @click="toggleFeature(m, f)"
+            添加模型</button
+          ><button class="text-btn" :disabled="busy" @click="askRemove(p)">
+            移除
+          </button>
+        </div>
+      </div>
+      <p class="tiny muted ai-endpoint">{{ p.baseUrl }}</p>
+      <p class="ai-health" :data-state="state(p.id)?.state">
+        {{ stateText(p.id) }} <span>{{ state(p.id)?.reason }}</span>
+      </p>
+      <div class="row wrap">
+        <button
+          class="text-btn"
+          :disabled="busy || !p.hasKey"
+          @click="loadModels(p)"
+        >
+          读取模型列表</button
+        ><button
+          v-if="state(p.id) && state(p.id).state !== 'healthy'"
+          class="text-btn"
+          :disabled="busy"
+          @click="reset(p.id)"
+        >
+          恢复服务商
+        </button>
+      </div>
+      <div class="ai-record-list">
+        <article v-for="m in p.models" :key="m.id" class="ai-record-row">
+          <div>
+            <strong
+              >{{ m.model }}
+              <span class="tiny muted">{{
+                m.enabled ? "启用" : "停用"
+              }}</span></strong
+            ><span class="tiny muted"
+              >{{
+                m.features
+                  .map((f) => features.find((x) => x[0] === f)?.[1])
+                  .join(" · ")
+              }}
+              · 优先级 {{ m.priority }} · 权重 {{ m.weight }} · 并发
+              {{ m.maxConcurrent }}</span
+            ><span class="tiny muted"
+              >采购价：{{
+                m.procurement
+                  ? `输入 ${m.procurement.input} / 缓存 ${m.procurement.cached} / 输出 ${m.procurement.output} 元／百万 Token`
+                  : "未配置，成本不按零估算"
+              }}</span
+            ><span class="ai-health" :data-state="state(m.id)?.state"
+              >{{ stateText(m.id) }} {{ state(m.id)?.reason }}</span
             >
-              {{ label }}
-            </button>
           </div>
-          <p v-if="!m.features.length" class="ai-error">
-            至少选择一种模型用途。
-          </p>
           <div class="row wrap">
-            <button
-              type="button"
+            <button class="btn small" :disabled="busy" @click="openModel(p, m)">
+              编辑模型</button
+            ><button
               class="btn small"
-              :disabled="
-                busy ||
-                task.busy.value ||
-                !state(m.id) ||
-                !p.enabled ||
-                !m.enabled
-              "
-              @click="task.start('/admin/ai/test', { targetId: m.id })"
+              :disabled="busy || !p.enabled || !m.enabled || task.busy.value"
+              @click="test(m)"
             >
-              测试此模型
-            </button>
-            <button
+              测试</button
+            ><button
               v-if="state(m.id) && state(m.id).state !== 'healthy'"
-              type="button"
               class="text-btn"
               :disabled="busy"
               @click="reset(m.id)"
             >
-              恢复此模型
+              恢复</button
+            ><button class="text-btn" :disabled="busy" @click="askRemove(p, m)">
+              移除
             </button>
           </div>
         </article>
-        <button
-          type="button"
-          class="btn small"
-          :disabled="busy || p.models.length >= 16"
-          @click="addModel(p)"
-        >
-          添加模型
-        </button>
-      </article>
-      <p v-if="!pool.providers.length" class="ai-empty">
-        尚未配置服务商，添加连接后可配置多个模型。
+      </div>
+      <p v-if="!p.models.length" class="ai-empty">
+        添加模型后，该服务商才会参与任务调度。
       </p>
-      <button
-        type="button"
-        class="btn"
-        :disabled="busy || pool.providers.length >= 12"
-        @click="addProvider"
+    </article>
+    <p v-if="!pool.providers.length" class="ai-empty">
+      尚未配置服务商。点击“添加服务商”开始。
+    </p>
+    <AppDialog :open="!!dialog" :title="title" :busy="busy" @close="close">
+      <p
+        v-if="formError || (dialog === 'test' && task.error.value)"
+        class="ai-error"
+        role="alert"
       >
-        添加服务商
-      </button>
-      <section class="ai-detail">
-        <AppDisclosure title="全站额度、调用限制与超时" default-open>
-          <p class="tiny muted">
-            额度费率对所有模型统一，修改后只影响新任务。每任务最多预占一次额度；自动切换不会额外扣用户额度。超时及重试次数共同限制上游成本。
-          </p>
-          <div class="ai-admin-grid">
-            <label v-for="[key, label, min, max] in fields" :key="key"
-              >{{ label
-              }}<AppField
-                v-model="pool.policy[key]"
-                type="number"
-                :min="min"
-                :max="max"
-                required
-            /></label>
-          </div>
-        </AppDisclosure>
-      </section>
-      <button class="btn primary" :disabled="busy || !encryptionReady">
-        {{ busy ? "保存中…" : "保存服务池配置" }}
-      </button>
-    </form>
+        {{ formError || (dialog === "test" && task.error.value) }}
+      </p>
+      <form
+        v-if="dialog === 'provider'"
+        novalidate
+        class="ai-admin-form"
+        @submit.prevent="save"
+      >
+        <div class="ai-admin-grid">
+          <label
+            >服务商名称<AppField v-model="draft.name" maxlength="80" /></label
+          ><label
+            >参与调度<AppSelect
+              v-model="draft.enabled"
+              label="服务商启用状态"
+              :options="enabledOptions" /></label
+          ><label
+            >接口协议<AppSelect
+              v-model="draft.protocol"
+              label="服务商接口协议"
+              :options="[
+                { value: 'chat', label: 'OpenAI 兼容 Chat Completions' },
+                { value: 'responses', label: 'OpenAI Responses' },
+              ]" /></label
+          ><label
+            >最大并发<AppField
+              v-model="draft.maxConcurrent"
+              type="number"
+              min="1"
+              max="10" /></label
+          ><label class="ai-wide"
+            >Base URL<AppField
+              v-model="draft.baseUrl"
+              type="url"
+              maxlength="500" /></label
+          ><label class="ai-wide"
+            >API Key · {{ draft.hasKey ? "留空保留已有密钥" : "首次保存必填"
+            }}<AppField
+              v-model="draft.apiKey"
+              type="password"
+              autocomplete="new-password"
+              maxlength="1000"
+          /></label>
+        </div>
+        <button class="btn primary" :disabled="busy || !encryptionReady">
+          保存服务商
+        </button>
+      </form>
+      <form
+        v-if="dialog === 'model'"
+        novalidate
+        class="ai-admin-form"
+        @submit.prevent="save"
+      >
+        <div class="ai-admin-grid">
+          <label
+            >模型 ID<AppField v-model="draft.model" maxlength="160" /></label
+          ><label v-if="models[providerId]?.length"
+            >从已读取列表选择<AppSelect
+              v-model="draft.model"
+              label="服务商模型列表"
+              :options="
+                models[providerId].map((value) => ({ value, label: value }))
+              " /></label
+          ><label
+            >参与调度<AppSelect
+              v-model="draft.enabled"
+              label="模型启用状态"
+              :options="enabledOptions" /></label
+          ><label
+            >优先级 · 越小越优先<AppField
+              v-model="draft.priority"
+              type="number"
+              min="0"
+              max="10" /></label
+          ><label
+            >调度权重<AppField
+              v-model="draft.weight"
+              type="number"
+              min="1"
+              max="100" /></label
+          ><label
+            >最大并发<AppField
+              v-model="draft.maxConcurrent"
+              type="number"
+              min="1"
+              max="10" /></label
+          ><label
+            >输出格式<AppSelect
+              v-model="draft.format"
+              label="模型输出格式"
+              :options="[
+                { value: 'schema', label: '严格 JSON Schema' },
+                { value: 'json', label: 'JSON 对象模式' },
+                { value: 'prompt', label: '提示词 JSON 兼容模式' },
+              ]" /></label
+          ><label
+            v-if="
+              pool.providers.find((p) => p.id === providerId)?.protocol ===
+              'chat'
+            "
+            >输出上限参数<AppSelect
+              v-model="draft.tokenParameter"
+              label="输出 Token 参数"
+              :options="[
+                {
+                  value: 'max_completion_tokens',
+                  label: 'max_completion_tokens',
+                },
+                { value: 'max_tokens', label: 'max_tokens' },
+              ]"
+          /></label>
+        </div>
+        <div
+          class="row wrap ai-model-features"
+          role="group"
+          aria-label="模型用途"
+        >
+          <AppChoice
+            v-for="[f, label] in features"
+            :key="f"
+            v-model="draft.features"
+            :value="f"
+            >{{ label }}</AppChoice
+          >
+        </div>
+        <p class="info-banner">
+          用户消耗采用统一公开费率：输入 {{ pool.policy.inputRate }}、缓存
+          {{ pool.policy.cachedRate }}、输出
+          {{ pool.policy.outputRate }} 额度／千 Token。采购成本只用于内部对账。
+        </p>
+        <AppChoice v-model="costEnabled">记录该模型的人民币采购价</AppChoice>
+        <div v-if="costEnabled" class="ai-admin-grid">
+          <label
+            >每百万输入 Token 成本（元）<AppField
+              v-model="draft.procurement.input"
+              inputmode="decimal" /></label
+          ><label
+            >每百万缓存 Token 成本（元）<AppField
+              v-model="draft.procurement.cached"
+              inputmode="decimal" /></label
+          ><label
+            >每百万输出 Token 成本（元）<AppField
+              v-model="draft.procurement.output"
+              inputmode="decimal"
+          /></label>
+        </div>
+        <p v-else class="tiny muted">
+          未填写采购价时记录为未知，不伪造零成本；最终以服务商账单为准。
+        </p>
+        <button class="btn primary" :disabled="busy">保存模型</button>
+      </form>
+      <form
+        v-if="dialog === 'policy'"
+        novalidate
+        class="ai-admin-form"
+        @submit.prevent="save"
+      >
+        <p class="tiny muted">
+          修改仅作用于新任务；运行中的调用和历史账单保留费率快照。
+        </p>
+        <div class="ai-admin-grid">
+          <label v-for="[key, label, min, max] in fields" :key="key"
+            >{{ label
+            }}<AppField
+              v-model="draft[key]"
+              type="number"
+              :min="min"
+              :max="max"
+          /></label>
+        </div>
+        <button class="btn primary" :disabled="busy">保存费率与限制</button>
+      </form>
+      <template v-if="dialog === 'remove'"
+        ><p>
+          移除“{{ removeTarget.name }}”的调度配置{{
+            removeTarget.modelId ? "" : "及其模型"
+          }}？调用历史与账单会保留。
+        </p>
+        <div class="row wrap">
+          <button class="btn" :disabled="busy" @click="close">取消</button
+          ><button class="btn primary" :disabled="busy" @click="save">
+            确认移除
+          </button>
+        </div></template
+      >
+      <template v-if="dialog === 'test'"
+        ><p>
+          目标模型：{{
+            testTarget.model
+          }}。测试使用已保存配置，真实上游调用会记录用量与平台成本。
+        </p>
+        <button
+          class="btn primary"
+          :disabled="task.busy.value"
+          @click="task.start('/admin/ai/test', { targetId: testTarget.id })"
+        >
+          测试此模型</button
+        ><AiRunMeta :run="task.run.value"
+      /></template>
+    </AppDialog>
   </div>
 </template>
 <style>
-.ai-pool-provider,
-.ai-pool-model {
-  min-width: 0;
+.ai-config-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
 }
-.ai-pool-provider {
-  margin-block: 16px;
+.ai-provider-summary .section-line {
+  flex-wrap: wrap;
+  gap: 12px;
 }
-.ai-pool-model {
-  margin-block: 18px;
-  padding: 18px;
-  border: 1px solid var(--line, #dce4df);
-  border-radius: 10px;
-  background: var(--paper, #fff);
-}
-.ai-model-features {
-  margin-block: 14px;
+.ai-provider-summary .ai-record-list {
+  margin-top: 16px;
 }
 .ai-health {
   font-size: 12px;
-  line-height: 1.7;
+  line-height: 1.8;
   color: var(--muted);
   overflow-wrap: anywhere;
 }
@@ -526,20 +655,11 @@ onMounted(() => void act(load));
 .ai-health[data-state="disabled"] {
   color: #a04732;
 }
-.ai-pool .section-line {
-  flex-wrap: wrap;
-  gap: 10px;
-}
-.ai-pool h2,
-.ai-pool h3 {
+.ai-endpoint {
   overflow-wrap: anywhere;
 }
-@media (max-width: 600px) {
-  .ai-pool-model {
-    padding: 12px;
-  }
-  .ai-pool .row > .btn {
-    white-space: normal;
-  }
+.ai-model-features {
+  gap: 16px;
+  margin: 12px 0 20px;
 }
 </style>

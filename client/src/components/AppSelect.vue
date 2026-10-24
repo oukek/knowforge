@@ -9,6 +9,8 @@ import {
   watch,
 } from "vue";
 import Icon from "./Icon.vue";
+import { lockModal, unlockModal } from "../composables/modal-lock.js";
+const modalOwner = Symbol("select");
 
 defineOptions({ inheritAttrs: false });
 const props = defineProps({
@@ -32,9 +34,6 @@ const selected = computed(() =>
   props.options.find((item) => item.value === props.modelValue),
 );
 let media,
-  previousOverflow,
-  previousInert,
-  locked = false,
   search = "",
   searchTimer;
 const enabled = () =>
@@ -43,19 +42,7 @@ const enabled = () =>
     .filter((i) => i >= 0);
 
 function lockScroll(value) {
-  if (value && !locked) {
-    previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const app = document.getElementById("app");
-    previousInert = app?.inert;
-    if (app) app.inert = true;
-    locked = true;
-  } else if (!value && locked) {
-    document.body.style.overflow = previousOverflow;
-    const app = document.getElementById("app");
-    if (app) app.inert = previousInert;
-    locked = false;
-  }
+  value ? lockModal(modalOwner) : unlockModal(modalOwner);
 }
 function place() {
   if (!open.value || sheet.value || !trigger.value) return;
@@ -245,7 +232,9 @@ onBeforeUnmount(() => {
         <div
           class="app-select-backdrop"
           aria-hidden="true"
-          @pointerdown.prevent="close()"
+          @pointerdown.stop
+          @pointerup.stop
+          @click.stop.prevent="close()"
         ></div>
         <section
           ref="panel"

@@ -33,7 +33,7 @@ test("迁移题不复制资料问答，也没有相同归一化题干", () => {
 });
 test("新增深入专题具有机制、代码、边界、来源和关联练习", () => {
   const deep = data.lessons.filter((l) => l.depth === "deep");
-  assert.equal(deep.length, 39);
+  assert.equal(deep.length, 59);
   for (const lesson of deep) {
     assert(lesson.sections.length >= 5, lesson.id);
     assert(
@@ -54,8 +54,8 @@ test("新增深入专题具有机制、代码、边界、来源和关联练习",
       ),
     );
   }
-  assert.equal(data.curriculum.expandedLessons, 13);
-  assert.equal(data.labs.filter((l) => l.pool === "transfer").length, 12);
+  assert.equal(data.curriculum.expandedLessons, 19);
+  assert.equal(data.labs.filter((l) => l.pool === "transfer").length, 54);
   for (const moduleId of [
     "agents",
     "fde",
@@ -111,6 +111,6 @@ test("AI 深入路线包含十八个新机制专题及独立场景、选择与�
   const ai = data.lessons.filter((l) =>
     ["ai", "llmapp", "agents", "fde"].includes(l.moduleId),
   );
-  assert.equal(ai.length, 64);
-  assert.equal(ai.filter((l) => l.depth === "deep").length, 28);
+  assert.equal(ai.length, 79);
+  assert.equal(ai.filter((l) => l.depth === "deep").length, 43);
 });

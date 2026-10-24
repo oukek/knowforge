@@ -290,7 +290,9 @@ onBeforeUnmount(() => {
       <div
         class="python-runtime-backdrop"
         aria-hidden="true"
-        @pointerdown="collapse"
+        @pointerdown.stop
+        @pointerup.stop
+        @click.stop.prevent="collapse"
       ></div>
       <section
         ref="panel"

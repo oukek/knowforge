@@ -137,7 +137,9 @@ try {
   ).json();
   assert(bootstrap.catalog.lessons.length > 0);
   assert.equal(bootstrap.database, mysqlCheck ? "mysql" : "sqlite");
-  assert.equal(bootstrap.catalog.curriculum.deepLessons, 39);
+  assert.equal(bootstrap.catalog.curriculum.deepLessons, 59);
+  assert.equal(bootstrap.catalog.curriculum.expandedLessons, 19);
+  assert.equal(bootstrap.catalog.curriculum.acmProblems, 42);
   assert.equal(bootstrap.catalog.curriculum.aiFoundationLessons, 24);
   assert.equal(bootstrap.catalog.curriculum.publicInterviewQuestions, 60);
   assert.equal(bootstrap.catalog.glossary.length, 108);
@@ -145,6 +147,20 @@ try {
     await fetch(base + "/api/ai/status", { headers: { Cookie: cookie } })
   ).json();
   assert.equal(aiStatus.account.balance, "0");
+  const products = await (
+    await fetch(base + "/api/ai/products", { headers: { Cookie: cookie } })
+  ).json();
+  assert.equal(products.rows.length, 8);
+  assert.equal(
+    products.rows.find((p) => p.code === "basic").published.price,
+    "21.90",
+  );
+  assert(
+    products.rows.every(
+      (p) => p.published.validDays === 180 && p.published.bonus === "0",
+    ),
+  );
+
   assert.equal(
     (
       await fetch(base + "/api/admin/ai/config", {

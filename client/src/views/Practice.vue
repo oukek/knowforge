@@ -32,7 +32,11 @@ const query = ref(""),
   moduleId = ref(route.query.module || ""),
   priority = ref(""),
   origin = ref(
-    route.query.source === "public" || route.query.company ? "public" : "",
+    route.query.company
+      ? "public"
+      : ["public", "friend", "inferred"].includes(route.query.source)
+        ? route.query.source
+        : "",
   ),
   company = ref(route.query.company || ""),
   onlyNew = ref(false),
@@ -120,8 +124,11 @@ watch(company, (value) => {
   }
 });
 watch(origin, (value) => {
-  if (value === "editorial") company.value = "";
-  if (value === "public" && questionPool.value === "foundation")
+  if (value !== "public") company.value = "";
+  if (
+    ["public", "friend", "inferred"].includes(value) &&
+    questionPool.value === "foundation"
+  )
     questionPool.value = "transfer";
 });
 function open(q) {
@@ -200,6 +207,8 @@ function random() {
           { value: '', label: '全部来源' },
           { value: 'editorial', label: '原创专题题' },
           { value: 'public', label: '公开面经考点改编' },
+          { value: 'friend', label: '朋友近期面试记录' },
+          { value: 'inferred', label: '根据考点推演的延伸题' },
           { value: 'ai', label: '我的 AI 生成题' },
         ]"
       />
@@ -237,6 +246,14 @@ function random() {
           <div class="row wrap">
             <span v-if="q.company" class="badge subtle"
               >{{ q.company }} · 考点改编</span
+            >
+            <span v-if="q.provenance === 'user-reported'" class="badge subtle"
+              >朋友面试记录</span
+            >
+            <span
+              v-if="q.provenance === 'editorial-inference'"
+              class="badge subtle"
+              >原创延伸追问</span
             >
             <span v-if="q.provenance === 'ai-generated'" class="badge subtle"
               >AI 生成</span

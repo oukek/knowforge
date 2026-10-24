@@ -1,0 +1,1274 @@
+[
+  {
+    "id": "acm-activity",
+    "title": "会议室最多安排几场会议",
+    "category": "greedy",
+    "difficulty": "基础",
+    "lessonId": "algo-greedy-foundations",
+    "prompt": "只有一间会议室，n 场会议占用半开区间 [start,end)。你可以拒绝部分会议，求最多能完整安排几场；相邻会议可以在同一时刻交接。目标是场数，不是总时长或总收益。",
+    "inputFormat": "第一行 n；接下来 n 行 start end。",
+    "outputFormat": "输出最多会议场数。",
+    "constraints": "1≤n≤100000；0≤start<end≤10^9。",
+    "samples": [
+      {
+        "input": "4\n1 3\n2 4\n3 5\n5 6\n",
+        "output": "3",
+        "explanation": "选择 [1,3)、[3,5)、[5,6)，可以接连安排三场，会议开始时间相同不代表都能选。"
+      },
+      {
+        "input": "3\n0 10\n1 2\n2 3\n",
+        "output": "2",
+        "explanation": "选择两场短会议；只按最早开始选择会先拿走 [0,10)，反而只能安排一场。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "4\n1 3\n2 4\n3 5\n5 6\n",
+        "output": "3"
+      },
+      {
+        "name": "样例 2",
+        "input": "3\n0 10\n1 2\n2 3\n",
+        "output": "2"
+      },
+      {
+        "name": "相同结束",
+        "input": "3\n0 2\n1 2\n2 3\n",
+        "output": "2"
+      },
+      {
+        "name": "单场",
+        "input": "1\n0 1\n",
+        "output": "1"
+      }
+    ],
+    "solution": "function solve(input){const t=input.trim().split(/\\s+/).map(Number),n=t[0],a=[];for(let i=0;i<n;i++)a.push([t[1+2*i],t[2+2*i]]);a.sort((x,y)=>x[1]-y[1]);let end=-Infinity,count=0;for(const [s,e]of a)if(s>=end){count++;end=e;}return String(count);}",
+    "analysis": "### 核心原理\n\n按结束时间排序，选择当前兼容且最早结束的会议。若最优解第一场不是它，可替换成更早结束的这一场而不减少后续可选空间；去掉第一场后重复该论证。只按最早开始或最短时长都没有这个保证。\n\n### 样例怎样一步步得到答案\n\n样例按结束时间排列为 [1,3)、[2,4)、[3,5)、[5,6)。先选 [1,3)，跳过开始时间 2 小于当前结束 3 的会议，再选 [3,5)、[5,6)，共 3 场。变量 lastEnd 只记录最后一场结束时刻；没有选过会议时可设为 -Infinity。\n\n### 实现不变量与常见错误\n\n相同结束时间谁先选不影响最大场数；关键是允许 start=lastEnd。不能按开始时间或持续时长直接套用：长会议可能挡住很多短会议。先枚举少量会议的所有子集，筛掉重叠子集，再核对最大场数。",
+    "complexity": "O(n log n) 时间、O(n) 空间。",
+    "hints": [
+      "画出半开区间，end=start 可以交接。",
+      "选完一场后，什么选择能给未来留最大空间？",
+      "用交换论证解释最早结束，而非只背排序规则。"
+    ]
+  },
+  {
+    "id": "acm-arrows",
+    "title": "击破所有气球的最少箭数",
+    "category": "greedy",
+    "difficulty": "基础",
+    "lessonId": "algo-greedy-foundations",
+    "prompt": "每个气球占据数轴上的闭区间 [left,right]，一支箭射在 x 时会击破所有满足 left≤x≤right 的气球。箭数不限，求击破全部气球的最少箭数；端点也能命中。",
+    "inputFormat": "第一行 n，接下来 n 行 left right。",
+    "outputFormat": "输出最少箭数。",
+    "constraints": "1≤n≤100000；-10^9≤left≤right≤10^9。",
+    "samples": [
+      {
+        "input": "4\n10 16\n2 8\n1 6\n7 12\n",
+        "output": "2",
+        "explanation": "例如在 6 和 12 射箭，分别覆盖前后两组；不需要每个气球各射一支。"
+      },
+      {
+        "input": "2\n1 2\n2 3\n",
+        "output": "1",
+        "explanation": "在共同端点 2 射箭可同时命中，闭区间边界与会议题不同。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "4\n10 16\n2 8\n1 6\n7 12\n",
+        "output": "2"
+      },
+      {
+        "name": "样例 2",
+        "input": "2\n1 2\n2 3\n",
+        "output": "1"
+      },
+      {
+        "name": "完全分离",
+        "input": "3\n1 1\n2 2\n3 3\n",
+        "output": "3"
+      },
+      {
+        "name": "全部重合",
+        "input": "3\n0 5\n1 4\n2 3\n",
+        "output": "1"
+      }
+    ],
+    "solution": "function solve(input){const t=input.trim().split(/\\s+/).map(Number),n=t[0],a=[];for(let i=0;i<n;i++)a.push([t[1+2*i],t[2+2*i]]);a.sort((x,y)=>x[1]-y[1]);let arrow=-Infinity,count=0;for(const[l,r]of a)if(l>arrow){arrow=r;count++;}return String(count);}",
+    "analysis": "### 核心原理\n\n按右端点升序，对尚未覆盖的最早结束气球在右端点射箭，不会比更左的位置覆盖更少的后续候选。只有 left>arrow 时才需要新箭，等于时仍可覆盖。\n\n### 样例怎样一步步得到答案\n\n样例按右端点得到 [1,6]、[2,8]、[7,12]、[10,16]。第一支箭放在 6，可覆盖前两个闭区间；7>6，因此第二支放在 12，又覆盖最后两个。只在当前区间左端点严格大于上一支箭位置时增箭。\n\n### 实现不变量与常见错误\n\n从未命中的最早结束气球出发，把任意命中它的箭移到它的右端点，不会丢失后续右端点更大的已命中区间。这是安全选择的依据。气球可以退化成一个点，left=right 也合法；注意它与半开会议使用的判断不同。",
+    "complexity": "O(n log n) 时间、O(n) 空间。",
+    "hints": [
+      "目标是覆盖全部，不是选择互不重叠的区间。",
+      "把最早结束气球的箭尽量往右放。",
+      "l>arrow 与 l>=arrow 的差别用端点样例验证。"
+    ]
+  },
+  {
+    "id": "acm-jumps",
+    "title": "到达终点的最少跳跃次数",
+    "category": "greedy",
+    "difficulty": "进阶",
+    "lessonId": "algo-greedy-foundations",
+    "prompt": "站在数组第 1 个位置，ai 表示从这里最多向右跳多少格，可选择跳 1…ai 格，ai=0 表示不能向前跳。求到第 n 个位置的最少次数；无法到达输出 -1。不得跳过终点后再返回。",
+    "inputFormat": "第一行 n；第二行 n 个非负整数。",
+    "outputFormat": "输出最少次数或 -1；n=1 时为 0。",
+    "constraints": "1≤n≤200000；0≤ai≤200000。",
+    "samples": [
+      {
+        "input": "5\n2 3 1 1 4\n",
+        "output": "2",
+        "explanation": "先从位置 1 跳到位置 2，再跳到位置 5，共两次；每次都跳最远落点并非正确策略。"
+      },
+      {
+        "input": "5\n3 2 1 0 4\n",
+        "output": "-1",
+        "explanation": "最多只能到位置 4，位置 4 不能继续，因此终点不可达。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "5\n2 3 1 1 4\n",
+        "output": "2"
+      },
+      {
+        "name": "样例 2",
+        "input": "5\n3 2 1 0 4\n",
+        "output": "-1"
+      },
+      {
+        "name": "起点即终点",
+        "input": "1\n0\n",
+        "output": "0"
+      },
+      {
+        "name": "逐格跳",
+        "input": "4\n1 1 1 0\n",
+        "output": "3"
+      }
+    ],
+    "solution": "function solve(input){const t=input.trim().split(/\\s+/).map(Number),n=t[0],a=t.slice(1);let end=0,farthest=0,steps=0;for(let i=0;i<n-1;i++){if(i>farthest)return '-1';farthest=Math.max(farthest,i+a[i]);if(i===end){if(farthest===end)return '-1';steps++;end=farthest;if(end>=n-1)return String(steps);}}return n===1?'0':'-1';}",
+    "analysis": "### 核心原理\n\n把所有可用相同跳数到达的位置看作 BFS 的一层，用 end 标记本层右边界，farthest 汇总下一层最远边界。遍历到 end 才增加步数。贪心的是扩大下一层覆盖范围，不是决定每次落到最远格。\n\n### 样例怎样一步步得到答案\n\n样例 [2,3,1,1,4] 用零基下标解释：起点这一层可达最远 2，所以第一次跳覆盖下标 1…2；扫描这层时，位置 1 可把下一层扩到 4，位置 2 只能到 3；扫描到本层边界 2，再计第二跳，终点已覆盖。并不需要真的把第一跳落在边界 2。\n\n### 实现不变量与常见错误\n\nsteps 是当前层数，end 是本层最右可达下标，farthest 是遍历已到达位置得到的下一层边界。若到 end 仍有 farthest≤end，后面不可达，应返回 -1。n=1 不需要跳，循环不必访问终点，否则容易多计一步。",
+    "complexity": "O(n) 时间、O(n) 输入空间，额外状态 O(1)。",
+    "hints": [
+      "先画一跳可到的范围，再画两跳范围。",
+      "遍历一层所有位置，而不是只看最远落点。",
+      "farthest 不再增长且未到终点时无解。"
+    ]
+  },
+  {
+    "id": "acm-cookies",
+    "title": "有限饼干满足最多孩子",
+    "category": "greedy",
+    "difficulty": "入门",
+    "lessonId": "algo-greedy-foundations",
+    "prompt": "每个孩子需要至少 gi 大小的一块饼干才满意；每块饼干只能给一个孩子，每个孩子最多得到一块。求最多满足多少孩子，不允许拼接两块饼干。",
+    "inputFormat": "第一行 n m；第二行 n 个需求；第三行 m 个饼干大小。",
+    "outputFormat": "输出最多满足人数。",
+    "constraints": "1≤n,m≤100000；1≤gi,sj≤10^9。",
+    "samples": [
+      {
+        "input": "3 2\n1 2 3\n1 1\n",
+        "output": "1",
+        "explanation": "两块大小 1 的饼干只能让需求为 1 的那个孩子满意，不能拼成一块大小 2。"
+      },
+      {
+        "input": "2 3\n1 2\n1 2 3\n",
+        "output": "2",
+        "explanation": "分别分配大小 1、2 即可，剩余一块无需使用。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "3 2\n1 2 3\n1 1\n",
+        "output": "1"
+      },
+      {
+        "name": "样例 2",
+        "input": "2 3\n1 2\n1 2 3\n",
+        "output": "2"
+      },
+      {
+        "name": "全部不足",
+        "input": "2 2\n5 6\n1 2\n",
+        "output": "0"
+      },
+      {
+        "name": "重复需求",
+        "input": "3 3\n2 2 2\n2 2 2\n",
+        "output": "3"
+      }
+    ],
+    "solution": "function solve(input){const t=input.trim().split(/\\s+/).map(Number),n=t[0],m=t[1],g=t.slice(2,2+n).sort((a,b)=>a-b),s=t.slice(2+n,2+n+m).sort((a,b)=>a-b);let i=0;for(const x of s)if(i<n&&x>=g[i])i++;return String(i);}",
+    "analysis": "### 核心原理\n\n排序后尝试用最小可用饼干满足最小尚未满足需求。过小饼干连最小需求都无法满足，可以丢弃；满足时用更大饼干也不会增加本次人数，留给更大需求更合适。\n\n### 样例怎样一步步得到答案\n\n样例需求排序为 [1,2,3]，饼干为 [1,1]。第一块 1 满足需求 1，第二块仍是 1，小于下一个需求 2，丢弃后再没有饼干，答案 1。两个指针分别指向最小未满足需求和最小未使用饼干。\n\n### 实现不变量与常见错误\n\n饼干太小时，它连最小剩余需求都满足不了，无法帮助任何剩余孩子；足够大时先满足最小需求，可以把更大的饼干留给后面。指针只单调推进，排序后扫描 O(n+m)。不要给一个孩子累加多块饼干，题意是一人至多一块。",
+    "complexity": "O(n log n+m log m) 时间、O(n+m) 空间。",
+    "hints": [
+      "先把需求与饼干都排序。",
+      "太小的饼干是否还有别的用途？",
+      "满足最小需求后同时推进两边。"
+    ]
+  },
+  {
+    "id": "acm-merge-cost",
+    "title": "合并文件的最小总成本",
+    "category": "greedy",
+    "difficulty": "进阶",
+    "lessonId": "algo-greedy-foundations",
+    "prompt": "有 n 个文件，合并任意两个文件的成本等于它们的大小之和，新文件大小也是该和。重复合并直到只有一个文件，求最小总成本，不要求保持文件原顺序。",
+    "inputFormat": "第一行 n；第二行 n 个正整数大小。",
+    "outputFormat": "输出最小总成本；只有一个文件时成本为 0。",
+    "constraints": "1≤n≤100000；1≤ai≤10^6；总成本在 JS 安全整数范围内。",
+    "samples": [
+      {
+        "input": "3\n1 2 3\n",
+        "output": "9",
+        "explanation": "先合并 1+2 成本 3，再合并 3+3 成本 6，总共 9；若先合并 2+3，总成本为 11。"
+      },
+      {
+        "input": "1\n8\n",
+        "output": "0",
+        "explanation": "已经只有一个文件，无须发生任何合并操作。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "3\n1 2 3\n",
+        "output": "9"
+      },
+      {
+        "name": "样例 2",
+        "input": "1\n8\n",
+        "output": "0"
+      },
+      {
+        "name": "等大",
+        "input": "4\n1 1 1 1\n",
+        "output": "8"
+      },
+      {
+        "name": "两份文件",
+        "input": "2\n4 9\n",
+        "output": "13"
+      }
+    ],
+    "solution": "class Heap{constructor(){this.a=[];}push(x){const a=this.a;let i=a.length;a.push(x);while(i){const p=(i-1)>>1;if(a[p]<=x)break;a[i]=a[p];i=p;}a[i]=x;}pop(){const a=this.a,r=a[0],x=a.pop();if(!a.length)return r;let i=0;while(i*2+1<a.length){let j=i*2+1;if(j+1<a.length&&a[j+1]<a[j])j++;if(a[j]>=x)break;a[i]=a[j];i=j;}a[i]=x;return r;}}\nfunction solve(input){const t=input.trim().split(/\\s+/).map(Number),h=new Heap();for(const x of t.slice(1))h.push(x);let cost=0;while(h.a.length>1){const x=h.pop()+h.pop();cost+=x;h.push(x);}return String(cost);}",
+    "analysis": "### 核心原理\n\n每次合并当前最小的两个文件。合并过程对应一棵二叉树，总成本是叶子大小乘深度之和；最小两项可放在最深兄弟位置而不增加成本，合并后递归得到同样问题。小根堆负责动态取最小，不是只对原数组排序一次。\n\n### 样例怎样一步步得到答案\n\n样例 [1,2,3]：先合并最小的 1、2，成本 3，剩 [3,3]；再合并成本 6，总成本 9。若先合并 2、3，成本 5，再合并 1、5，成本 6，总计 11。累计的是每次合并费用之和，不是最终文件大小。\n\n### 实现不变量与常见错误\n\n每次从小根堆取两项，把和加入累计费用再放回堆，直到只剩一个文件。n=1 无合并动作，答案为 0。每轮把整数组重新排序会产生过大开销；堆的插入和删除 O(log n)，一共 n-1 轮。",
+    "complexity": "O(n log n) 时间、O(n) 空间。",
+    "hints": [
+      "每个文件越早合并，大小被重复计费越多。",
+      "最小两项先合并，结果需要放回候选集合。",
+      "用合并树解释局部选择的依据。"
+    ]
+  },
+  {
+    "id": "acm-candy",
+    "title": "按评分发放最少糖果",
+    "category": "greedy",
+    "difficulty": "进阶",
+    "lessonId": "algo-greedy-foundations",
+    "prompt": "n 个孩子排成一排，每人至少一颗糖。如果某孩子评分严格高于相邻孩子，他的糖必须更多。相同评分没有大小要求。求最少总糖果数。",
+    "inputFormat": "第一行 n；第二行 n 个评分。",
+    "outputFormat": "输出最小糖果总数。",
+    "constraints": "1≤n≤200000；0≤rating≤10^9。",
+    "samples": [
+      {
+        "input": "3\n1 0 2\n",
+        "output": "5",
+        "explanation": "分配 [2,1,2] 满足左右相邻规则，总数 5；中间评分低，不需与两边相同。"
+      },
+      {
+        "input": "3\n1 2 2\n",
+        "output": "4",
+        "explanation": "可分配 [1,2,1]；最后两人评分相同，无须给最后一人两颗。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "3\n1 0 2\n",
+        "output": "5"
+      },
+      {
+        "name": "样例 2",
+        "input": "3\n1 2 2\n",
+        "output": "4"
+      },
+      {
+        "name": "下降",
+        "input": "4\n4 3 2 1\n",
+        "output": "10"
+      },
+      {
+        "name": "单人",
+        "input": "1\n0\n",
+        "output": "1"
+      }
+    ],
+    "solution": "function solve(input){const t=input.trim().split(/\\s+/).map(Number),a=t.slice(1),n=t[0],c=new Array(n).fill(1);for(let i=1;i<n;i++)if(a[i]>a[i-1])c[i]=c[i-1]+1;for(let i=n-2;i>=0;i--)if(a[i]>a[i+1])c[i]=Math.max(c[i],c[i+1]+1);return String(c.reduce((s,x)=>s+x,0));}",
+    "analysis": "### 核心原理\n\n左到右给出满足左邻约束的最小值，右到左补足右邻约束，取两者最大。每个位置都至少达到这两侧的下界，最终分配又同时满足约束，所以总和最小。单向扫描不足以处理长下降段。\n\n### 样例怎样一步步得到答案\n\n样例评分 [1,0,2]：先全部给 1 颗，左到右只处理“比左邻居高”的约束，得到 [1,1,2]；右到左看见评分 1 大于 0，第一人至少应有 2 颗，得到 [2,1,2]，总数 5。\n\n### 实现不变量与常见错误\n\n左右约束都提供下界，第二遍应取 max(已有值,右侧+1)，不能直接覆盖。例如严格递增评分在第一遍已经满足，第二遍不应把它改回 1。相等评分不要求相同糖果，也不要求多给；检验相等、峰顶和长降序。",
+    "complexity": "O(n) 时间、O(n) 空间。",
+    "hints": [
+      "先满足每人至少 1。",
+      "分别考虑左侧和右侧的严格上升要求。",
+      "第二遍取 max，不能覆盖掉第一遍必要值。"
+    ]
+  },
+  {
+    "id": "acm-remove-digits",
+    "title": "删除数字得到最小数",
+    "category": "greedy",
+    "difficulty": "进阶",
+    "lessonId": "algo-greedy-foundations",
+    "prompt": "给定不含前导零的非负整数字符串 num（0 本身合法），恰好删除 k 个字符，剩余相对顺序不变，求最小结果。输出去除前导零后的十进制形式；全删或结果全零输出 0。",
+    "inputFormat": "第一行 num；第二行 k。",
+    "outputFormat": "输出一个数字字符串，不使用科学计数法。",
+    "constraints": "1≤|num|≤200000；0≤k≤|num|；禁止把整串转成 Number。",
+    "samples": [
+      {
+        "input": "1432219\n3\n",
+        "output": "1219",
+        "explanation": "删除 4、一个 3、一个 2 后得到 1219；比较的是保留顺序后的整体数值。"
+      },
+      {
+        "input": "10200\n1\n",
+        "output": "200",
+        "explanation": "删除首位 1 后是 0200，去掉前导零后输出 200。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "1432219\n3\n",
+        "output": "1219"
+      },
+      {
+        "name": "样例 2",
+        "input": "10200\n1\n",
+        "output": "200"
+      },
+      {
+        "name": "全部删除",
+        "input": "10\n2\n",
+        "output": "0"
+      },
+      {
+        "name": "递增剩余删除",
+        "input": "12345\n2\n",
+        "output": "123"
+      }
+    ],
+    "solution": "function solve(input){const [num,raw]=input.trim().split(/\\s+/);let k=Number(raw);const stack=[];for(const ch of num){while(k&&stack.length&&stack.at(-1)>ch){stack.pop();k--;}stack.push(ch);}if(k)stack.length-=k;return stack.join('').replace(/^0+/,'')||'0';}",
+    "analysis": "### 核心原理\n\n高位越小越优先。新数字比栈顶小时，若还有删除额度，就删除左侧更大的数，这样最早不同位变小。若原串非递减，最后仍有删除次数，应删末尾最大后缀。字符串保存避免超过 Number 精度。\n\n### 样例怎样一步步得到答案\n\n处理 1432219，k=3：读到 3 时弹掉前面的 4，读到第一个 2 时弹掉 3，读到 1 时弹掉前面的一个 2，删够三次，保留次序得到 1219。每弹掉一位，剩余删除次数减一。\n\n### 实现不变量与常见错误\n\n栈保留当前已处理前缀的候选最小结果，遇到更小的当前位时优先修正左边更高位。若全串单调不降，扫描后仍有删除额度，就从末尾删。最后去掉前导零，空串规范成 0；一开始就转 Number 会丢失长数字信息。",
+    "complexity": "O(n) 时间、O(n) 空间。",
+    "hints": [
+      "目标优先比较高位，而非每个局部和。",
+      "单调栈维护当前最优前缀。",
+      "别漏掉末尾剩余删除、前导零与全部删除。"
+    ]
+  },
+  {
+    "id": "acm-boats",
+    "title": "救生艇最少使用数量",
+    "category": "greedy",
+    "difficulty": "基础",
+    "lessonId": "algo-greedy-foundations",
+    "prompt": "每艘救生艇最多坐两人，总重量不超过 limit。每人必须上船，求最少艇数；保证每人体重均不超过 limit。",
+    "inputFormat": "第一行 n limit；第二行 n 个体重。",
+    "outputFormat": "输出最少艇数。",
+    "constraints": "1≤n≤100000；1≤wi≤limit≤10^9。",
+    "samples": [
+      {
+        "input": "4 3\n3 2 2 1\n",
+        "output": "3",
+        "explanation": "重量 3 单独一艘；2 与 1 同船；剩下的 2 单独一艘，总共 3。"
+      },
+      {
+        "input": "2 3\n1 2\n",
+        "output": "1",
+        "explanation": "二人总重刚好 3，可以共用一艘，允许等于载重上限。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "4 3\n3 2 2 1\n",
+        "output": "3"
+      },
+      {
+        "name": "样例 2",
+        "input": "2 3\n1 2\n",
+        "output": "1"
+      },
+      {
+        "name": "全部不能配对",
+        "input": "3 5\n3 3 3\n",
+        "output": "3"
+      },
+      {
+        "name": "单人",
+        "input": "1 5\n5\n",
+        "output": "1"
+      }
+    ],
+    "solution": "function solve(input){const t=input.trim().split(/\\s+/).map(Number),limit=t[1],a=t.slice(2).sort((x,y)=>x-y);let l=0,r=a.length-1,count=0;while(l<=r){if(l<r&&a[l]+a[r]<=limit)l++;r--;count++;}return String(count);}",
+    "analysis": "### 核心原理\n\n考虑最重的人：如果连最轻的人都不能与他配对，他必定单独坐；否则可以让最轻者与他同坐，交换其他配对不会增加艇数。每步安置最重者，用左右指针收缩。最多两人的前提十分关键，三人版本不能直接套此规则。\n\n### 样例怎样一步步得到答案\n\n样例排序后 [1,2,2,3]，limit=3。最重 3 与最轻 1 装不下，3 单独一船；之后最重 2 与最轻 1 刚好同船；最后的 2 单独一船，共 3 船。无论能否配对，每一轮都安排掉最重的一人。\n\n### 实现不变量与常见错误\n\n如果最重和最轻都超重，最重就不可能与其他更重的人同行，必须单独。如果可配对，存在一个最优方案这样配对而不增加船数，剩余问题同形。这个结论依赖每船最多两人，不能随意推广到三人。",
+    "complexity": "O(n log n) 时间、O(n) 空间。",
+    "hints": [
+      "先处理最难安置的最重者。",
+      "用最轻者判断是否能配对。",
+      "体重和等于 limit 时合法。"
+    ]
+  },
+  {
+    "id": "acm-stairs",
+    "title": "每次走一或两级的方案数",
+    "category": "dp",
+    "difficulty": "入门",
+    "lessonId": "algo-dp-foundations",
+    "prompt": "从第 0 级出发，到达第 n 级，每次走 1 或 2 级。不同跳步顺序算不同方案，例如 [1,2] 与 [2,1] 不同。n=0 时空方案计为 1。答案对 1000000007 取模。",
+    "inputFormat": "一行 n。",
+    "outputFormat": "输出方案数对模数的余数。",
+    "constraints": "0≤n≤1000000。",
+    "samples": [
+      {
+        "input": "3\n",
+        "output": "3",
+        "explanation": "三种方案为 1+1+1、1+2、2+1；不能把后两种当作同一个组合。"
+      },
+      {
+        "input": "0\n",
+        "output": "1",
+        "explanation": "什么也不做就到达起点，因此空方案有 1 种，不是 0 种。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "3\n",
+        "output": "3"
+      },
+      {
+        "name": "样例 2",
+        "input": "0\n",
+        "output": "1"
+      },
+      {
+        "name": "一级",
+        "input": "1\n",
+        "output": "1"
+      },
+      {
+        "name": "两级",
+        "input": "2\n",
+        "output": "2"
+      }
+    ],
+    "solution": "function solve(input){const n=Number(input.trim()),mod=1000000007;let a=1,b=1;for(let i=2;i<=n;i++){const c=(a+b)%mod;a=b;b=c;}return String(n===0?a:b);}",
+    "analysis": "### 核心原理\n\ndp[i] 表示到达第 i 级的方案数，最后一步只能来自 i-1 或 i-2，两个集合不重叠，所以相加。dp[0]=1、dp[1]=1；只保留前两项即可。每次先取模，避免 Number 大整数失真。\n\n### 样例怎样一步步得到答案\n\ndp[0]=1 表示什么都不走的一种空方案，dp[1]=1。dp[2]=dp[1]+dp[0]=2，对应 1+1、2；dp[3]=dp[2]+dp[1]=3，对应 1+1+1、1+2、2+1。按最后一步为 1 或 2 分类，两类互斥并覆盖所有走法。\n\n### 实现不变量与常见错误\n\n每步相加后立即取模，两项各小于模数，加法仍在 JS 安全整数范围。滚动变量 a、b 分别是前两项和前一项，要先算 next 再更新；n=0 直接返回 1。纯递归不加记忆会指数重复计算，并在大 n 时爆栈。",
+    "complexity": "O(n) 时间、O(1) 额外空间。",
+    "hints": [
+      "按最后一步来源分类。",
+      "空方案是递推所需的合法基例。",
+      "先加后取模，每一步数值都保持安全。"
+    ]
+  },
+  {
+    "id": "acm-house-robber",
+    "title": "不能相邻领取的最大收益",
+    "category": "dp",
+    "difficulty": "基础",
+    "lessonId": "algo-dp-foundations",
+    "prompt": "一排 n 个房间各有非负收益，不能同时选择相邻两个房间，求最多可获得的收益。允许一个也不选。",
+    "inputFormat": "第一行 n；第二行 n 个收益。",
+    "outputFormat": "输出最大总收益。",
+    "constraints": "1≤n≤200000；0≤ai≤10^9；总收益在安全整数范围内。",
+    "samples": [
+      {
+        "input": "5\n2 7 9 3 1\n",
+        "output": "12",
+        "explanation": "选第 1、3、5 个房间，收益 2+9+1=12；不能选相邻房间 2 和 3。"
+      },
+      {
+        "input": "3\n2 1 2\n",
+        "output": "4",
+        "explanation": "选两端收益 4，局部拿相邻最大值并不足以描述全局最优。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "5\n2 7 9 3 1\n",
+        "output": "12"
+      },
+      {
+        "name": "样例 2",
+        "input": "3\n2 1 2\n",
+        "output": "4"
+      },
+      {
+        "name": "全零",
+        "input": "3\n0 0 0\n",
+        "output": "0"
+      },
+      {
+        "name": "单项",
+        "input": "1\n8\n",
+        "output": "8"
+      }
+    ],
+    "solution": "function solve(input){const a=input.trim().split(/\\s+/).map(Number).slice(1);let prev2=0,prev1=0;for(const x of a){const cur=Math.max(prev1,prev2+x);prev2=prev1;prev1=cur;}return String(prev1);}",
+    "analysis": "### 核心原理\n\n前 i 项最优分两类：不选第 i 项，则沿用前 i-1 项；选第 i 项，则只能接前 i-2 项再加本项。dp[i]=max(dp[i-1],dp[i-2]+ai)，空前缀最优为 0。需先算 cur 再覆盖旧状态。\n\n### 样例怎样一步步得到答案\n\n样例前缀最优依次为 [0,2,7,11,11,12]。处理收益 9 时，不选是前两项的 7，选是前一项之前的最优 2 加 9，得到 11；最后选收益 1 时可接前三项中不相邻的最优前缀 11，得到 12。\n\n### 实现不变量与常见错误\n\n统一用 dp[i] 表示前 i 项最优，转移 dp[i]=max(dp[i-1],dp[i-2]+a[i-1])。这里允许空选，所以空前缀为 0。压缩为两变量时保存旧值再移动，不能把本轮新结果又当成上一轮值；收益和可能远超 32 位。",
+    "complexity": "O(n) 时间、O(1) 额外状态（输入数组 O(n)）。",
+    "hints": [
+      "对最后一间只考虑选或不选。",
+      "选它就必须跳过相邻前一间。",
+      "滚动状态覆盖顺序别写反。"
+    ]
+  },
+  {
+    "id": "acm-grid-paths",
+    "title": "有障碍网格的路径条数",
+    "category": "dp",
+    "difficulty": "基础",
+    "lessonId": "algo-dp-foundations",
+    "prompt": "从 n×m 网格左上角到右下角，每步只能向右或向下。0 为可走，1 为障碍。求合法路径数，对 1000000007 取模，起点或终点有障碍时为 0。",
+    "inputFormat": "第一行 n m；接下来 n 行，每行 m 个 0/1，用空格分隔。",
+    "outputFormat": "输出路径数余数。",
+    "constraints": "1≤n,m≤1000；n×m≤200000。",
+    "samples": [
+      {
+        "input": "3 3\n0 0 0\n0 1 0\n0 0 0\n",
+        "output": "2",
+        "explanation": "中央被挡，只剩沿上边再下行、或沿左边再右行两条路径，不允许斜着走。"
+      },
+      {
+        "input": "1 1\n0\n",
+        "output": "1",
+        "explanation": "起点就是终点，站在原处是一条合法路径，无需移动。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "3 3\n0 0 0\n0 1 0\n0 0 0\n",
+        "output": "2"
+      },
+      {
+        "name": "样例 2",
+        "input": "1 1\n0\n",
+        "output": "1"
+      },
+      {
+        "name": "起点被挡",
+        "input": "1 2\n1 0\n",
+        "output": "0"
+      },
+      {
+        "name": "终点被挡",
+        "input": "2 2\n0 0\n0 1\n",
+        "output": "0"
+      }
+    ],
+    "solution": "function solve(input){const t=input.trim().split(/\\s+/).map(Number),n=t[0],m=t[1],dp=new Array(m).fill(0);dp[0]=1;let p=2;for(let r=0;r<n;r++)for(let c=0;c<m;c++){const wall=t[p++];if(wall)dp[c]=0;else if(c>0)dp[c]=(dp[c]+dp[c-1])%1000000007;}return String(dp[m-1]);}",
+    "analysis": "### 核心原理\n\n到格子 (r,c) 的最后一步只能来自上方或左方。障碍处方案数必须清零；一维 dp[c] 更新前代表上方，dp[c-1] 更新后代表左方。起点单独赋 1 后照常处理障碍，避免被挡的起点仍向后传播。\n\n### 样例怎样一步步得到答案\n\n样例障碍在中心。方案表从上到下是 [1,1,1]、[1,0,1]、[1,1,2]，终点为 2。每个可走格只可能从上方或左方到达，两者最后一步不同，所以把方案数相加不会重复。\n\n### 实现不变量与常见错误\n\n一维 dp[c] 在更新前代表上一行同列，dp[c-1] 在更新后代表本行左格。遇到障碍要立刻把 dp[c] 清零，否则旧行路径会穿过障碍。起点或终点被堵时为 0；单行、单列与障碍后的格子都值得单独测试。",
+    "complexity": "O(nm) 时间、O(m) DP 空间；本示例读入全部输入占 O(nm)。",
+    "hints": [
+      "明确只能右/下，别与最短路 BFS 混用。",
+      "空格子相加，障碍清零。",
+      "一维滚动时列从左到右更新。"
+    ]
+  },
+  {
+    "id": "acm-max-subarray",
+    "title": "连续区间的最大收益",
+    "category": "dp",
+    "difficulty": "基础",
+    "lessonId": "algo-dp-foundations",
+    "prompt": "在整数数组中选一个非空连续子数组，使其元素和最大，输出该最大和。允许负数；不能跳过中间亏损把不连续的数相加。",
+    "inputFormat": "第一行 n；第二行 n 个整数。",
+    "outputFormat": "输出最大子数组和。",
+    "constraints": "1≤n≤200000；|ai|≤10^9；所有和在安全整数范围内。",
+    "samples": [
+      {
+        "input": "9\n-2 1 -3 4 -1 2 1 -5 4\n",
+        "output": "6",
+        "explanation": "连续区间 [4,-1,2,1] 的和为 6，不能只取所有正数。"
+      },
+      {
+        "input": "3\n-5 -2 -7\n",
+        "output": "-2",
+        "explanation": "要求非空，所以选最大的单个负数 -2，不能返回空区间的 0。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "9\n-2 1 -3 4 -1 2 1 -5 4\n",
+        "output": "6"
+      },
+      {
+        "name": "样例 2",
+        "input": "3\n-5 -2 -7\n",
+        "output": "-2"
+      },
+      {
+        "name": "单项",
+        "input": "1\n0\n",
+        "output": "0"
+      },
+      {
+        "name": "全部正数",
+        "input": "4\n1 2 3 4\n",
+        "output": "10"
+      }
+    ],
+    "solution": "function solve(input){const a=input.trim().split(/\\s+/).map(Number).slice(1);let end=a[0],best=a[0];for(let i=1;i<a.length;i++){end=Math.max(a[i],end+a[i]);best=Math.max(best,end);}return String(best);}",
+    "analysis": "### 核心原理\n\nend[i] 表示必须以 i 结尾的最大和，它要么从当前元素重新开始，要么接前一个最优结尾。全局 best 再从所有 end 取最大。两者不能混用，初始化为首元素才能处理全负数组。\n\n### 样例怎样一步步得到答案\n\n样例 end 值依次是 [-2,1,-2,4,3,5,6,1,5]；全局最大值为 6，对应连续段 [4,-1,2,1]。在当前位置，要么从该元素重新开始，要么接上“以前一位置结尾”的最佳连续段。\n\n### 实现不变量与常见错误\n\n定义 end[i]=max(a[i],end[i-1]+a[i])，best 记录所有 end 的最大值。end 与 best 含义不同，不能把全局 best 直接用于接续，否则会跨过中间元素。由于必须非空，两者都从首元素初始化；全负数组应返回最大负数。",
+    "complexity": "O(n) 时间、O(1) 额外状态。",
+    "hints": [
+      "先定义“必须以当前位置结尾”的状态。",
+      "只有接上与重新开始两种选择。",
+      "非空条件决定初始值不是 0。"
+    ]
+  },
+  {
+    "id": "acm-partition",
+    "title": "能否分成等和的两组",
+    "category": "dp",
+    "difficulty": "进阶",
+    "lessonId": "algo-dp-foundations",
+    "prompt": "给出 n 个非负整数，能否把每个元素恰好放入两组之一，使两组总和相同？元素即使数值相同也按不同下标各使用一次，允许某组为空。",
+    "inputFormat": "第一行 n；第二行 n 个整数。",
+    "outputFormat": "可行输出 YES，否则 NO。",
+    "constraints": "1≤n≤200；0≤ai≤10000；总和≤20000。",
+    "samples": [
+      {
+        "input": "4\n1 5 11 5\n",
+        "output": "YES",
+        "explanation": "分成 [11] 与 [1,5,5]，总和均为 11。"
+      },
+      {
+        "input": "4\n1 2 3 5\n",
+        "output": "NO",
+        "explanation": "总和为 11，是奇数，无法分成两个相等整数和。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "4\n1 5 11 5\n",
+        "output": "YES"
+      },
+      {
+        "name": "样例 2",
+        "input": "4\n1 2 3 5\n",
+        "output": "NO"
+      },
+      {
+        "name": "不能重复用一项",
+        "input": "2\n1 3\n",
+        "output": "NO"
+      },
+      {
+        "name": "全部零",
+        "input": "3\n0 0 0\n",
+        "output": "YES"
+      }
+    ],
+    "solution": "function solve(input){const a=input.trim().split(/\\s+/).map(Number).slice(1),sum=a.reduce((s,x)=>s+x,0);if(sum%2)return 'NO';const target=sum/2,dp=new Uint8Array(target+1);dp[0]=1;for(const x of a)for(let s=target;s>=x;s--)if(dp[s-x])dp[s]=1;return dp[target]?'YES':'NO';}",
+    "analysis": "### 核心原理\n\n总和为偶数后，只需找一组和等于 sum/2 的子集。每个元素使用一次，是 0/1 背包可达性；一维数组从大到小更新，避免同一元素在当前轮被重复利用。dp[0]=true 对应空子集。\n\n### 样例怎样一步步得到答案\n\n样例总和 22，目标 11。处理 1 后可达 {0,1}；处理第一个 5 后可达 {0,1,5,6}；处理 11 后目标已可达，另一组由未选下标构成。目标是存在性，不需要统计有多少种分组。\n\n### 实现不变量与常见错误\n\n对每个元素 x，从 target 降到 x 更新 dp[s] ||= dp[s-x]。逆序保证来源还属于处理当前元素之前的轮次，每个下标只用一次。正序会把同一个 5 反复使用，误变完全背包。总和为奇数直接 NO，全零和目标 0 则由空子集可达。",
+    "complexity": "O(n×sum) 时间、O(sum) DP 空间。",
+    "hints": [
+      "先检查总和奇偶。",
+      "将两组问题转成找目标和子集。",
+      "逆序更新是每项最多一次的关键。"
+    ]
+  },
+  {
+    "id": "acm-palindrome-subsequence",
+    "title": "最长回文子序列长度",
+    "category": "dp",
+    "difficulty": "进阶",
+    "lessonId": "algo-dp-foundations",
+    "prompt": "给定小写字符串，删除任意若干字符且保持剩余顺序，求最长回文子序列长度。回文是正反读相同；不要求连续，不是最长回文子串。",
+    "inputFormat": "一行非空字符串。",
+    "outputFormat": "输出最大长度。",
+    "constraints": "1≤n≤1000。",
+    "samples": [
+      {
+        "input": "bbbab\n",
+        "output": "4",
+        "explanation": "选择四个 b 得到 bbbb，删除中间的 a；子序列不要求连续。"
+      },
+      {
+        "input": "cbbd\n",
+        "output": "2",
+        "explanation": "可以选择 bb，不能为了长度选不是回文的整个字符串。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "bbbab\n",
+        "output": "4"
+      },
+      {
+        "name": "样例 2",
+        "input": "cbbd\n",
+        "output": "2"
+      },
+      {
+        "name": "单字符",
+        "input": "a\n",
+        "output": "1"
+      },
+      {
+        "name": "全不相同",
+        "input": "abcd\n",
+        "output": "1"
+      }
+    ],
+    "solution": "function solve(input){const s=input.trim(),n=s.length,dp=new Int32Array(n);for(let i=n-1;i>=0;i--){let diagonal=0;dp[i]=1;for(let j=i+1;j<n;j++){const old=dp[j];dp[j]=s[i]===s[j]?diagonal+2:Math.max(dp[j],dp[j-1]);diagonal=old;}}return String(dp[n-1]);}",
+    "analysis": "### 核心原理\n\n区间 dp[i][j]：两端相同可接内部回文+2，不同则丢弃任一端取最大。i 从右向左、j 从左向右满足依赖；压成一维时 diagonal 保存上一轮左下角，覆盖前必须备份。单字符为 1，空区间为 0。\n\n### 样例怎样一步步得到答案\n\n样例 bbbab，删去 a 后得到 bbbb，长度 4；它是子序列，不要求原位置连续。二维定义 dp[l][r] 为闭区间内最长回文子序列长度，单点为 1，空区间为 0。端点相同接内部最优加 2，否则舍弃一个端点取大。\n\n### 实现不变量与常见错误\n\n参考实现按 l 从右到左，r 从左到右做一维压缩：更新前 dp[r] 是旧行 dp[l+1][r]，更新后 dp[r-1] 是本行 dp[l][r-1]，单独的 prev 保存左下对角 dp[l+1][r-1]。务必先保存旧 dp[r] 再覆盖；字符串全相同与没有重复字符分别测试。",
+    "complexity": "O(n²) 时间、O(n) DP 空间。",
+    "hints": [
+      "先写二维区间定义，再考虑压缩。",
+      "为什么 i 倒序、j 正序？",
+      "保存旧 dp[j]，不要丢掉对角状态。"
+    ]
+  },
+  {
+    "id": "acm-stock-fee",
+    "title": "含手续费的多次股票交易",
+    "category": "dp",
+    "difficulty": "进阶",
+    "lessonId": "algo-dp-foundations",
+    "prompt": "给出 n 天价格，可多次买卖，但同时最多持有一股，卖出每股需支付固定 fee。开始不持股，结束不持股，求最大利润，允许完全不交易。",
+    "inputFormat": "第一行 n fee；第二行 n 个价格。",
+    "outputFormat": "输出最大利润。",
+    "constraints": "1≤n≤100000；0≤price,fee≤10^6。",
+    "samples": [
+      {
+        "input": "6 2\n1 3 2 8 4 9\n",
+        "output": "8",
+        "explanation": "在 1 买 8 卖赚 5，在 4 买 9 卖赚 3，共 8；每次卖出分别扣一次手续费。"
+      },
+      {
+        "input": "3 5\n1 2 3\n",
+        "output": "0",
+        "explanation": "涨幅不足手续费，最优是保持不交易，利润 0。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "6 2\n1 3 2 8 4 9\n",
+        "output": "8"
+      },
+      {
+        "name": "样例 2",
+        "input": "3 5\n1 2 3\n",
+        "output": "0"
+      },
+      {
+        "name": "单日",
+        "input": "1 0\n7\n",
+        "output": "0"
+      },
+      {
+        "name": "零手续费",
+        "input": "4 0\n1 3 2 5\n",
+        "output": "5"
+      }
+    ],
+    "solution": "function solve(input){const t=input.trim().split(/\\s+/).map(Number),n=t[0],fee=t[1],a=t.slice(2);let cash=0,hold=-a[0];for(let i=1;i<n;i++){const nextCash=Math.max(cash,hold+a[i]-fee),nextHold=Math.max(hold,cash-a[i]);cash=nextCash;hold=nextHold;}return String(cash);}",
+    "analysis": "### 核心原理\n\n每日用 cash 表示不持股的最大利润，hold 表示持股后的最大净值。当天 cash 可以保持或从旧 hold 卖出；hold 可以保持或用旧 cash 买入。手续费固定放在卖出一侧扣一次，使用临时变量保持前一日语义。\n\n### 样例怎样一步步得到答案\n\n样例买 1 卖 8，净赚 8-1-2=5；再买 4 卖 9，净赚 9-4-2=3，总计 8。持股状态 hold 表示当天结束持有一股的最大净资产，cash 表示结束时不持股的最大利润。\n\n### 实现不变量与常见错误\n\n每天用旧 cash、oldHold 计算 nextCash=max(cash,hold+price-fee)、nextHold=max(hold,cash-price)，然后一起更新。这里只在卖出扣手续费一次。初态 cash=0、hold=-price[0]；结束只能返回 cash，不能把未卖出的股票当利润。",
+    "complexity": "O(n) 时间、O(1) 额外状态。",
+    "hints": [
+      "状态包含是否持股，不能只看相邻涨跌。",
+      "买入价格应作为负成本进入 hold。",
+      "手续费只在一个方向扣除，别重复扣。"
+    ]
+  },
+  {
+    "id": "acm-coin-combinations",
+    "title": "无限硬币的组合数量",
+    "category": "dp",
+    "difficulty": "进阶",
+    "lessonId": "algo-dp-foundations",
+    "prompt": "若干不同正整数面额，每种数量无限，求凑成 amount 的组合数。顺序不同但使用各面额枚数相同算同一组合；答案对 1000000007 取模。amount=0 有空组合 1 种。",
+    "inputFormat": "第一行 n amount；第二行 n 个互不相同的面额。",
+    "outputFormat": "输出组合数量余数。",
+    "constraints": "1≤n≤50；0≤amount≤10000；1≤coin≤10000。",
+    "samples": [
+      {
+        "input": "3 5\n1 2 5\n",
+        "output": "4",
+        "explanation": "组合为 5；2+2+1；2+1+1+1；五个 1，不区分每种硬币的排列顺序。"
+      },
+      {
+        "input": "1 3\n2\n",
+        "output": "0",
+        "explanation": "只有面额 2，无论拿几枚都凑不成奇数 3。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "3 5\n1 2 5\n",
+        "output": "4"
+      },
+      {
+        "name": "样例 2",
+        "input": "1 3\n2\n",
+        "output": "0"
+      },
+      {
+        "name": "空组合",
+        "input": "2 0\n2 3\n",
+        "output": "1"
+      },
+      {
+        "name": "顺序不重复计",
+        "input": "2 3\n1 2\n",
+        "output": "2"
+      }
+    ],
+    "solution": "function solve(input){const t=input.trim().split(/\\s+/).map(Number),amount=t[1],coins=t.slice(2),dp=new Array(amount+1).fill(0),mod=1000000007;dp[0]=1;for(const c of coins)for(let s=c;s<=amount;s++)dp[s]=(dp[s]+dp[s-c])%mod;return String(dp[amount]);}",
+    "analysis": "### 核心原理\n\n外层依次加入一种面额，内层金额正序允许当前面额重复使用；每个组合按面额阶段被计一次。如果金额外层、面额内层，会把 1+2 和 2+1 算成两种排列，这是另一道题。\n\n### 样例怎样一步步得到答案\n\n样例 amount=5，硬币 [1,2,5]：只有面额 1 时，各金额恰有一种；加入 2 后，金额 5 有 1×5、2+1×3、2×2+1 三种；加入 5 再多 [5] 一种，共 4。交换硬币先后顺序不产生新组合。\n\n### 实现不变量与常见错误\n\n先遍历面额，再让金额从 coin 升到 amount。升序让同一面额本轮可重复使用，面额外层给每种组合固定构造顺序。若金额外层，会把 1+2 与 2+1 作为不同方案。dp[0]=1，目标 0 是空组合，不应返回 0。",
+    "complexity": "O(n×amount) 时间、O(amount) 空间。",
+    "hints": [
+      "区分最少枚数、组合数和排列数。",
+      "dp[0]=1 是合法空组合。",
+      "面额外层保证不重复计顺序，金额正序允许重复用。"
+    ]
+  },
+  {
+    "id": "acm-merge-sort",
+    "title": "把整数正确地从小到大排列",
+    "category": "sorting",
+    "difficulty": "入门",
+    "lessonId": "algo-sorting-foundations",
+    "prompt": "给出 n 个整数，按数值从小到大输出。可含负数与重复值。建议手写归并排序理解分治；本题不把数组转成字符串后按字典序排序。",
+    "inputFormat": "第一行 n；第二行 n 个整数。",
+    "outputFormat": "一行升序整数，空格分隔。",
+    "constraints": "1≤n≤200000；|ai|≤10^9。",
+    "samples": [
+      {
+        "input": "5\n10 2 -1 2 0\n",
+        "output": "-1 0 2 2 10",
+        "explanation": "按数值比较，2 应在 10 前；重复的两个 2 都需要保留。"
+      },
+      {
+        "input": "3\n3 2 1\n",
+        "output": "1 2 3",
+        "explanation": "原数组完全逆序，排序仍需正确，不能假设输入已经大致有序。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "5\n10 2 -1 2 0\n",
+        "output": "-1 0 2 2 10"
+      },
+      {
+        "name": "样例 2",
+        "input": "3\n3 2 1\n",
+        "output": "1 2 3"
+      },
+      {
+        "name": "单项",
+        "input": "1\n7\n",
+        "output": "7"
+      },
+      {
+        "name": "全相同",
+        "input": "3\n0 0 0\n",
+        "output": "0 0 0"
+      }
+    ],
+    "solution": "function solve(input){let a=input.trim().split(/\\s+/).map(Number).slice(1),n=a.length,b=new Array(n);for(let w=1;w<n;w*=2){for(let l=0;l<n;l+=2*w){const m=Math.min(l+w,n),r=Math.min(l+2*w,n);let i=l,j=m,k=l;while(i<m&&j<r)b[k++]=a[i]<=a[j]?a[i++]:a[j++];while(i<m)b[k++]=a[i++];while(j<r)b[k++]=a[j++];}[a,b]=[b,a];}return a.join(' ');}",
+    "analysis": "### 核心原理\n\n先合并长度 1 的相邻有序段，再合并长度 2、4…的段；每层所有元素至多处理一次，共 log n 层。相等时先取左侧可保持稳定性。迭代写法避免深递归并展示每层输入输出缓冲的交换。\n\n### 样例怎样一步步得到答案\n\n样例 [10,2,-1,2,0]，先合并长度 1 的相邻段得到 [2,10]、[-1,2]、[0]，再合并前两段为 [-1,2,2,10]，最后合并 [0] 得 [-1,0,2,2,10]。每次归并只比较两个有序段当前最小未取元素。\n\n### 实现不变量与常见错误\n\n参考实现用长度 1、2、4… 的迭代归并，避免递归层面的额外处理。区间采用半开 [l,m)、[m,r)，最后一段可能不足长度，需用 min 截断。相等时优先取左半保证稳定；每轮输出完整写入辅助数组，不能漏掉任一侧剩余元素。",
+    "complexity": "O(n log n) 时间、O(n) 额外空间。",
+    "hints": [
+      "默认 JS sort 是字符串语义，需要数值比较器。",
+      "先会合并两个有序数组，再分治。",
+      "奇数尾段也要完整拷贝。"
+    ]
+  },
+  {
+    "id": "acm-stable-records",
+    "title": "按分数稳定整理报名记录",
+    "category": "sorting",
+    "difficulty": "基础",
+    "lessonId": "algo-sorting-foundations",
+    "prompt": "每条记录有整数分数和唯一名称，按分数升序输出名称；相同分数必须保持输入时的先后顺序，这就是稳定排序。名称不参与排序。",
+    "inputFormat": "第一行 n；随后 n 行 score name，name 仅包含字母数字下划线且不含空格。",
+    "outputFormat": "一行名称，用空格分隔。",
+    "constraints": "1≤n≤100000；|score|≤10^9；name 长度 1…20。",
+    "samples": [
+      {
+        "input": "4\n80 alice\n70 bob\n80 carol\n70 dave\n",
+        "output": "bob dave alice carol",
+        "explanation": "同分 70 中 bob 先于 dave，同分 80 中 alice 先于 carol，不能按名字重新排序。"
+      },
+      {
+        "input": "2\n1 z\n1 a\n",
+        "output": "z a",
+        "explanation": "分数相同应保持原序 z、a，即使字典序 a 更小也不能提前。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "4\n80 alice\n70 bob\n80 carol\n70 dave\n",
+        "output": "bob dave alice carol"
+      },
+      {
+        "name": "样例 2",
+        "input": "2\n1 z\n1 a\n",
+        "output": "z a"
+      },
+      {
+        "name": "单记录",
+        "input": "1\n0 only\n",
+        "output": "only"
+      },
+      {
+        "name": "负分",
+        "input": "2\n-1 a\n-2 b\n",
+        "output": "b a"
+      }
+    ],
+    "solution": "function solve(input){const t=input.trim().split(/\\s+/),n=+t[0],a=[];for(let i=0;i<n;i++)a.push({score:+t[1+2*i],name:t[2+2*i],index:i});a.sort((x,y)=>x.score-y.score||x.index-y.index);return a.map(x=>x.name).join(' ');}",
+    "analysis": "### 核心原理\n\n把输入位置作为第二关键字，可显式保证相同分数按原序，即使迁移到不稳定排序也维持业务规则。稳定性不是“排序多跑几次结果相同”，而是相等键相对顺序保留。\n\n### 样例怎样一步步得到答案\n\n样例中 70 分的 bob 先于 dave 输入，80 分的 alice 先于 carol 输入；因此输出 bob dave alice carol。若同分改按姓名排序，遇到姓名逆序输入就会偏离本题要求。\n\n### 实现不变量与常见错误\n\n读入时保存 index，用 score 升序、index 升序比较，把业务顺序显式写进比较器。只输出姓名但不能丢掉重复分数记录。比较器需要返回负数、零、正数，不能写成 a.score>b.score 的布尔值。",
+    "complexity": "O(n log n) 时间、O(n) 空间。",
+    "hints": [
+      "先找排序主键与同分要求。",
+      "记录输入下标作为次关键字。",
+      "不要把姓名当同分破局条件。"
+    ]
+  },
+  {
+    "id": "acm-inversions",
+    "title": "需要纠正多少对逆序记录",
+    "category": "sorting",
+    "difficulty": "进阶",
+    "lessonId": "algo-sorting-foundations",
+    "prompt": "给定数组，统计下标 i<j 且 ai>aj 的二元组数量。相等值不算逆序；要统计总对数，不是只统计相邻逆序位置。",
+    "inputFormat": "第一行 n；第二行 n 个整数。",
+    "outputFormat": "输出逆序对数量。",
+    "constraints": "1≤n≤200000；|ai|≤10^9；答案可能超过 32 位但在 Number 安全整数范围内。",
+    "samples": [
+      {
+        "input": "5\n2 4 1 3 5\n",
+        "output": "3",
+        "explanation": "三对为 (2,1)、(4,1)、(4,3)，括号写的是数值；不只检查相邻元素。"
+      },
+      {
+        "input": "3\n2 2 1\n",
+        "output": "2",
+        "explanation": "两个不同下标的 2 各与 1 组成逆序，相等的两个 2 之间不计数。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "5\n2 4 1 3 5\n",
+        "output": "3"
+      },
+      {
+        "name": "样例 2",
+        "input": "3\n2 2 1\n",
+        "output": "2"
+      },
+      {
+        "name": "已排序",
+        "input": "3\n1 2 3\n",
+        "output": "0"
+      },
+      {
+        "name": "完全逆序",
+        "input": "4\n4 3 2 1\n",
+        "output": "6"
+      }
+    ],
+    "solution": "function solve(input){const a=input.trim().split(/\\s+/).map(Number).slice(1),tmp=new Array(a.length);let count=0;function sort(l,r){if(r-l<2)return;const m=(l+r)>>1;sort(l,m);sort(m,r);let i=l,j=m,k=l;while(i<m&&j<r){if(a[i]<=a[j])tmp[k++]=a[i++];else{count+=m-i;tmp[k++]=a[j++];}}while(i<m)tmp[k++]=a[i++];while(j<r)tmp[k++]=a[j++];for(let p=l;p<r;p++)a[p]=tmp[p];}sort(0,a.length);return String(count);}",
+    "analysis": "### 核心原理\n\n归并时左右半段各自已排序，若右边 a[j] 小于左边 a[i]，它也小于左边从 i 到 m-1 的全部元素，一次增加 m-i。相等时取左侧，避免把等值计入。递归只到 log n 深度，答案不能用位运算截成 32 位。\n\n### 样例怎样一步步得到答案\n\n样例左半 [2,4] 与右半排序结果 [1,3,5] 归并：右边 1 比左边当前 2 小，因此它与剩下的 2、4 同时组成两对；随后取左边 2；右边 3 比当前 4 小，又组成一对，共三对。每对只会在它跨越的那次划分边界被统计一次。\n\n### 实现不变量与常见错误\n\n总答案=左半答案+右半答案+跨边界答案。右元素更小时增加左半尚未取出的数量 m-i；相等时取左边，不计逆序。不要逐一枚举那 m-i 个元素，否则又会退化为平方；20 万降序的答案是 19999900000，不能用位运算存储。",
+    "complexity": "O(n log n) 时间、O(n) 空间。",
+    "hints": [
+      "暴力枚举每对可作小数据校验。",
+      "排序过程中批量统计跨左右段的逆序。",
+      "相等时不增加，数量使用普通 Number 加法。"
+    ]
+  },
+  {
+    "id": "acm-sort-colors",
+    "title": "只含三种值的原地分类",
+    "category": "sorting",
+    "difficulty": "基础",
+    "lessonId": "algo-sorting-foundations",
+    "prompt": "数组只含 0、1、2，输出按 0 在前、1 居中、2 在后的数组。学习目标是用三路划分，在一次扫描内分类，不能丢失重复项。",
+    "inputFormat": "第一行 n；第二行 n 个 0/1/2。",
+    "outputFormat": "输出分类后的 n 个数，空格分隔。",
+    "constraints": "1≤n≤200000。",
+    "samples": [
+      {
+        "input": "6\n2 0 2 1 1 0\n",
+        "output": "0 0 1 1 2 2",
+        "explanation": "只改变顺序，不是去重；两个 0、两个 1、两个 2 均需保留。"
+      },
+      {
+        "input": "3\n2 2 0\n",
+        "output": "0 2 2",
+        "explanation": "从右端交换过来的元素仍未检查，不能无条件把扫描指针向前推进。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "6\n2 0 2 1 1 0\n",
+        "output": "0 0 1 1 2 2"
+      },
+      {
+        "name": "样例 2",
+        "input": "3\n2 2 0\n",
+        "output": "0 2 2"
+      },
+      {
+        "name": "全中间值",
+        "input": "3\n1 1 1\n",
+        "output": "1 1 1"
+      },
+      {
+        "name": "单项",
+        "input": "1\n2\n",
+        "output": "2"
+      }
+    ],
+    "solution": "function solve(input){const a=input.trim().split(/\\s+/).map(Number).slice(1);let low=0,i=0,high=a.length-1;while(i<=high){if(a[i]===0){[a[low],a[i]]=[a[i],a[low]];low++;i++;}else if(a[i]===2){[a[i],a[high]]=[a[high],a[i]];high--;}else i++;}return a.join(' ');}",
+    "analysis": "### 核心原理\n\n维护 [0,low) 全为 0、[low,i) 全为 1、(high,n) 全为 2，中间 [i,high] 未处理。遇 2 换到末端时，新换到 i 的值未知，需要留在原位再检查。\n\n### 样例怎样一步步得到答案\n\n维护 [0,low) 全是 0、[low,mid) 全是 1、(high,n) 全是 2，中间 [mid,high] 未检查。样例开头为 2，把它与 high 的 0 交换，high 左移；原地换来的 0 尚未处理，因此 mid 不能立刻右移。\n\n### 实现不变量与常见错误\n\n检查 mid：0 与 low 交换后两指针都前进；1 只前进 mid；2 与 high 交换后只后退 high。每轮至少减少一个未知元素，所以线性结束。这里排序会改变工作数组，不需要额外计数表，但要守住三个区间不变量。",
+    "complexity": "O(n) 时间、O(1) 额外空间（不含输入输出）。",
+    "hints": [
+      "先画四个区间与不变量。",
+      "处理 0 可以推进 low 和 i。",
+      "处理 2 只缩 high，不推进 i。"
+    ]
+  },
+  {
+    "id": "acm-relative-sort",
+    "title": "按指定优先序排列编号",
+    "category": "sorting",
+    "difficulty": "基础",
+    "lessonId": "algo-sorting-foundations",
+    "prompt": "给定数组 A 和不含重复项的优先序 B，先按 B 中出现的次序输出 A 里这些值的所有副本，再将 A 中未列入 B 的值按数值升序输出。B 的每个值保证在 A 中出现。",
+    "inputFormat": "第一行 n m；第二行 A 的 n 个整数；第三行 B 的 m 个整数。",
+    "outputFormat": "输出排序后的完整 A，空格分隔。",
+    "constraints": "1≤m≤n≤200000；0≤Ai,Bi≤1000。",
+    "samples": [
+      {
+        "input": "7 3\n2 3 1 3 2 4 0\n3 2 4\n",
+        "output": "3 3 2 2 4 0 1",
+        "explanation": "优先序要求 3、2、4 在前，剩余 0、1 再升序；不是把整个数组普通排序。"
+      },
+      {
+        "input": "3 1\n5 1 5\n5\n",
+        "output": "5 5 1",
+        "explanation": "两个 5 都放到前面，未列入优先序的 1 放在末尾。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "7 3\n2 3 1 3 2 4 0\n3 2 4\n",
+        "output": "3 3 2 2 4 0 1"
+      },
+      {
+        "name": "样例 2",
+        "input": "3 1\n5 1 5\n5\n",
+        "output": "5 5 1"
+      },
+      {
+        "name": "只一种",
+        "input": "2 1\n0 0\n0\n",
+        "output": "0 0"
+      },
+      {
+        "name": "优先序逆数值",
+        "input": "3 3\n1 2 3\n3 2 1\n",
+        "output": "3 2 1"
+      }
+    ],
+    "solution": "function solve(input){const t=input.trim().split(/\\s+/).map(Number),n=t[0],m=t[1],count=new Int32Array(1001),out=[];for(const x of t.slice(2,2+n))count[x]++;for(const x of t.slice(2+n,2+n+m)){while(count[x]>0){out.push(x);count[x]--;}}for(let x=0;x<=1000;x++)while(count[x]>0){out.push(x);count[x]--;}return out.join(' ');}",
+    "analysis": "### 核心原理\n\n值域很小，用计数数组保存频次。先遍历 B 消耗指定编号的计数，再升序遍历剩余值域。时间与值域而不是比较排序下界相关；当值域很大时可改 Map 加排序。\n\n### 样例怎样一步步得到答案\n\n样例计数为 0:1、1:1、2:2、3:2、4:1。按 B=[3,2,4] 先输出两次 3、两次 2、一次 4，并把对应计数清零；之后按数值升序扫 0…1000，输出 0、1。最终每个 A 中的元素出现次数保持不变。\n\n### 实现不变量与常见错误\n\nB 的元素代表优先级，不是要删除的值，也不必覆盖 A 的全部值。清零已输出优先值可避免在尾部重复输出。计数法依赖本题值域很小；若值域扩大到任意整数，可改用 Map 加剩余键排序，复杂度也需要重算。",
+    "complexity": "O(n+m+V) 时间、O(V+n) 空间，V=1001，含输出。",
+    "hints": [
+      "把副本数量与顺序规则分开处理。",
+      "优先序处理后清零该值计数。",
+      "剩余编号按数值遍历，别遗漏 0。"
+    ]
+  },
+  {
+    "id": "acm-largest-concat",
+    "title": "拼接成最大的十进制整数",
+    "category": "sorting",
+    "difficulty": "进阶",
+    "lessonId": "algo-sorting-foundations",
+    "prompt": "给出 n 个非负整数的十进制字符串，重新排序并把它们直接拼接，输出可得到的最大整数。每项内部数字不能变；若所有项都是 0，输出一个 0。",
+    "inputFormat": "第一行 n；第二行 n 个无前导零的数字字符串，0 本身合法。",
+    "outputFormat": "输出最大结果字符串，不转为 Number。",
+    "constraints": "1≤n≤10000；每个字符串长度 1…10；总长度≤100000。",
+    "samples": [
+      {
+        "input": "5\n3 30 34 5 9\n",
+        "output": "9534330",
+        "explanation": "3 应放在 30 前，因为 330 大于 303；只按数字大小或字符串字典序排序都不够。"
+      },
+      {
+        "input": "2\n0 0\n",
+        "output": "0",
+        "explanation": "全零结果规范化为单个 0，不输出 00。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "5\n3 30 34 5 9\n",
+        "output": "9534330"
+      },
+      {
+        "name": "样例 2",
+        "input": "2\n0 0\n",
+        "output": "0"
+      },
+      {
+        "name": "前缀关系",
+        "input": "2\n12 121\n",
+        "output": "12121"
+      },
+      {
+        "name": "单项",
+        "input": "1\n10\n",
+        "output": "10"
+      }
+    ],
+    "solution": "function solve(input){const a=input.trim().split(/\\s+/).slice(1);a.sort((x,y)=>{const xy=x+y,yx=y+x;return xy===yx?0:xy>yx?-1:1;});return a[0]==='0'?'0':a.join('');}",
+    "analysis": "### 核心原理\n\n相邻两项 x、y 的优先顺序由 xy 和 yx 决定，较大拼接放前；交换不满足该条件的相邻项会改善全局结果。比较等长拼接字符串，避免长整数转 Number 后丢精度。\n\n### 样例怎样一步步得到答案\n\n样例中 9 应在 5 前，因为 95>59；34 在 3 前，因为 343>334；3 又在 30 前，因为 330>303，最后得到 9|5|34|3|30=9534330。不能只按整数大小或只按第一位排序。\n\n### 实现不变量与常见错误\n\n比较 xy 与 yx 字符串，它们长度相同，所以字典序就是数值大小顺序，且不会溢出。若比较结果相等，谁先谁后不影响拼接值。输入没有前导零；排序后首项为 0 时可判断全零并输出单个 0。不要用 Number(x+y)-Number(y+x)，拼接可能超过精度上限。",
+    "complexity": "O(n log n×L) 比较时间，O(nL) 输出空间；L 为单项最大长度。",
+    "hints": [
+      "比较的是 x+y 与 y+x。",
+      "拼接后可能非常长，必须使用字符串。",
+      "全为 0 时特殊规范化。"
+    ]
+  },
+  {
+    "id": "acm-merge-sorted",
+    "title": "合并两份已排序名单",
+    "category": "sorting",
+    "difficulty": "入门",
+    "lessonId": "algo-sorting-foundations",
+    "prompt": "两份整数名单各自已经非递减排列，合并为一份非递减名单，保留所有重复项。允许其中一份为空；不得把相同值当作同一个人而去重。",
+    "inputFormat": "第一行 n m；后续依次提供 n 个 A 值、m 个 B 值；空数组对应空行也可省略。",
+    "outputFormat": "输出 n+m 个升序整数，空格分隔。",
+    "constraints": "0≤n,m≤200000；1≤n+m≤200000；|值|≤10^9。",
+    "samples": [
+      {
+        "input": "3 3\n1 2 4\n1 3 4\n",
+        "output": "1 1 2 3 4 4",
+        "explanation": "两个 1 和两个 4 都要保留，合并不是集合并集。"
+      },
+      {
+        "input": "0 3\n\n-1 0 2\n",
+        "output": "-1 0 2",
+        "explanation": "第一份为空时，直接保留第二份的全部内容。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "3 3\n1 2 4\n1 3 4\n",
+        "output": "1 1 2 3 4 4"
+      },
+      {
+        "name": "样例 2",
+        "input": "0 3\n\n-1 0 2\n",
+        "output": "-1 0 2"
+      },
+      {
+        "name": "第二份为空",
+        "input": "2 0\n1 2\n",
+        "output": "1 2"
+      },
+      {
+        "name": "交错",
+        "input": "2 2\n-2 2\n-1 3\n",
+        "output": "-2 -1 2 3"
+      }
+    ],
+    "solution": "function solve(input){const t=input.trim().split(/\\s+/).map(Number),n=t[0],m=t[1],a=t.slice(2,2+n),b=t.slice(2+n,2+n+m),out=[];let i=0,j=0;while(i<n&&j<m)out.push(a[i]<=b[j]?a[i++]:b[j++]);while(i<n)out.push(a[i++]);while(j<m)out.push(b[j++]);return out.join(' ');}",
+    "analysis": "### 核心原理\n\n两份输入都已排序，所以最小未输出值一定在两个头指针中。比较后推进被取出的那一侧；任意一份耗尽后复制另一份余项。无需重新比较排序，能线性完成。\n\n### 样例怎样一步步得到答案\n\n样例两个头指针都指向 1，先取左侧 1，再取右侧 1；之后依次比较得到 2、3、4、4。每次输出一个元素就推进其所属数组的指针，输出总数必须是 n+m。\n\n### 实现不变量与常见错误\n\n循环条件是两边都有剩余；结束后分别追加任一边的尾部。允许其中一个数组长度为 0，因此解析标准输入应按 n、m 消费 token，不能假设空数组一定有一整行。排序已有顺序的两份输入会浪费信息，双指针 O(n+m) 已达到读写下界。",
+    "complexity": "O(n+m) 时间、O(n+m) 输出空间。",
+    "hints": [
+      "利用输入已排序这一信息。",
+      "只比较当前两头，取小者。",
+      "一份用完后处理剩余尾段。"
+    ]
+  },
+  {
+    "id": "acm-quickselect",
+    "title": "未排序数组的第 K 小元素",
+    "category": "sorting",
+    "difficulty": "进阶",
+    "lessonId": "algo-sorting-foundations",
+    "prompt": "给定未排序整数数组，找第 k 小的值。重复项按次数计排名；本题 k 从 1 开始，不要求输出全部排序结果。",
+    "inputFormat": "第一行 n k；第二行 n 个整数。",
+    "outputFormat": "输出第 k 小值。",
+    "constraints": "1≤k≤n≤200000；|ai|≤10^9。",
+    "samples": [
+      {
+        "input": "6 3\n7 2 5 2 9 1\n",
+        "output": "2",
+        "explanation": "升序为 1,2,2,5,7,9，第 3 小是 2；重复值计入排名。"
+      },
+      {
+        "input": "4 1\n-1 3 -5 0\n",
+        "output": "-5",
+        "explanation": "k=1 时求最小值，不是第 1 个输入元素。"
+      }
+    ],
+    "tests": [
+      {
+        "name": "样例 1",
+        "input": "6 3\n7 2 5 2 9 1\n",
+        "output": "2"
+      },
+      {
+        "name": "样例 2",
+        "input": "4 1\n-1 3 -5 0\n",
+        "output": "-5"
+      },
+      {
+        "name": "全部相同",
+        "input": "5 4\n2 2 2 2 2\n",
+        "output": "2"
+      },
+      {
+        "name": "最大排名",
+        "input": "3 3\n3 1 2\n",
+        "output": "3"
+      }
+    ],
+    "solution": "function solve(input){const t=input.trim().split(/\\s+/).map(Number),k=t[1]-1,a=t.slice(2);let l=0,r=a.length-1;while(l<=r){const pivot=a[l+Math.floor((r-l)/2)];let low=l,i=l,high=r;while(i<=high){if(a[i]<pivot){[a[i],a[low]]=[a[low],a[i]];i++;low++;}else if(a[i]>pivot){[a[i],a[high]]=[a[high],a[i]];high--;}else i++;}if(k<low)r=low-1;else if(k>high)l=high+1;else return String(pivot);}return ''; }",
+    "analysis": "### 核心原理\n\n三路划分成小于、等于、大于 pivot 的三段，只在包含目标下标的一段继续，等值段直接返回。此版本用中间位置值作枢轴，一般表现良好但最坏仍可能 O(n²)；若要求稳定最坏界可使用堆或完整 O(n log n) 排序，不能把平均复杂度说成保证。\n\n### 样例怎样一步步得到答案\n\n第 3 小对应零基目标下标 2。对 [7,2,5,2,9,1] 以某个枢轴三向划分成小于、等于、大于三段：若目标落在小于段，只继续处理它；落在等于段直接返回枢轴；否则只处理大于段。重复值各占一个排名，两个 2 对应第二、第三小。\n\n### 实现不变量与常见错误\n\n维护当前搜索半开区间和全局目标 k-1，三向划分能让全相同数组一次结束。参考实现使用中点位置的值作枢轴，平均线性、最坏平方；不能承诺最坏 O(n)。对抗输入下可随机选枢轴或改用有最坏保证的选择策略；若只要易实现且可预测，可排序后取值。",
+    "complexity": "平均 O(n)、最坏 O(n²) 时间；划分额外空间 O(1)，输入数组 O(n)。",
+    "hints": [
+      "先把 k 转零基下标。",
+      "重复值多时三路划分比二路更稳。",
+      "每轮只继续目标所在一侧，不递归排序两侧。"
+    ]
+  }
+]

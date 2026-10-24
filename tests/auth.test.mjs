@@ -279,8 +279,9 @@ test("所有个人记录、同 ID 内容、试卷和备份按账号隔离", asyn
     })
   ).data.exam;
   const stateB = (await b.api("/bootstrap")).data.state;
-  for (const key of ["progress", "notes", "settings"])
+  for (const key of ["progress", "notes"])
     assert.deepEqual(stateB[key], {});
+  assert.deepEqual(stateB.settings, { planOnboarding: "pending" });
   for (const key of [
     "bookmarks",
     "attempts",

@@ -264,7 +264,7 @@ test("商品草稿与发布版本隔离，按旧版本发放保持额度与到�
   const version = first.published.versionId;
   assert.equal(first.published.priceFen, "990");
   const catalog = (await f.user.api("/ai/products")).data.rows;
-  assert.equal(catalog.length, 1);
+  assert.equal(catalog.length, 9);
   assert.equal(catalog[0].published.note, undefined);
   assert.equal(catalog[0].published.priceFen, undefined);
   const edited = await f.admin.api("/admin/ai/products", "POST", {
@@ -275,7 +275,9 @@ test("商品草稿与发布版本隔离，按旧版本发放保持额度与到�
     validDays: 90,
   });
   assert.equal(edited.status, 200);
-  let current = (await f.admin.api("/admin/ai/products")).data.rows[0];
+  let current = (await f.admin.api("/admin/ai/products")).data.rows.find(
+    (p) => p.id === first.id,
+  );
   assert.equal(current.published.credits, "500");
   assert.equal(
     (
@@ -305,13 +307,18 @@ test("商品草稿与发布版本隔离，按旧版本发放保持额度与到�
     ),
   );
   invariant(d.lots);
-  current = (await f.admin.api("/admin/ai/products")).data.rows[0];
+  current = (await f.admin.api("/admin/ai/products")).data.rows.find(
+    (p) => p.id === first.id,
+  );
   assert.equal(current.published.version, 2);
   await f.admin.api("/admin/ai/products/" + current.id + "/publish", "POST", {
     revision: current.revision,
     publish: false,
   });
-  assert.equal((await f.user.api("/ai/products")).data.rows.length, 0);
+  assert.equal(
+    (await f.user.api("/ai/products")).data.rows.some((p) => p.id === first.id),
+    false,
+  );
   assert.equal((await f.user.api("/ai/credits")).data.account.available, "550");
 });
 test("即将过期优先与跨包扣费，分摊不重复计算用量，一次冲正回到原批次", async (t) => {
@@ -698,4 +705,86 @@ test("资源包发布提示价格倒挂，采购价快照和实际账单核对�
     "0.0017",
   );
   assert.equal((await f.user.api("/ai/status")).data.account.available, "99.3");
+});
+
+test("默认八档资源包自动发布，计费规则独立，重复初始化保留修改及下架状态", async (t) => {
+  const f = await fixture(t);
+  const { DEFAULT_PRODUCTS, BILLING_DEFAULTS_VERSION } =
+    await import("../server/ai/defaults.mjs");
+  const original = (await f.admin.api("/admin/ai/products")).data.rows;
+  assert.equal(original.length, 8);
+  for (const expected of DEFAULT_PRODUCTS) {
+    const product = original.find((p) => p.code === expected.code);
+    assert(product);
+    assert.equal(product.status, "published");
+    assert.equal(product.published.credits, expected.credits);
+    assert.equal(product.published.bonus, "0");
+    assert.equal(product.published.validDays, 180);
+    assert.equal(product.published.price, expected.price);
+    assert.equal(product.published.version, 1);
+  }
+  const settings = (await f.admin.api("/admin/ai/billing-settings")).data;
+  assert.deepEqual(
+    [settings.maxTaskPoints, settings.dailyBudget, settings.pendingHours],
+    ["90", "1000", 24],
+  );
+  const pool = (await f.admin.api("/admin/ai/pool")).data.pool;
+  assert.equal(pool.providers.length, 0);
+  assert.deepEqual(
+    [pool.policy.inputRate, pool.policy.cachedRate, pool.policy.outputRate],
+    [1, 1, 3],
+  );
+  assert.equal((await f.user.api("/ai/credits")).data.account.available, "0");
+  const first = original.find((p) => p.code === "basic");
+  await f.admin.api("/admin/ai/products", "POST", {
+    ...first.draft,
+    id: first.id,
+    revision: first.revision,
+    name: "自定义基础包",
+    price: "25.00",
+  });
+  const edited = (await f.admin.api("/admin/ai/products")).data.rows.find(
+    (p) => p.id === first.id,
+  );
+  await f.admin.api("/admin/ai/products/" + first.id + "/publish", "POST", {
+    revision: edited.revision,
+    publish: false,
+  });
+  await f.admin.api("/admin/ai/billing-settings", "PUT", {
+    ...settings,
+    maxTaskPoints: "75",
+    dailyBudget: "800",
+  });
+  const snapshot = (await f.admin.api("/admin/ai/products")).data.rows;
+  await f.ai.billing.init();
+  assert.deepEqual(
+    (await f.admin.api("/admin/ai/products")).data.rows,
+    snapshot,
+  );
+  assert.equal(
+    (await f.admin.api("/admin/ai/billing-settings")).data.dailyBudget,
+    "800",
+  );
+  // Simulate existing product codes during the first upgrade: skip them without overwriting.
+  await f.store.session(() =>
+    f.store.run("DELETE FROM ai_config WHERE id=?", BILLING_DEFAULTS_VERSION),
+  );
+  await f.ai.billing.init();
+  assert.deepEqual(
+    (await f.admin.api("/admin/ai/products")).data.rows,
+    snapshot,
+  );
+  assert.equal(
+    (await f.admin.api("/admin/ai/billing-settings")).data.maxTaskPoints,
+    "75",
+  );
+  assert.equal((await f.user.api("/ai/credits")).data.account.available, "0");
+  const publicRows = (await f.user.api("/ai/products")).data.rows;
+  assert.equal(publicRows.length, 7);
+  assert(
+    publicRows.every(
+      (p) =>
+        p.published.note === undefined && p.published.priceFen === undefined,
+    ),
+  );
 });

@@ -6,6 +6,7 @@ import { store, init, dueReviews, signOut } from "./store";
 import Icon from "./components/Icon.vue";
 import { afterLoginPath, loginLocation } from "./auth-routing.js";
 import SearchDialog from "./components/SearchDialog.vue";
+import PlanOnboarding from "./components/PlanOnboarding.vue";
 import "./ai.js";
 const route = useRoute();
 const router = useRouter();
@@ -51,6 +52,7 @@ watch(
 </script>
 <template>
   <AppTooltip />
+  <PlanOnboarding />
   <main
     v-if="!store.user && (store.loading || store.error)"
     class="session-screen"
