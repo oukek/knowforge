@@ -1,0 +1,310 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  PRICING_SIMULATION_DEFAULTS as defaults,
+  calculatePricingSimulation,
+  normalizePricingSimulation,
+  formatPricingNumber,
+} from "../shared/pricing-simulation.mjs";
+import { usageCharge } from "../server/ai/amounts.mjs";
+import { fixture } from "./helpers/ai.mjs";
+import { PricingSimulation } from "../server/ai/pricing-simulation.mjs";
+const plan = (patch) => ({
+  ...defaults,
+  inputPrice: "5",
+  outputPrice: "30",
+  costDiscount: "0.15",
+  inputRate: "0.125",
+  outputRate: "0.75",
+  ...patch,
+});
+const lite = {
+  id: "lite",
+  name: "轻量",
+  price: "9.90",
+  credits: "500",
+  bonus: "0",
+  version: 1,
+  validDays: 180,
+};
+const flagship = {
+  id: "flagship",
+  name: "旗舰",
+  price: "699",
+  credits: "50000",
+  bonus: "0",
+};
+
+test("截图人民币成本与小数费率：一组收费、八档折扣和整包毛利不混淆", () => {
+  const r = calculatePricingSimulation(plan(), [lite, flagship]);
+  assert.equal(r.channels.input.baseCost, "0.75");
+  assert.equal(r.channels.output.baseCost, "4.5");
+  assert.equal(r.sample.points, "2.5");
+  assert.equal(r.sample.cost, "0.015");
+  const [a, b] = r.rows;
+  assert.equal(a.channels.input.revenue, "2.475");
+  assert.equal(a.channels.output.revenue, "14.85");
+  assert.equal(a.channels.input.originalPercent, "49.5");
+  assert.equal(a.channels.output.costMultiple, "3.3");
+  assert.equal(a.sample.revenue, "0.0495");
+  assert.equal(a.sample.profit, "0.0345");
+  assert.equal(a.fullPack.cost, "3");
+  assert.equal(a.fullPack.profit, "6.9");
+  assert.equal(a.fullPack.estimatedRuns, "200");
+  assert.equal(b.channels.input.revenue, "1.7475");
+  assert.equal(b.channels.output.revenue, "10.485");
+  assert.equal(b.channels.input.originalPercent, "34.95");
+  assert.equal(b.fullPack.cost, "300");
+  assert.equal(b.fullPack.profit, "399");
+  assert.equal(formatPricingNumber(b.fullPack.marginPercent, 2), "57.08");
+  assert.notEqual(a.sample.marginPercent, "230"); // margin, not markup over cost
+});
+test("旧 1/3 费率下整包成本依赖输入输出比例，不擅自给统一毛利", () => {
+  const input = calculatePricingSimulation(
+    plan({
+      inputRate: "1",
+      outputRate: "3",
+      inputTokens: "1000000",
+      outputTokens: "0",
+    }),
+    [lite],
+  ).rows[0];
+  const output = calculatePricingSimulation(
+    plan({
+      inputRate: "1",
+      outputRate: "3",
+      inputTokens: "0",
+      outputTokens: "1000000",
+    }),
+    [lite],
+  ).rows[0];
+  assert.equal(input.fullPack.cost, "0.375");
+  assert.equal(output.fullPack.cost, "0.75");
+  assert.equal(input.channels.input.revenue, "19.8");
+  assert.equal(output.channels.output.revenue, "59.4");
+  assert(input.aboveOriginal && output.aboveOriginal);
+});
+test("赠送额度降低有效单价，提高整包成本；免费商品不会除零或显示假毛利率", () => {
+  const r = calculatePricingSimulation(plan(), [
+    { ...lite, bonus: "500" },
+    { ...lite, id: "gift", price: "0" },
+  ]);
+  assert.equal(r.rows[0].totalCredits, "1000");
+  assert.equal(r.rows[0].channels.input.revenue, "1.2375");
+  assert.equal(r.rows[0].fullPack.cost, "6");
+  assert.equal(r.rows[0].fullPack.profit, "3.9");
+  const free = r.rows[1];
+  assert.equal(free.fullPack.profit, "-3");
+  assert.equal(free.sample.marginPercent, null);
+  assert.equal(free.fullPack.marginPercent, null);
+  assert.equal(free.channels.input.breakEvenRate, null);
+  assert(free.hasLoss);
+});
+test("缓存是输入子集，不重复收费；额外成本只增加成本不增加客户扣款", () => {
+  const a = calculatePricingSimulation(
+    plan({
+      useCache: true,
+      cachedPrice: "1",
+      cachedRate: "0.02",
+      cachedTokens: "4000",
+    }),
+    [lite],
+  );
+  // 4000 uncached + 4000 cached + 2000 output = .003 + .0006 + .009 CNY.
+  assert.equal(a.sample.cost, "0.0126");
+  assert.equal(a.sample.points, "2.08");
+  const b = calculatePricingSimulation(
+    { ...a.config, extraCostPercent: "50" },
+    [lite],
+  );
+  assert.equal(b.sample.baseCost, "0.0126");
+  assert.equal(b.sample.cost, "0.0189");
+  assert.equal(b.rows[0].sample.revenue, a.rows[0].sample.revenue);
+  assert.equal(b.channels.cached.baseCost, "0.15");
+});
+test("零采购价、零折扣、零收费及亏损保留各自含义", () => {
+  const zeroCost = calculatePricingSimulation(plan({ costDiscount: "0" }), [
+    lite,
+  ]).rows[0];
+  assert.equal(zeroCost.sample.marginPercent, "100");
+  assert.equal(zeroCost.channels.input.costMultiple, null);
+  assert(zeroCost.channels.input.zeroCost);
+  const free = calculatePricingSimulation(
+    plan({ inputRate: "0", outputRate: "0" }),
+    [lite],
+  );
+  assert.equal(free.sample.points, "0");
+  assert.equal(free.rows[0].fullPack, null);
+  assert(free.rows[0].hasLoss);
+  assert.equal(free.rows[0].sample.profit, "-0.015");
+  const loss = calculatePricingSimulation(
+    plan({ inputRate: "0.01", outputRate: "0.01" }),
+    [flagship],
+  ).rows[0];
+  assert(loss.hasLoss);
+  assert.equal(loss.sample.state, "loss");
+  assert(Number(loss.sample.marginPercent) < 0);
+  const noList = calculatePricingSimulation(plan({ inputPrice: "0" }), [lite]);
+  assert.equal(noList.rows[0].channels.input.originalPercent, null);
+});
+test("微额度与正式账本保持同一次向上取整，分数单价不提前舍入", () => {
+  const x = plan({
+    inputRate: "0.000001",
+    outputRate: "0.75",
+    inputTokens: "1",
+    outputTokens: "0",
+  });
+  const r = calculatePricingSimulation(x, [
+    { ...lite, price: "1", credits: "3" },
+  ]);
+  assert.equal(r.sample.points, "0.000001");
+  assert.equal(usageCharge({ input: 1, cached: 0, output: 0 }, x), 1n);
+  assert.equal(r.rows[0].sample.revenue, "0.000000333333333333");
+  assert.equal(r.rows[0].channels.output.revenue, "250");
+  assert.equal(formatPricingNumber("0.0000004", 6), "<0.000001");
+  assert.equal(formatPricingNumber("-0.0000004", 6), ">−0.000001");
+  assert.equal(formatPricingNumber("1234567.995", 2), "1,234,568");
+});
+test("无效参数明确拒绝，损坏资源包不会让其余行失效", () => {
+  for (const patch of [
+    { costDiscount: "15" },
+    { costDiscount: "-0.15" },
+    { inputRate: "0.0000001" },
+    { outputPrice: "NaN" },
+    { inputRate: "1e3" },
+    { inputPrice: ["5"] },
+    { inputTokens: [8000] },
+    { outputRate: true },
+    { inputPrice: "1000001" },
+    { inputTokens: "1.5" },
+    { inputTokens: "100000001" },
+    { inputTokens: "0", outputTokens: "0" },
+    { useCache: true, cachedPrice: null },
+    { useCache: true, cachedPrice: "1", cachedTokens: "8001" },
+    { useCache: "true" },
+    { apiKey: "should-never-store" },
+  ])
+    assert.throws(
+      () => normalizePricingSimulation(plan(patch)),
+      JSON.stringify(patch),
+    );
+  const r = calculatePricingSimulation(plan(), [
+    { ...lite, id: "bad", credits: "0" },
+    lite,
+  ]);
+  assert.match(r.rows[0].error, /总额度/);
+  assert.equal(r.rows[1].fullPack.profit, "6.9");
+});
+test("当前费率下纯输入盈利但纯输出亏损时仍提示风险", () => {
+  const r = calculatePricingSimulation(
+    plan({
+      inputRate: "1",
+      outputRate: "0.1",
+      inputTokens: "10000",
+      outputTokens: "1",
+    }),
+    [lite],
+  ).rows[0];
+  assert.equal(r.sample.state, "profit");
+  assert.equal(r.channels.output.state, "loss");
+  assert(r.hasLoss);
+});
+
+test("测算接口仅管理员可用，遵守 CSRF，读取不写入配置", async (t) => {
+  const f = await fixture(t),
+    url = "/admin/ai/pricing-simulation";
+  assert.equal((await f.user.api(url)).status, 403);
+  assert.equal(
+    (await f.user.api(url, "PUT", { revision: null, plan: plan() })).status,
+    403,
+  );
+  assert.equal(
+    (
+      await f.admin.api(
+        url,
+        "PUT",
+        { revision: null, plan: plan() },
+        { "X-CSRF-Token": "invalid" },
+      )
+    ).status,
+    403,
+  );
+  const current = await f.admin.api(url);
+  assert.equal(current.status, 200);
+  assert.equal(current.data.revision, null);
+  assert.equal(current.data.plan.inputPrice, "5");
+  assert.equal(current.data.plan.costDiscount, "0.15");
+  assert.equal(current.data.plan.inputRate, "1");
+  assert.equal(current.data.examplePlan.inputRate, "0.125");
+  assert.equal(
+    await f.store.session(() =>
+      f.store.get("SELECT id FROM ai_config WHERE id=?", "pricing-simulation"),
+    ),
+    undefined,
+  );
+  assert.equal(f.calls(), 0);
+});
+test("保存后重建服务仍可读取，版本冲突不覆盖，普通接口不暴露成本方案", async (t) => {
+  const f = await fixture(t),
+    url = "/admin/ai/pricing-simulation";
+  const beforePool = (await f.admin.api("/admin/ai/pool")).data;
+  const beforeProducts = (await f.admin.api("/admin/ai/products")).data;
+  const beforeCredits = (await f.user.api("/ai/credits")).data;
+  const saved = await f.admin.api(url, "PUT", {
+    revision: null,
+    plan: plan({ modelName: "私有定价方案" }),
+  });
+  assert.equal(saved.status, 200);
+  assert.match(saved.data.revision, /^[a-f0-9-]{36}$/);
+  const again = await new PricingSimulation(f.ai.repo, f.ai.pool).read();
+  assert.deepEqual(again, saved.data);
+  assert.equal(
+    (
+      await f.admin.api(url, "PUT", {
+        revision: null,
+        plan: plan({ modelName: "过期编辑" }),
+      })
+    ).status,
+    409,
+  );
+  assert.equal((await f.admin.api(url)).data.plan.modelName, "私有定价方案");
+  assert.deepEqual((await f.admin.api("/admin/ai/pool")).data, beforePool);
+  assert.deepEqual(
+    (await f.admin.api("/admin/ai/products")).data,
+    beforeProducts,
+  );
+  assert.deepEqual((await f.user.api("/ai/credits")).data, beforeCredits);
+  for (const path of ["/bootstrap", "/ai/status", "/export/backup"]) {
+    const json = JSON.stringify((await f.user.api(path)).data);
+    assert(!json.includes("私有定价方案"));
+  }
+  const audit = await f.store.session(() =>
+    f.store.get(
+      "SELECT * FROM admin_audit WHERE action=?",
+      "pricing.simulation.save",
+    ),
+  );
+  assert.equal(audit.userId, f.admin.user.id);
+  assert.equal(f.calls(), 0);
+});
+test("无效测算保存返回 400 且不改变上次方案", async (t) => {
+  const f = await fixture(t),
+    url = "/admin/ai/pricing-simulation";
+  const saved = (
+    await f.admin.api(url, "PUT", { revision: null, plan: plan() })
+  ).data;
+  for (const patch of [
+    { costDiscount: "15" },
+    { useCache: true, cachedTokens: "99999", cachedPrice: "1" },
+    { inputPrice: "-5" },
+    { inputRate: "1.2345678" },
+    { currency: "USD" },
+  ]) {
+    const r = await f.admin.api(url, "PUT", {
+      revision: saved.revision,
+      plan: plan(patch),
+    });
+    assert.equal(r.status, 400, JSON.stringify(r));
+  }
+  assert.deepEqual((await f.admin.api(url)).data, saved);
+});

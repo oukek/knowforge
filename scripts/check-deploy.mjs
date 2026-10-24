@@ -169,6 +169,14 @@ try {
     ).status,
     403,
   );
+  assert.equal(
+    (
+      await fetch(base + "/api/admin/ai/pricing-simulation", {
+        headers: { Cookie: cookie },
+      })
+    ).status,
+    403,
+  );
   const cliEnv = {
     ...process.env,
     DB_DRIVER: mysqlCheck ? "mysql" : "sqlite",
@@ -188,6 +196,31 @@ try {
     ).status,
     200,
   );
+  const pricingResponse = await fetch(
+    base + "/api/admin/ai/pricing-simulation",
+    {
+      headers: { Cookie: cookie },
+    },
+  );
+  assert.equal(pricingResponse.status, 200);
+  const pricing = await pricingResponse.json();
+  assert.equal(pricing.revision, null);
+  assert.equal(pricing.plan.costDiscount, "0.15");
+  const pricingSave = await fetch(base + "/api/admin/ai/pricing-simulation", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: base,
+      Cookie: cookie,
+      "X-CSRF-Token": csrfToken,
+    },
+    body: JSON.stringify({ revision: null, plan: pricing.examplePlan }),
+  });
+  assert.equal(pricingSave.status, 200);
+  const savedPricing = await pricingSave.json();
+  assert.equal(savedPricing.plan.inputRate, "0.125");
+  assert.equal(savedPricing.liveRates.inputRate, "1");
+  assert.match(savedPricing.revision, /^[a-f0-9-]{36}$/);
   execFileSync(
     process.execPath,
     ["server/admin.mjs", "demote", "--id", registeredUser.id],

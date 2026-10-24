@@ -3,6 +3,7 @@ import { AiService } from "./service.mjs";
 import { AiError, answerSchema, requestKey } from "./policy.mjs";
 import { grantSchema, userPolicySchema } from "./billing.mjs";
 import { micro, points } from "./amounts.mjs";
+import { PricingSimulation } from "./pricing-simulation.mjs";
 const id = z.string().min(1).max(191);
 const historyQuery = z
   .object({
@@ -22,6 +23,7 @@ const historyQuery = z
 export async function installAi(app, store, auth, catalog, options) {
   const ai = new AiService(store, catalog, options);
   await ai.init();
+  const pricingSimulation = new PricingSimulation(ai.repo, ai.pool);
   function route(method, path, handler, admin = false) {
     app[method](path, async (req, res, next) => {
       try {
@@ -187,6 +189,18 @@ export async function installAi(app, store, auth, catalog, options) {
     );
   });
   route("get", "/api/admin/ai/config", () => ai.adminConfig(), true);
+  route(
+    "get",
+    "/api/admin/ai/pricing-simulation",
+    () => pricingSimulation.read(),
+    true,
+  );
+  route(
+    "put",
+    "/api/admin/ai/pricing-simulation",
+    (r) => pricingSimulation.save(r.user.id, r.body),
+    true,
+  );
   route(
     "get",
     "/api/admin/ai/pool",

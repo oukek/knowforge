@@ -1,5 +1,6 @@
 <script setup>
-import { ref, watch, onMounted } from "vue";
+import { ref, watch, onMounted, computed, defineAsyncComponent } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { request, toast, dateLabel } from "../store.js";
 import { featureLabel, aiStateLabel, refreshAi } from "../ai.js";
 import AppField from "../components/AppField.vue";
@@ -10,8 +11,25 @@ import AdminAiPool from "../components/AdminAiPool.vue";
 import AdminCredits from "../components/AdminCredits.vue";
 import AdminProducts from "../components/AdminProducts.vue";
 import AppDialog from "../components/AppDialog.vue";
-const tab = ref("config"),
-  error = ref(""),
+const AdminPricing = defineAsyncComponent(
+  () => import("../components/AdminPricing.vue"),
+);
+const route = useRoute(),
+  router = useRouter();
+const tab = computed({
+  get: () =>
+    ["config", "users", "products", "pricing", "history"].includes(
+      route.query.tab,
+    )
+      ? route.query.tab
+      : "config",
+  set: (value) =>
+    router.replace({
+      path: "/admin",
+      query: { ...route.query, tab: value === "config" ? undefined : value },
+    }),
+});
+const error = ref(""),
   busy = ref(false);
 const history = ref({ rows: [], total: 0 }),
   page = ref(1),
@@ -137,6 +155,7 @@ onMounted(
           ['config', '服务与模型'],
           ['users', '用户与额度'],
           ['products', '资源包与预算'],
+          ['pricing', '定价测算'],
           ['history', '调用与核对'],
         ]"
         :key="value"
@@ -152,6 +171,7 @@ onMounted(
     <AdminAiPool v-if="tab === 'config'" />
     <AdminCredits v-if="tab === 'users'" />
     <AdminProducts v-if="tab === 'products'" />
+    <AdminPricing v-if="tab === 'pricing'" />
     <template v-if="tab === 'history'">
       <section class="ai-detail">
         <h2>近 24 小时调用与额度</h2>
