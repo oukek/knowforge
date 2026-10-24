@@ -31,8 +31,8 @@ export class PricingSimulation {
         "SELECT data,updatedAt FROM ai_config WHERE id=?",
         key,
       );
-      const live =
-        (await this.pool.raw(db))?.policy || PRICING_SIMULATION_DEFAULTS;
+      const pool = await this.pool.raw(db);
+      const live = pool?.policy || PRICING_SIMULATION_DEFAULTS;
       const liveRates = Object.fromEntries(
         ["inputRate", "cachedRate", "outputRate"].map((k) => [
           k,
@@ -41,7 +41,11 @@ export class PricingSimulation {
       );
       return {
         ...(row
-          ? { ...JSON.parse(row.data), updatedAt: row.updatedAt }
+          ? {
+              ...JSON.parse(row.data),
+              plan: normalizePricingSimulation(JSON.parse(row.data).plan),
+              updatedAt: row.updatedAt,
+            }
           : {
               revision: null,
               updatedAt: null,
@@ -52,6 +56,18 @@ export class PricingSimulation {
               }),
             }),
         liveRates,
+        models: (pool?.providers || []).flatMap((p) =>
+          p.models.map((m) => ({
+            id: m.id,
+            model: m.model,
+            providerName: p.name,
+            kind: m.kind || "text",
+            pricing: m.pricing || null,
+            procurement: m.procurement || null,
+            imageProcurement: m.imageProcurement ?? null,
+            imageCredits: m.imageCredits || "1",
+          })),
+        ),
         examplePlan: normalizePricingSimulation({
           ...PRICING_SIMULATION_DEFAULTS,
           ...receipt,

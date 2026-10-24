@@ -76,6 +76,15 @@ function parseTokens(value, label) {
 }
 export const PRICING_SIMULATION_DEFAULTS = Object.freeze({
   modelName: "未命名测算方案",
+  kind: "text",
+  directCosts: false,
+  inputCost: "0",
+  cachedCost: "0",
+  outputCost: "0",
+  imageCost: "0",
+  imagePrice: "0",
+  imageRate: "1",
+  imageCount: "1",
   inputPrice: "0",
   cachedPrice: null,
   outputPrice: "0",
@@ -103,7 +112,31 @@ export function normalizePricingSimulation(input) {
   )
     throw new Error("方案名称须为 1～80 个字符");
   x.modelName = x.modelName.trim();
+  if (!["text", "image"].includes(x.kind)) throw new Error("模型类型错误");
+  if (typeof x.directCosts !== "boolean") throw new Error("采购成本模式错误");
   if (typeof x.useCache !== "boolean") throw new Error("缓存开关格式错误");
+  // Clear inactive controls so switching units or cost mode cannot leave an
+  // invalid, hidden field blocking the plan, or retain stale costing data.
+  const reset = (keys) => {
+    for (const key of keys) x[key] = PRICING_SIMULATION_DEFAULTS[key];
+  };
+  if (x.kind === "image") {
+    x.useCache = false;
+    reset([
+      "inputPrice",
+      "outputPrice",
+      "inputRate",
+      "outputRate",
+      "inputTokens",
+      "outputTokens",
+      "inputCost",
+      "outputCost",
+    ]);
+  } else reset(["imagePrice", "imageRate", "imageCount", "imageCost"]);
+  if (!x.useCache)
+    reset(["cachedPrice", "cachedRate", "cachedTokens", "cachedCost"]);
+  if (x.directCosts) x.costDiscount = "1";
+  else reset(["inputCost", "cachedCost", "outputCost", "imageCost"]);
   for (const [key, label, max] of [
     ["inputPrice", "输入原价"],
     ["outputPrice", "输出原价"],
@@ -112,8 +145,15 @@ export function normalizePricingSimulation(input) {
     ["cachedRate", "缓存扣费额度"],
     ["outputRate", "输出扣费额度"],
     ["extraCostPercent", "额外模型成本比例", 1000n],
+    ["inputCost", "普通输入实际成本"],
+    ["cachedCost", "缓存输入实际成本"],
+    ["outputCost", "输出实际成本"],
+    ["imageCost", "图片实际成本"],
+    ["imagePrice", "图片标价"],
+    ["imageRate", "每张图片扣费额度"],
   ])
     x[key] = decimal(parseDecimal(x[key], label, max), 6);
+  if (x.kind === "image") x.useCache = false;
   x.cachedPrice = x.useCache
     ? decimal(parseDecimal(x.cachedPrice, "缓存原价"), 6)
     : null;
@@ -124,7 +164,13 @@ export function normalizePricingSimulation(input) {
     : "0";
   if (BigInt(x.cachedTokens) > BigInt(x.inputTokens))
     throw new Error("缓存命中 Token 不能超过总输入 Token");
-  if (BigInt(x.inputTokens) + BigInt(x.outputTokens) === 0n)
+  x.imageCount = parseTokens(x.imageCount, "图片数量");
+  if (BigInt(x.imageCount) < 1n || BigInt(x.imageCount) > 10000n)
+    throw new Error("图片数量须为 1～10000 的整数");
+  if (
+    x.kind === "text" &&
+    BigInt(x.inputTokens) + BigInt(x.outputTokens) === 0n
+  )
     throw new Error("样例输入和输出不能同时为 0");
   return x;
 }
@@ -153,34 +199,48 @@ export function calculatePricingSimulation(input, products) {
     one,
     div(parseDecimal(x.extraCostPercent, "额外成本比例", 1000n), hundred),
   );
-  const channels = ["input", ...(x.useCache ? ["cached"] : []), "output"].map(
-    (key) => {
-      const original = parseDecimal(x[key + "Price"], "原价");
-      const cost = mul(original, discount);
-      return {
-        key,
-        original,
-        baseCost: cost,
-        cost: mul(cost, overhead),
-        rate: parseDecimal(x[key + "Rate"], "客户扣费"),
-      };
-    },
-  );
+  const channels = (
+    x.kind === "image"
+      ? ["image"]
+      : ["input", ...(x.useCache ? ["cached"] : []), "output"]
+  ).map((key) => {
+    const original = parseDecimal(x[key + "Price"], "原价");
+    const cost = x.directCosts
+      ? parseDecimal(x[key + "Cost"], "实际采购成本")
+      : mul(original, discount);
+    return {
+      key,
+      original,
+      baseCost: cost,
+      cost: mul(cost, overhead),
+      rate: parseDecimal(x[key + "Rate"], "客户扣费"),
+    };
+  });
   const tokens = {
     input: BigInt(x.inputTokens) - BigInt(x.cachedTokens),
     cached: BigInt(x.cachedTokens),
     output: BigInt(x.outputTokens),
+    image: BigInt(x.imageCount),
   };
   let original = zero,
     baseCost = zero,
     cost = zero,
     spent = zero;
   for (const channel of channels) {
-    const volume = fraction(tokens[channel.key], SCALE);
+    const volume = fraction(
+      tokens[channel.key],
+      channel.key === "image" ? 1n : SCALE,
+    );
     original = add(original, mul(volume, channel.original));
     baseCost = add(baseCost, mul(volume, channel.baseCost));
     cost = add(cost, mul(volume, channel.cost));
-    spent = add(spent, mul(fraction(tokens[channel.key], 1000n), channel.rate));
+    spent = add(
+      spent,
+      mul(
+        fraction(tokens[channel.key], channel.key === "image" ? 1n : 1000n),
+        channel.rate,
+      ),
+    );
   }
   // Match the real ledger: one rounding up to a microcredit per logical call.
   const spentMicro = (spent.n * SCALE + spent.d - 1n) / spent.d;
@@ -199,12 +259,34 @@ export function calculatePricingSimulation(input, products) {
           channel.key,
           {
             ...metrics(
-              mul(mul(channel.rate, thousand), unit),
+              mul(
+                mul(channel.rate, channel.key === "image" ? one : thousand),
+                unit,
+              ),
               channel.cost,
               channel.original,
             ),
             breakEvenRate: unit.n
-              ? decimal(div(channel.cost, mul(unit, thousand)))
+              ? decimal(
+                  div(
+                    channel.cost,
+                    mul(unit, channel.key === "image" ? one : thousand),
+                  ),
+                )
+              : null,
+            creditsAtListPrice: channel.original.n
+              ? decimal(
+                  div(
+                    mul(
+                      price,
+                      mul(
+                        channel.rate,
+                        channel.key === "image" ? one : thousand,
+                      ),
+                    ),
+                    channel.original,
+                  ),
+                )
               : null,
           },
         ]),
@@ -230,6 +312,15 @@ export function calculatePricingSimulation(input, products) {
         channels: channelViews,
         sample,
         fullPack,
+        atModelPrice:
+          original.n && spent.n
+            ? {
+                credits: decimal(div(mul(price, spent), original)),
+                difference: decimal(
+                  sub(div(mul(price, spent), original), credits),
+                ),
+              }
+            : null,
         hasLoss: Object.values(channelViews).some(
           (view) => view.state === "loss",
         ),

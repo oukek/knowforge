@@ -5,6 +5,22 @@ import { micro, points } from "./amounts.mjs";
 
 const integer = (min, max, fallback) =>
   z.number().int().min(min).max(max).default(fallback);
+const price = z
+  .union([z.string(), z.number()])
+  .transform((value) => points(micro(value)));
+const tokenPrices = z
+  .object({ input: price, cached: price, output: price })
+  .strict();
+const modelPricing = z.discriminatedUnion("unit", [
+  tokenPrices.extend({ unit: z.literal("token") }),
+  z
+    .object({
+      unit: z.literal("image"),
+      perImage: price,
+      specification: z.string().trim().max(120).default(""),
+    })
+    .strict(),
+]);
 export const policySchema = z
   .object({
     outputLimit: integer(512, 4096, 2048),
@@ -27,10 +43,13 @@ const modelSchema = z
   .object({
     id: z.string().uuid(),
     model: z.string().trim().min(1).max(160),
+    kind: z.enum(["text", "image"]).default("text"),
+    pricing: modelPricing.nullable().default(null),
+    imageProcurement: price.nullable().default(null),
+    imageCredits: price.default("1"),
     enabled: z.boolean().default(true),
     features: z
       .array(z.enum(["grade", "variants", "interview"]))
-      .min(1)
       .max(3)
       .refine((x) => new Set(x).size === x.length, "用途不能重复"),
     priority: integer(0, 10, 0),
@@ -40,23 +59,24 @@ const modelSchema = z
     tokenParameter: z
       .enum(["max_completion_tokens", "max_tokens"])
       .default("max_completion_tokens"),
-    procurement: z
-      .object({
-        input: z
-          .union([z.string(), z.number()])
-          .transform((v) => points(micro(v))),
-        cached: z
-          .union([z.string(), z.number()])
-          .transform((v) => points(micro(v))),
-        output: z
-          .union([z.string(), z.number()])
-          .transform((v) => points(micro(v))),
-      })
-      .strict()
-      .nullable()
-      .default(null),
+    procurement: tokenPrices.nullable().default(null),
   })
-  .strict();
+  .strict()
+  .superRefine((m, ctx) => {
+    const issue = (message) => ctx.addIssue({ code: "custom", message });
+    if (m.kind === "text") {
+      if (!m.features.length) issue("文本模型至少选择一种用途");
+      if (m.pricing && m.pricing.unit !== "token")
+        issue("文本模型须按 Token 配置标价");
+      if (m.imageProcurement !== null) issue("文本模型不能配置图片采购价");
+    } else {
+      if (m.features.length) issue("图片模型不能用于文本评阅、出题或面试");
+      if (m.pricing && m.pricing.unit !== "image")
+        issue("图片模型须按张配置标价");
+      if (m.procurement !== null) issue("图片模型不能配置 Token 采购价");
+      if (micro(m.imageCredits) <= 0n) issue("每张图片额度必须大于 0");
+    }
+  });
 export const poolSchema = z
   .object({
     revision: z.string().uuid().optional(),
@@ -379,6 +399,7 @@ export class AiPool {
       if (!p.enabled) continue;
       const models = p.models.filter(
         (m) =>
+          (m.kind || "text") === "text" &&
           m.enabled &&
           (feature === "test"
             ? !targetId || m.id === targetId

@@ -81,7 +81,9 @@ export class AiService {
         account = await this.billing.view(db, userId),
         settings = await this.billing.settings(db);
       const configured = !!row?.providers.some(
-        (p) => p.enabled && p.models.some((m) => m.enabled),
+        (p) =>
+          p.enabled &&
+          p.models.some((m) => m.enabled && (m.kind || "text") === "text"),
       );
       const unsettled = Number(
         (

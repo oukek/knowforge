@@ -221,6 +221,35 @@ try {
   assert.equal(savedPricing.plan.inputRate, "0.125");
   assert.equal(savedPricing.liveRates.inputRate, "1");
   assert.match(savedPricing.revision, /^[a-f0-9-]{36}$/);
+  const imagePricingSave = await fetch(
+    base + "/api/admin/ai/pricing-simulation",
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: base,
+        Cookie: cookie,
+        "X-CSRF-Token": csrfToken,
+      },
+      body: JSON.stringify({
+        revision: savedPricing.revision,
+        plan: {
+          ...savedPricing.plan,
+          kind: "image",
+          directCosts: true,
+          imagePrice: "0.5",
+          imageCost: "0.1",
+          imageRate: "10",
+          imageCount: "2",
+        },
+      }),
+    },
+  );
+  assert.equal(imagePricingSave.status, 200);
+  const imagePricing = await imagePricingSave.json();
+  assert.equal(imagePricing.plan.kind, "image");
+  assert.equal(imagePricing.plan.imageCost, "0.1");
+  assert.equal(imagePricing.liveRates.inputRate, "1");
   execFileSync(
     process.execPath,
     ["server/admin.mjs", "demote", "--id", registeredUser.id],

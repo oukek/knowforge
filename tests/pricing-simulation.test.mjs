@@ -135,6 +135,7 @@ test("零采购价、零折扣、零收费及亏损保留各自含义", () => {
   );
   assert.equal(free.sample.points, "0");
   assert.equal(free.rows[0].fullPack, null);
+  assert.equal(free.rows[0].atModelPrice, null);
   assert(free.rows[0].hasLoss);
   assert.equal(free.rows[0].sample.profit, "-0.015");
   const loss = calculatePricingSimulation(
@@ -307,4 +308,130 @@ test("无效测算保存返回 400 且不改变上次方案", async (t) => {
     assert.equal(r.status, 400, JSON.stringify(r));
   }
   assert.deepEqual((await f.admin.api(url)).data, saved);
+});
+
+test("按模型标价反推充值额度：区分输入、输出与混合比例，赠送及采购折扣不改变换算", () => {
+  const x = plan({ inputRate: "1", outputRate: "3" });
+  const r = calculatePricingSimulation(x, [lite]).rows[0];
+  assert.equal(r.channels.input.creditsAtListPrice, "1980");
+  assert.equal(r.channels.output.creditsAtListPrice, "990");
+  assert.equal(r.atModelPrice.credits, "1386");
+  assert.equal(r.atModelPrice.difference, "886");
+  const other = calculatePricingSimulation({ ...x, costDiscount: "0.5" }, [
+    { ...lite, bonus: "500" },
+  ]).rows[0];
+  assert.equal(other.atModelPrice.credits, "1386");
+  assert.equal(other.atModelPrice.difference, "386");
+  const low = calculatePricingSimulation(plan(), [lite]).rows[0];
+  assert.equal(low.atModelPrice.credits, "247.5");
+  assert.equal(low.atModelPrice.difference, "-252.5");
+});
+
+test("图片按张测算：无百万 Token 换算、无缓存重复收费，固定规格按次数反推额度", () => {
+  const r = calculatePricingSimulation(
+    plan({
+      kind: "image",
+      imagePrice: "0.5",
+      imageRate: "10",
+      imageCount: "2",
+      directCosts: true,
+      imageCost: "0.1",
+      useCache: true,
+      cachedPrice: "1",
+    }),
+    [lite],
+  );
+  assert.deepEqual(Object.keys(r.channels), ["image"]);
+  assert.equal(r.config.useCache, false);
+  assert.equal(r.channels.image.baseCost, "0.1");
+  assert.equal(r.sample.points, "20");
+  assert.equal(r.sample.cost, "0.2");
+  assert.equal(r.sample.original, "1");
+  const a = r.rows[0];
+  assert.equal(a.channels.image.revenue, "0.198");
+  assert.equal(a.fullPack.cost, "5");
+  assert.equal(a.fullPack.profit, "4.9");
+  assert.equal(a.atModelPrice.credits, "198");
+  assert.equal(a.channels.image.creditsAtListPrice, "198");
+  const many = calculatePricingSimulation({ ...r.config, imageCount: "10" }, [
+    lite,
+  ]).rows[0];
+  assert.equal(many.atModelPrice.credits, "198");
+  assert.equal(many.fullPack.profit, "4.9");
+});
+
+test("实际成本直接填入不会再次打折；无标价不编造可换额度，旧版方案默认文本", () => {
+  const r = calculatePricingSimulation(
+    plan({
+      directCosts: true,
+      inputCost: "0.75",
+      outputCost: "4.5",
+      costDiscount: "0.15",
+    }),
+    [lite],
+  );
+  assert.equal(r.channels.input.baseCost, "0.75");
+  assert.equal(r.channels.output.baseCost, "4.5");
+  assert.equal(r.rows[0].fullPack.profit, "6.9");
+  assert.equal(
+    calculatePricingSimulation(plan({ inputPrice: "0", outputPrice: "0" }), [
+      lite,
+    ]).rows[0].atModelPrice,
+    null,
+  );
+  assert.equal(
+    normalizePricingSimulation({ modelName: "旧版方案" }).kind,
+    "text",
+  );
+  for (const patch of [
+    { kind: "video" },
+    { directCosts: 1 },
+    { kind: "image", imageCount: "0" },
+    { kind: "image", imageCount: "10001" },
+    { kind: "image", directCosts: true, imageCost: "-1" },
+    { kind: "image", imageRate: "0.0000001" },
+  ])
+    assert.throws(() => normalizePricingSimulation(plan(patch)));
+});
+
+test("切换计价单位或采购模式清理隐藏字段，保留有效的当前参数", () => {
+  const image = normalizePricingSimulation(
+    plan({
+      kind: "image",
+      inputPrice: "",
+      inputRate: "bad",
+      inputTokens: "bad",
+      imagePrice: "0.5",
+      imageRate: "10",
+      imageCount: "2",
+      directCosts: true,
+      costDiscount: "bad",
+      imageCost: "0.1",
+      inputCost: "",
+    }),
+  );
+  assert.equal(image.costDiscount, "1");
+  assert.equal(image.inputCost, "0");
+  assert.equal(
+    calculatePricingSimulation(image, [lite]).rows[0].atModelPrice.credits,
+    "198",
+  );
+  const text = normalizePricingSimulation(
+    plan({
+      imagePrice: "",
+      imageCount: "bad",
+      directCosts: false,
+      inputCost: "",
+      outputCost: "",
+      cachedRate: "",
+      useCache: false,
+    }),
+  );
+  assert.equal(text.imageCount, "1");
+  assert.equal(text.inputCost, "0");
+  assert.equal(text.cachedRate, "1");
+  assert.equal(
+    calculatePricingSimulation(text, [lite]).rows[0].fullPack.profit,
+    "6.9",
+  );
 });

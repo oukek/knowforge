@@ -18,15 +18,21 @@ const route = useRoute(),
   router = useRouter();
 const tab = computed({
   get: () =>
-    ["config", "users", "products", "pricing", "history"].includes(
-      route.query.tab,
-    )
+    [
+      "providers",
+      "models",
+      "limits",
+      "users",
+      "products",
+      "pricing",
+      "history",
+    ].includes(route.query.tab)
       ? route.query.tab
-      : "config",
+      : "providers",
   set: (value) =>
     router.replace({
       path: "/admin",
-      query: { ...route.query, tab: value === "config" ? undefined : value },
+      query: { ...route.query, tab: value === "providers" ? undefined : value },
     }),
 });
 const error = ref(""),
@@ -152,7 +158,9 @@ onMounted(
     <div class="type-tabs">
       <button
         v-for="[value, label] in [
-          ['config', '服务与模型'],
+          ['providers', '服务商管理'],
+          ['models', '模型管理'],
+          ['limits', '额度与限制'],
           ['users', '用户与额度'],
           ['products', '资源包与预算'],
           ['pricing', '定价测算'],
@@ -168,7 +176,11 @@ onMounted(
     <p v-if="error" class="ai-error" role="alert">
       {{ error }}
     </p>
-    <AdminAiPool v-if="tab === 'config'" />
+    <AdminAiPool
+      v-if="['providers', 'models', 'limits'].includes(tab)"
+      :key="tab"
+      :section="tab"
+    />
     <AdminCredits v-if="tab === 'users'" />
     <AdminProducts v-if="tab === 'products'" />
     <AdminPricing v-if="tab === 'pricing'" />
