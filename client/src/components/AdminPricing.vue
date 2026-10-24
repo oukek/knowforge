@@ -117,7 +117,7 @@ const unconfiguredRates = computed(() =>
 const formalCompatible = computed(() =>
   ["inputRate", "cachedRate", "outputRate"].every((key) => {
     const rate = Number(plan.value[key]);
-    return Number.isInteger(rate) && rate >= 1 && rate <= 1000;
+    return rate > 0 && rate <= 1000;
   }),
 );
 
@@ -215,6 +215,7 @@ function importModel() {
       draft.value[k + "Price"] = m.pricing[k];
       draft.value[k + "Cost"] = m.procurement?.[k] ?? "0";
     }
+  if (!image && m.rates) Object.assign(draft.value, m.rates);
   formError.value = draft.value.directCosts
     ? ""
     : "该模型未记录实际采购成本，现按原价采购试算；请填写采购折扣或实际成本。";
@@ -229,7 +230,9 @@ function quotaDifference(row) {
         fmt(d.replace(/^-/, ""), 6);
 }
 function importRates() {
-  Object.assign(draft.value, liveRates.value);
+  const selected = modelOptions.value.find((m) => m.id === selectedModel.value);
+  if (selected?.kind === "image") draft.value.imageRate = selected.imageCredits;
+  else if (selected?.rates) Object.assign(draft.value, selected.rates);
   formError.value = "";
 }
 function reload() {
@@ -285,7 +288,7 @@ onMounted(load);
             ? (dirty ? "上次保存于 " : "保存于 ") + dateLabel(updatedAt)
             : dirty
               ? "本页方案尚未保存。"
-              : "初始上游价格采用截图示例，客户费率载入正式配置。"
+              : "初始价格采用截图示例，可选择模型载入其标价、成本及费率。"
         }}</span>
       </div>
       <div class="pricing-cost-strip">
@@ -321,14 +324,14 @@ onMounted(load);
             isImage
               ? "图片额度仅用于本页测算。"
               : unconfiguredRates
-                ? "当前测算费率与正式费率不同。"
-                : "当前测算费率与读取时的正式费率一致。"
+                ? "请在模型卡片保存正式费率，本页只作比较。"
+                : "正式扣费由各模型自己的费率决定。"
           }}
         </p>
       </div>
       <p v-if="!isImage && !formalCompatible" class="info-banner" role="status">
-        当前方案含小数或超出范围的费率。正式配置目前只接受每千 Token 1～1000
-        的整数额度；此方案可用于试算，应用前需调整资源包售价／额度，或另行支持小数费率。
+        当前方案含零费率或超出模型配置范围的费率。正式模型费率须大于 0 且不超过
+        1000 额度／千 Token，支持最多六位小数。
       </p>
       <p v-if="isImage" class="info-banner">
         图片按所选规格的固定单张价格测算；当前学习功能尚未接入图片生成，保存此方案不启用图片调用。
@@ -627,10 +630,10 @@ onMounted(load);
           ><button
             type="button"
             class="text-btn"
-            :disabled="!liveRates"
+            :disabled="!selectedModel"
             @click="importRates"
           >
-            载入当前正式费率
+            载入所选模型费率
           </button>
         </div>
         <div class="pricing-model-import">

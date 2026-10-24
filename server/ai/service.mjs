@@ -2,6 +2,12 @@ import { randomUUID } from "node:crypto";
 import { AiRepository, decodeRun } from "./repository.mjs";
 import { createProvider } from "./provider.mjs";
 import { AiPool } from "./pool.mjs";
+import {
+  effectivePolicy,
+  ratesOf,
+  checkEligible,
+  claimModel,
+} from "./model-policy.mjs";
 import { AiBilling } from "./billing.mjs";
 import { micro, points, procurementCost, usageCharge } from "./amounts.mjs";
 import { ensureProfile } from "../account-profile.mjs";
@@ -95,6 +101,20 @@ export class AiService {
           )
         ).n,
       );
+      const tariffs = (row?.providers || [])
+        .filter((p) => p.enabled)
+        .flatMap((p) =>
+          p.models
+            .filter((m) => m.enabled && (m.kind || "text") === "text")
+            .map((m) => ({
+              targetId: m.id,
+              model: m.model,
+              ...ratesOf(effectivePolicy(m, row.policy)),
+            })),
+        );
+      const same = tariffs.every(
+        (t) => hash(ratesOf(t)) === hash(ratesOf(tariffs[0])),
+      );
       return {
         configured,
         available:
@@ -110,18 +130,11 @@ export class AiService {
               ? "服务端加密配置不可用，请联系管理员"
               : "",
         account,
-        tariff: row
-          ? {
-              inputRate: row.policy.inputRate,
-              cachedRate: row.policy.cachedRate,
-              outputRate: row.policy.outputRate,
-              version: hash({
-                inputRate: row.policy.inputRate,
-                cachedRate: row.policy.cachedRate,
-                outputRate: row.policy.outputRate,
-              }),
-            }
-          : null,
+        tariffs,
+        tariff:
+          same && tariffs.length
+            ? { ...ratesOf(tariffs[0]), version: hash(ratesOf(tariffs[0])) }
+            : null,
         budgets: {
           maxTaskPoints: settings.maxTaskPoints,
           dailyBudget: account.policy.dailyBudget || settings.dailyBudget,
@@ -149,7 +162,10 @@ export class AiService {
     await this.provider.validate(parsed.baseUrl);
     return this.repo.transaction(async (db) => {
       const pool = await this.pool.raw(db);
-      if (pool?.providers.length > 1)
+      if (
+        pool?.providers.length > 1 ||
+        pool?.providers.some((p) => p.models.some((m) => m.policy))
+      )
         throw new AiError(
           409,
           "请使用多服务商配置页面保存，旧版接口不能覆盖服务池",
@@ -385,7 +401,7 @@ export class AiService {
     const operation = await this.repo
       .transaction(async (db) => {
         const snapshot = await this.pool.snapshot(db, feature, input.targetId);
-        const { targets, ...policy } = snapshot;
+        let { targets, ...policy } = snapshot;
         const config = { ...policy, model: "自动调度" };
         const fingerprint = hash({
           feature,
@@ -421,20 +437,6 @@ export class AiService {
           return { run: cached, reused: true };
         const account = await this.billing.view(db, user.id);
         if (account.blocked) throw new AiError(403, "该账号的 AI 使用已暂停");
-        const since = new Date(Date.now() - 86400000).toISOString();
-        const billable = " AND feature<>?";
-        const total = await db.get(
-          "SELECT COUNT(*) AS n FROM ai_runs WHERE createdAt>=?" + billable,
-          since,
-          "models",
-        );
-        const personal = await db.get(
-          "SELECT COUNT(*) AS n FROM ai_runs WHERE userId=? AND createdAt>=?" +
-            billable,
-          user.id,
-          since,
-          "models",
-        );
         const active = await db.get(
           "SELECT COUNT(*) AS n FROM ai_runs WHERE userId=? AND (status=? OR status=?) AND feature<>?",
           user.id,
@@ -466,22 +468,13 @@ export class AiService {
           );
         if (Number(siteActive.n) >= 3)
           throw new AiError(429, "AI 服务繁忙，请稍后重试");
-        if (
-          Number(total.n) >= config.siteDailyRuns ||
-          Number(personal.n) >= config.dailyRuns
-        )
-          throw new AiError(429, "已达到近 24 小时 AI 使用上限");
-        if (feature === "grade") {
-          const perQuestion = await db.get(
-            "SELECT COUNT(*) AS n FROM ai_runs WHERE userId=? AND questionId=? AND feature=? AND createdAt>=?",
-            user.id,
-            input.questionId,
-            feature,
-            since,
-          );
-          if (Number(perQuestion.n) >= config.perQuestionRuns)
-            throw new AiError(429, "本题近 24 小时 AI 评阅次数已达上限");
-        }
+        targets = await checkEligible(
+          db,
+          targets,
+          user.id,
+          input.questionId,
+          feature,
+        );
         let session = null;
         if (feature === "interview") {
           session = await this.repo.sessionRaw(input.sessionId, user.id, db);
@@ -494,6 +487,14 @@ export class AiService {
             throw new AiError(409, "面试状态已变化，请刷新");
         }
         acquired = this.pool.acquire(targets);
+        Object.assign(config, acquired.target.policy, {
+          tariffCandidates: targets.map((t) => ({
+            targetId: t.id,
+            model: t.model,
+            ...ratesOf(t.policy),
+            outputLimit: t.policy.outputLimit,
+          })),
+        });
         const id = randomUUID(),
           stamp = now();
         const run = {
@@ -516,6 +517,7 @@ export class AiService {
           usage: null,
           attempts: [],
         };
+        await claimModel(db, acquired.target, run);
         Object.assign(
           run,
           await this.billing.reserve(db, run, config, prepared.messages),
@@ -576,9 +578,28 @@ export class AiService {
           operation.config.totalTimeoutMs - (Date.now() - started);
         if (remaining <= 0) break;
         if (!lease) {
+          let candidateLease;
           try {
-            lease = this.pool.acquire(operation.targets, excluded);
+            lease = await this.repo.transaction(async (db) => {
+              const targets = await checkEligible(
+                db,
+                operation.targets.filter((t) => !excluded.has(t.id)),
+                operation.run.userId,
+                operation.run.questionId,
+                operation.run.feature,
+              );
+              const next = this.pool.acquire(targets, excluded);
+              candidateLease = next;
+              try {
+                await claimModel(db, next.target, operation.run);
+                return next;
+              } catch (e) {
+                next.release();
+                throw e;
+              }
+            });
           } catch {
+            candidateLease?.release();
             break;
           }
         }
@@ -587,12 +608,11 @@ export class AiService {
         const { encryptedKey, features, ...settings } = target;
         const config = {
           ...operation.config,
+          ...target.policy,
           ...settings,
           outputLimit:
-            operation.run.feature === "test"
-              ? 512
-              : operation.config.outputLimit,
-          timeoutMs: Math.min(operation.config.attemptTimeoutMs, remaining),
+            operation.run.feature === "test" ? 512 : target.policy.outputLimit,
+          timeoutMs: Math.min(target.policy.attemptTimeoutMs, remaining),
         };
         const attempt = {
           id: randomUUID(),
@@ -729,7 +749,7 @@ export class AiService {
           attempt.responseText = response?.text || response?.refusal || "";
           attempt.usageUnknown = !attempt.usage && !attempt.noCharge;
           attempt.estimatedPoints = attempt.usage
-            ? points(usageCharge(attempt.usage, operation.config))
+            ? points(usageCharge(attempt.usage, config))
             : null;
           attempt.estimatedCostCny = procurementCost(
             attempt.usage,
@@ -817,7 +837,8 @@ export class AiService {
       run.upstreamRequestId = String(response?.requestId || "").slice(0, 191);
       run.actualModel = response?.actualModel || run.config.model;
       if (run.attempts?.length) {
-        run.config.model = run.attempts.at(-1).model;
+        // Keep the initial task policy intact. Each attempt stores its own
+        // model configuration; actualRates records the settled model tariff.
         run.actualModel =
           response?.actualModel || run.attempts.at(-1).actualModel;
       }
@@ -942,6 +963,7 @@ export class AiService {
       refundedPoints: run.refundedPoints,
       billingNote: run.billingNote,
       chargeCapped: !!run.chargeCapped,
+      actualRates: run.actualRates || null,
     };
     if (run.sessionId) {
       const session = await this.repo.read((db) =>

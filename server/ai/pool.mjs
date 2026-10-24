@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { AiError, encrypt, decrypt, now } from "./policy.mjs";
 import { micro, points } from "./amounts.mjs";
+import { effectivePolicy } from "./model-policy.mjs";
 
 const integer = (min, max, fallback) =>
   z.number().int().min(min).max(max).default(fallback);
@@ -39,12 +40,22 @@ export const policySchema = z
     (x) => x.totalTimeoutMs >= x.attemptTimeoutMs,
     "总超时不能小于单次超时",
   );
+const modelRate = price.refine(
+  (value) => micro(value) > 0n && micro(value) <= 1000n * 1000000n,
+  "每千 Token 扣费须大于 0 且不超过 1000，最多六位小数",
+);
+export const modelPolicySchema = policySchema.safeExtend({
+  inputRate: modelRate,
+  cachedRate: modelRate,
+  outputRate: modelRate,
+});
 const modelSchema = z
   .object({
     id: z.string().uuid(),
     model: z.string().trim().min(1).max(160),
     kind: z.enum(["text", "image"]).default("text"),
     pricing: modelPricing.nullable().default(null),
+    policy: modelPolicySchema.nullable().default(null),
     imageProcurement: price.nullable().default(null),
     imageCredits: price.default("1"),
     enabled: z.boolean().default(true),
@@ -207,6 +218,48 @@ export class AiPool {
           providers: [],
           policy: policySchema.parse({}),
         });
+      if (
+        !(await db.get(
+          "SELECT id FROM ai_config WHERE id=?",
+          "model-policy-counts-1",
+        ))
+      ) {
+        for (const run of await db.all(
+          "SELECT id,userId,questionId,feature,createdAt,data FROM ai_runs WHERE createdAt>=?",
+          new Date(Date.now() - 86400000).toISOString(),
+        )) {
+          const value = { ...JSON.parse(run.data), ...run };
+          for (const attempt of Array.isArray(value.attempts)
+            ? value.attempts
+            : []) {
+            if (
+              !attempt ||
+              typeof attempt.targetId !== "string" ||
+              !attempt.targetId ||
+              attempt.targetId.length > 191
+            )
+              continue;
+            const slotId = value.id + ":" + attempt.targetId;
+            if (
+              !(await db.get(
+                "SELECT id FROM ai_model_invocations WHERE id=?",
+                slotId,
+              ))
+            )
+              await db.run(
+                "INSERT INTO ai_model_invocations(id,modelId,runId,userId,questionId,feature,createdAt) VALUES(?,?,?,?,?,?,?)",
+                slotId,
+                attempt.targetId,
+                value.id,
+                value.userId,
+                value.questionId || "",
+                value.feature,
+                attempt.startedAt || value.createdAt,
+              );
+          }
+        }
+        await this.put(db, "model-policy-counts-1", {});
+      }
       for (const row of await db.all("SELECT * FROM ai_health"))
         this.health.set(row.id, JSON.parse(row.data));
     });
@@ -416,6 +469,7 @@ export class AiPool {
           providerName: p.name,
           providerMaxConcurrent: p.maxConcurrent,
           ...m,
+          policy: effectivePolicy(m, pool.policy),
           baseUrl: p.baseUrl,
           protocol: p.protocol,
           encryptedKey: row?.encryptedKey || "",

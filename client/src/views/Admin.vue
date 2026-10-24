@@ -18,17 +18,18 @@ const route = useRoute(),
   router = useRouter();
 const tab = computed({
   get: () =>
-    [
-      "providers",
-      "models",
-      "limits",
-      "users",
-      "products",
-      "pricing",
-      "history",
-    ].includes(route.query.tab)
-      ? route.query.tab
-      : "providers",
+    route.query.tab === "limits"
+      ? "models"
+      : [
+            "providers",
+            "models",
+            "users",
+            "products",
+            "pricing",
+            "history",
+          ].includes(route.query.tab)
+        ? route.query.tab
+        : "providers",
   set: (value) =>
     router.replace({
       path: "/admin",
@@ -160,7 +161,6 @@ onMounted(
         v-for="[value, label] in [
           ['providers', '服务商管理'],
           ['models', '模型管理'],
-          ['limits', '额度与限制'],
           ['users', '用户与额度'],
           ['products', '资源包与预算'],
           ['pricing', '定价测算'],
@@ -177,7 +177,7 @@ onMounted(
       {{ error }}
     </p>
     <AdminAiPool
-      v-if="['providers', 'models', 'limits'].includes(tab)"
+      v-if="['providers', 'models'].includes(tab)"
       :key="tab"
       :section="tab"
     />

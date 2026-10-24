@@ -5,6 +5,7 @@ import {
   PRICING_SIMULATION_DEFAULTS,
   normalizePricingSimulation,
 } from "../../shared/pricing-simulation.mjs";
+import { effectivePolicy, ratesOf } from "./model-policy.mjs";
 const key = "pricing-simulation";
 // Procurement assumptions are returned only by authenticated admin endpoints,
 // never embedded in the public frontend bundle or learner bootstrap.
@@ -66,6 +67,7 @@ export class PricingSimulation {
             procurement: m.procurement || null,
             imageProcurement: m.imageProcurement ?? null,
             imageCredits: m.imageCredits || "1",
+            rates: ratesOf(effectivePolicy(m, live)),
           })),
         ),
         examplePlan: normalizePricingSimulation({

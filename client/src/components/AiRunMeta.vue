@@ -31,6 +31,11 @@ defineProps({ run: Object });
     >
     <span v-if="run.billingMode === 'platform'">平台调试 · 不扣个人额度</span>
     <span v-if="run.refundedPoints">已冲正 {{ run.refundedPoints }} 额度</span>
+    <p v-if="run.actualRates" class="tiny muted">
+      本次模型费率／千 Token：输入 {{ run.actualRates.inputRate }} · 缓存
+      {{ run.actualRates.cachedRate }} · 输出
+      {{ run.actualRates.outputRate }} 额度
+    </p>
     <p v-if="run.billingNote" class="tiny muted">{{ run.billingNote }}</p>
     <span v-if="run.usage && (run.usage.cached || run.usage.reasoning)"
       >其中缓存输入 {{ run.usage.cached }} / 推理输出

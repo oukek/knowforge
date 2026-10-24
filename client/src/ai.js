@@ -5,6 +5,7 @@ export const ai = reactive({
   configured: false,
   available: false,
   tariff: null,
+  tariffs: [],
   budgets: null,
   account: { balance: 0, reserved: 0, available: 0 },
   answerLimit: 3000,
@@ -37,6 +38,7 @@ watch(
       configured: false,
       available: false,
       tariff: null,
+      tariffs: [],
       budgets: null,
       account: { balance: 0, reserved: 0, available: 0 },
     });

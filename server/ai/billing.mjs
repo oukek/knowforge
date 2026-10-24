@@ -687,7 +687,13 @@ export class AiBilling {
     const account = await this.view(db, run.userId),
       settings = await this.settings(db);
     if (account.blocked) throw new AiError(403, "该账号的 AI 使用已暂停");
-    const n = quote(messages, config, run.feature);
+    const n = (
+      config.tariffCandidates?.length ? config.tariffCandidates : [config]
+    )
+      .map((candidate) =>
+        quote(messages, { ...config, ...candidate }, run.feature),
+      )
+      .reduce((maximum, value) => (value > maximum ? value : maximum), 0n);
     if (n > micro(settings.maxTaskPoints))
       throw new AiError(
         400,
@@ -741,6 +747,14 @@ export class AiBilling {
       data: {
         allocations,
         rates,
+        tariffs: config.tariffCandidates?.map((t) => ({
+          targetId: t.targetId,
+          rates: {
+            inputRate: t.inputRate,
+            cachedRate: t.cachedRate,
+            outputRate: t.outputRate,
+          },
+        })),
         tariffVersion: hash(rates),
         expiresAt: new Date(
           this.clock() + settings.pendingHours * 3600000,
@@ -781,6 +795,20 @@ export class AiBilling {
     const u = await this.unit(db, run.id);
     if (!u) throw new AiError(503, "计费单元不存在");
     if (!["reserved", "pending"].includes(u.status)) return this.runFields(u);
+    if (success && u.tariffs?.length) {
+      const targetId = run.attempts?.findLast(
+        (a) => a.status === "succeeded",
+      )?.targetId;
+      const selected = u.tariffs.find((t) => t.targetId === targetId);
+      if (!selected)
+        throw new AiError(
+          503,
+          "模型费率快照缺失，需核对后结算",
+          "AI_TARIFF_MISSING",
+        );
+      u.rates = selected.rates;
+      u.tariffVersion = hash(u.rates);
+    }
     let due =
       manual === null
         ? usage
@@ -869,6 +897,7 @@ export class AiBilling {
       duePoints: u.due == null ? null : points(u.due),
       waivedPoints: u.waived == null ? null : points(u.waived),
       tariffVersion: u.tariffVersion,
+      actualRates: u.rates,
       chargeCapped: !!u.chargeCapped,
     };
   }

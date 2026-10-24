@@ -7,12 +7,12 @@ import AppField from "./AppField.vue";
 import AppSelect from "./AppSelect.vue";
 import AppChoice from "./AppChoice.vue";
 import AiRunMeta from "./AiRunMeta.vue";
+import ModelPriceEditor from "./ModelPriceEditor.vue";
 const props = defineProps({ section: { type: String, default: "providers" } });
 const filterProvider = ref(""),
   filterKind = ref(""),
   search = ref("");
-const priceEnabled = ref(false),
-  priceDraft = ref({});
+const priceTarget = ref(null);
 const busy = ref(false),
   error = ref(""),
   formError = ref(""),
@@ -25,8 +25,7 @@ const draft = ref({}),
   providerId = ref(""),
   editingId = ref(""),
   removeTarget = ref(null),
-  testTarget = ref(null),
-  costEnabled = ref(false);
+  testTarget = ref(null);
 const task = useAiTask(),
   clone = (x) => JSON.parse(JSON.stringify(x));
 const features = [
@@ -40,9 +39,6 @@ const enabledOptions = [
 ];
 const fields = [
   ["outputLimit", "最大输出 Token", 512, 4096],
-  ["inputRate", "每千输入 Token 额度", 1, 1000],
-  ["cachedRate", "每千缓存 Token 额度", 1, 1000],
-  ["outputRate", "每千输出 Token 额度", 1, 1000],
   ["dailyRuns", "每用户近 24 小时次数", 1, 100],
   ["siteDailyRuns", "全站近 24 小时次数", 1, 10000],
   ["perQuestionRuns", "每题近 24 小时评阅次数", 1, 10],
@@ -55,7 +51,7 @@ const title = computed(
     ({
       provider: editingId.value ? "编辑服务商" : "添加服务商",
       model: editingId.value ? "编辑模型" : "添加模型",
-      policy: "配置费率、调用限制与超时",
+      policy: "配置当前模型调用限制",
       remove: "确认移除配置",
       test: "测试已保存模型",
     })[dialog.value] || "服务配置",
@@ -193,40 +189,43 @@ function openModel(p, m) {
         format: "schema",
         tokenParameter: "max_completion_tokens",
         procurement: null,
+        policy: clone(pool.policy),
       };
-  priceEnabled.value = !!draft.value.pricing;
-  priceDraft.value = draft.value.pricing
-    ? clone(draft.value.pricing)
-    : { input: "", cached: "", output: "", perImage: "", specification: "" };
-  costEnabled.value =
-    draft.value.kind === "image"
-      ? draft.value.imageProcurement !== null
-      : !!draft.value.procurement;
-  draft.value.imageProcurement ??= "";
-  if (!draft.value.procurement)
-    draft.value.procurement = { input: "", cached: "", output: "" };
   formError.value = "";
   dialog.value = "model";
 }
 function changeKind(kind) {
   draft.value.features =
     kind === "image" ? [] : ["grade", "variants", "interview"];
-  draft.value.procurement = { input: "", cached: "", output: "" };
-  draft.value.imageProcurement = "";
-  costEnabled.value = false;
-  priceEnabled.value = false;
-  priceDraft.value = {
-    input: "",
-    cached: "",
-    output: "",
-    perImage: "",
-    specification: "",
-  };
+  draft.value.pricing = null;
+  draft.value.procurement = null;
+  draft.value.imageProcurement = null;
+  draft.value.imageCredits = "1";
 }
-function openPolicy() {
-  draft.value = clone(pool.policy);
+function openPolicy(p, m) {
+  providerId.value = p.id;
+  editingId.value = m.id;
+  draft.value = clone(m.policy || pool.policy);
   formError.value = "";
   dialog.value = "policy";
+}
+function openPrices(p, m) {
+  priceTarget.value = { providerId: p.id, model: clone(m) };
+  formError.value = "";
+  dialog.value = "prices";
+}
+async function savePrices(model) {
+  await act(async () => {
+    const next = clone(pool.providers),
+      provider = next.find((p) => p.id === priceTarget.value.providerId);
+    const index = provider?.models.findIndex((m) => m.id === model.id) ?? -1;
+    if (index < 0) throw Error("模型已变化，请重新载入");
+    provider.models[index] = model;
+    await persist(next);
+    dialog.value = "";
+    priceTarget.value = null;
+    toast("当前模型价格已保存，新任务按模型费率执行");
+  });
 }
 function close() {
   if (busy.value) return;
@@ -267,47 +266,23 @@ async function save() {
       const p = next.find((x) => x.id === providerId.value);
       if (!p) throw new Error("服务商已变化，请刷新后重试。");
       const m = clone(draft.value);
-      const image = m.kind === "image";
-      m.procurement = costEnabled.value && !image ? m.procurement : null;
-      m.imageProcurement =
-        costEnabled.value && image ? m.imageProcurement : null;
-      if (
-        costEnabled.value &&
-        (image
-          ? m.imageProcurement === ""
-          : Object.values(m.procurement).some((v) => v === ""))
-      )
-        throw new Error("请填写实际采购价；真实免费项目可明确填写 0。");
-      m.pricing = !priceEnabled.value
-        ? null
-        : image
-          ? {
-              unit: "image",
-              perImage: priceDraft.value.perImage,
-              specification: priceDraft.value.specification || "",
-            }
-          : {
-              unit: "token",
-              ...Object.fromEntries(
-                ["input", "cached", "output"].map((k) => [
-                  k,
-                  priceDraft.value[k],
-                ]),
-              ),
-            };
-      if (
-        priceEnabled.value &&
-        (image
-          ? m.pricing.perImage === ""
-          : ["input", "cached", "output"].some((k) => m.pricing[k] === ""))
-      )
-        throw new Error("请完整填写模型标价；免费项目可明确填写 0。");
       const i = p.models.findIndex((x) => x.id === editingId.value);
       if (i >= 0) p.models[i] = m;
       else p.models.push(m);
       await persist(next);
-    } else if (dialog.value === "policy") await persist(next, draft.value);
-    else if (dialog.value === "remove") {
+    } else if (dialog.value === "policy") {
+      const m = next
+        .find((p) => p.id === providerId.value)
+        ?.models.find((m) => m.id === editingId.value);
+      if (!m) throw Error("模型已变化，请重新载入");
+      m.policy = {
+        ...(m.policy || pool.policy),
+        ...Object.fromEntries(
+          fields.map(([key]) => [key, Number(draft.value[key])]),
+        ),
+      };
+      await persist(next);
+    } else if (dialog.value === "remove") {
       const t = removeTarget.value;
       await persist(
         t.modelId
@@ -521,6 +496,19 @@ onMounted(() => void act(load));
             <button class="btn small" :disabled="busy" @click="openModel(p, m)">
               编辑模型</button
             ><button
+              class="btn small"
+              :disabled="busy"
+              @click="openPrices(p, m)"
+            >
+              配置价格</button
+            ><button
+              v-if="m.kind !== 'image'"
+              class="btn small"
+              :disabled="busy"
+              @click="openPolicy(p, m)"
+            >
+              调用限制</button
+            ><button
               v-if="m.kind !== 'image'"
               class="btn small"
               :disabled="busy || !p.enabled || !m.enabled || task.busy.value"
@@ -535,6 +523,11 @@ onMounted(() => void act(load));
         <div class="ai-model-price-summary">
           <span><strong>模型标价</strong> {{ priceText(m) }}</span
           ><span><strong>实际采购成本</strong> {{ priceText(m, true) }}</span
+          ><span v-if="m.kind !== 'image'"
+            >扣费额度／千 Token：输入
+            {{ (m.policy || pool.policy).inputRate }} / 缓存
+            {{ (m.policy || pool.policy).cachedRate }} / 输出
+            {{ (m.policy || pool.policy).outputRate }}</span
           ><span v-if="m.kind === 'image'"
             >测算扣费：{{
               m.imageCredits
@@ -564,30 +557,12 @@ onMounted(() => void act(load));
         }}
       </p>
     </template>
-    <section v-else class="ai-detail">
-      <div class="section-line">
-        <div>
-          <h2>额度费率与调用限制</h2>
-          <p class="tiny muted">
-            文本任务按全站公开费率扣额度，模型标价与采购成本独立管理。修改只影响新任务。
-          </p>
-        </div>
-        <button class="btn primary small" :disabled="busy" @click="openPolicy">
-          配置费率与限制
-        </button>
-      </div>
-      <div class="ai-config-summary">
-        <span
-          >输入 {{ pool.policy.inputRate }} / 缓存
-          {{ pool.policy.cachedRate }} / 输出
-          {{ pool.policy.outputRate }} 额度／千 Token</span
-        ><span
-          >最大输出 {{ pool.policy.outputLimit }} Token · 每用户近 24 小时
-          {{ pool.policy.dailyRuns }} 次</span
-        >
-      </div>
-    </section>
-    <AppDialog :open="!!dialog" :title="title" :busy="busy" @close="close">
+    <AppDialog
+      :open="!!dialog && dialog !== 'prices'"
+      :title="title"
+      :busy="busy"
+      @close="close"
+    >
       <p
         v-if="formError || (dialog === 'test' && task.error.value)"
         class="ai-error"
@@ -752,80 +727,11 @@ onMounted(() => void act(load));
             >{{ label }}</AppChoice
           >
         </div>
-        <fieldset class="ai-model-pricing-fields">
-          <legend>模型标价 · 人民币</legend>
-          <AppChoice v-model="priceEnabled"
-            >配置该模型标价，用于定价比较与额度换算</AppChoice
-          >
-          <div v-if="priceEnabled" class="ai-admin-grid">
-            <template v-if="draft.kind !== 'image'"
-              ><label
-                >每百万普通输入 Token 标价（元）<AppField
-                  v-model="priceDraft.input"
-                  inputmode="decimal" /></label
-              ><label
-                >每百万缓存输入 Token 标价（元）<AppField
-                  v-model="priceDraft.cached"
-                  inputmode="decimal" /></label
-              ><label
-                >每百万输出 Token 标价（元）<AppField
-                  v-model="priceDraft.output"
-                  inputmode="decimal" /></label
-            ></template>
-            <template v-else
-              ><label
-                >每张图片标价（元）<AppField
-                  v-model="priceDraft.perImage"
-                  inputmode="decimal" /></label
-              ><label
-                >适用图片规格<AppField
-                  v-model="priceDraft.specification"
-                  maxlength="120"
-                  placeholder="例如 1024 × 1024，标准质量" /></label
-            ></template>
-          </div>
-          <p class="tiny muted">
-            标价是管理员填写的参考售价，不自动代表官方报价；不直接修改已有用户的扣费规则。
-          </p>
-        </fieldset>
-        <fieldset class="ai-model-pricing-fields">
-          <legend>实际采购成本 · 人民币</legend>
-          <AppChoice v-model="costEnabled">记录该模型的实际采购价</AppChoice>
-          <div v-if="costEnabled" class="ai-admin-grid">
-            <template v-if="draft.kind !== 'image'"
-              ><label
-                >每百万普通输入 Token 成本（元）<AppField
-                  v-model="draft.procurement.input"
-                  inputmode="decimal" /></label
-              ><label
-                >每百万缓存输入 Token 成本（元）<AppField
-                  v-model="draft.procurement.cached"
-                  inputmode="decimal" /></label
-              ><label
-                >每百万输出 Token 成本（元）<AppField
-                  v-model="draft.procurement.output"
-                  inputmode="decimal" /></label
-            ></template>
-            <label v-else
-              >每张图片实际成本（元）<AppField
-                v-model="draft.imageProcurement"
-                inputmode="decimal"
-            /></label>
-          </div>
-          <p class="tiny muted">
-            填写折扣后实际成本，不再重复乘折扣。未配置成本记为未知；真实免费项目明确填写
-            0。
-          </p>
-        </fieldset>
-        <label v-if="draft.kind === 'image'"
-          >每张图片扣费额度 · 用于测算<AppField
-            v-model="draft.imageCredits"
-            inputmode="decimal"
-        /></label>
-        <p v-else class="info-banner">
-          文本扣费规则在“额度与限制”配置：输入 {{ pool.policy.inputRate }} /
-          缓存 {{ pool.policy.cachedRate }} / 输出
-          {{ pool.policy.outputRate }} 额度／千 Token。
+        <p class="tiny muted">
+          保存模型后，可从模型卡片单独配置价格和调用限制。
+        </p>
+        <p v-if="editingId" class="tiny muted">
+          切换模型类型会清空原类型的价格配置；取消本次编辑会保留原配置。
         </p>
         <button class="btn primary" :disabled="busy">保存模型</button>
       </form>
@@ -836,7 +742,7 @@ onMounted(() => void act(load));
         @submit.prevent="save"
       >
         <p class="tiny muted">
-          修改仅作用于新任务；运行中的调用和历史账单保留费率快照。
+          仅配置当前模型。次数按实际选择该模型的尝试计数，失败尝试也计入。修改仅影响新任务，运行中的任务保留原快照。
         </p>
         <div class="ai-admin-grid">
           <label v-for="[key, label, min, max] in fields" :key="key"
@@ -848,7 +754,7 @@ onMounted(() => void act(load));
               :max="max"
           /></label>
         </div>
-        <button class="btn primary" :disabled="busy">保存费率与限制</button>
+        <button class="btn primary" :disabled="busy">保存模型限制</button>
       </form>
       <template v-if="dialog === 'remove'"
         ><p>
@@ -878,6 +784,15 @@ onMounted(() => void act(load));
         ><AiRunMeta :run="task.run.value"
       /></template>
     </AppDialog>
+    <ModelPriceEditor
+      :open="dialog === 'prices'"
+      :model="priceTarget?.model"
+      :legacy-policy="pool.policy"
+      :busy="busy"
+      :error="formError"
+      @close="close"
+      @save="savePrices"
+    />
   </div>
 </template>
 <style>
