@@ -2,7 +2,7 @@
 import { formatPricingNumber as fmt } from "../../../shared/pricing-simulation.mjs";
 defineProps({ pack: Object, price: String, hasOriginal: Boolean });
 const money = (value) => {
-  const text = fmt(value, 4);
+  const text = fmt(value, 6);
   return text.startsWith("<") ? "<¥" + text.slice(1) : "¥" + text;
 };
 </script>

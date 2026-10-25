@@ -180,6 +180,20 @@ export function normalizePricingSimulation(input) {
     throw new Error("样例输入和输出不能同时为 0");
   return x;
 }
+// Resource-pack previews depend only on pack credits and each channel's rate.
+// Ignore historical sample fields before validation, including stale/invalid
+// values, so an old usage ratio cannot influence the new preview or saving.
+export function normalizePackPricing(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    return normalizePricingSimulation(input);
+  return normalizePricingSimulation({
+    ...input,
+    inputTokens: PRICING_SIMULATION_DEFAULTS.inputTokens,
+    cachedTokens: PRICING_SIMULATION_DEFAULTS.cachedTokens,
+    outputTokens: PRICING_SIMULATION_DEFAULTS.outputTokens,
+    imageCount: PRICING_SIMULATION_DEFAULTS.imageCount,
+  });
+}
 const ratio = (a, b) => decimal(div(a, b));
 function metrics(revenue, cost, original) {
   const profit = sub(revenue, cost);
@@ -273,6 +287,11 @@ export function calculatePricingSimulation(input, products) {
                 channel.rate,
               )
             : null;
+          const count = capacity ? capacity.n / capacity.d : null;
+          const volume =
+            count === null
+              ? null
+              : fraction(count, channel.key === "image" ? 1n : SCALE);
           return [
             channel.key,
             {
@@ -294,7 +313,15 @@ export function calculatePricingSimulation(input, products) {
                 : null,
               // Single-channel capacity, with all credits spent on that channel.
               // Floor whole tokens/images so the display never overpromises a unit.
-              capacity: capacity ? String(capacity.n / capacity.d) : null,
+              capacity: count === null ? null : String(count),
+              wholePack:
+                count !== null && count > 0n
+                  ? metrics(
+                      price,
+                      mul(volume, channel.cost),
+                      mul(volume, channel.original),
+                    )
+                  : null,
             },
           ];
         }),
@@ -351,5 +378,29 @@ export function calculatePricingSimulation(input, products) {
       baseCost: decimal(baseCost),
       cost: decimal(cost),
     },
+  };
+}
+
+export function calculatePackPricing(input, products) {
+  const { config, channels, rows } = calculatePricingSimulation(
+    normalizePackPricing(input),
+    products,
+  );
+  return {
+    config,
+    channels,
+    rows: rows.map(({ sample, fullPack, ...row }) =>
+      row.error
+        ? row
+        : {
+            ...row,
+            hasLoss: Object.values(row.channels).some(
+              (channel) => channel.wholePack?.state === "loss",
+            ),
+            aboveOriginal: Object.values(row.channels).some(
+              (channel) => Number(channel.wholePack?.discountPercent) < 0,
+            ),
+          },
+    ),
   };
 }

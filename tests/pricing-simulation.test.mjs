@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   PRICING_SIMULATION_DEFAULTS as defaults,
   calculatePricingSimulation,
+  calculatePackPricing,
+  normalizePackPricing,
   normalizePricingSimulation,
   formatPricingNumber,
 } from "../shared/pricing-simulation.mjs";
@@ -34,6 +36,98 @@ const flagship = {
   credits: "50000",
   bonus: "0",
 };
+
+test("资源包直接换算：9.9 元的 500 额度分别得到输入和输出 Token，再用这些数量算原价", () => {
+  const r = calculatePackPricing(
+    plan({ useCache: true, cachedPrice: "1", cachedRate: "0.05" }),
+    [lite],
+  );
+  const row = r.rows[0];
+  assert.equal(row.channels.input.capacity, "4000000");
+  assert.equal(row.channels.input.wholePack.original, "20");
+  assert.equal(row.channels.input.wholePack.revenue, "9.9");
+  assert.equal(row.channels.input.wholePack.discountPercent, "50.5");
+  assert.equal(row.channels.input.wholePack.cost, "3");
+  assert.equal(row.channels.output.capacity, "666666");
+  assert.equal(row.channels.output.wholePack.original, "19.99998");
+  assert.equal(row.channels.output.wholePack.cost, "2.999997");
+  assert.equal(row.channels.cached.capacity, "10000000");
+  assert.equal(row.channels.cached.wholePack.original, "10");
+  assert.equal(row.channels.cached.wholePack.discountPercent, "1");
+  assert(!Object.hasOwn(row, "sample"));
+  assert(!Object.hasOwn(row, "fullPack"));
+});
+
+test("资源包结果完全不依赖旧样例：不同样例比例、零用量和无效旧样例均不影响计算或配置保存", () => {
+  const expected = calculatePackPricing(plan(), [lite]);
+  for (const patch of [
+    { inputTokens: "1000000", outputTokens: "0", cachedTokens: "0" },
+    { inputTokens: "0", outputTokens: "1000000", cachedTokens: "0" },
+    { inputTokens: "0", outputTokens: "0" },
+    {
+      inputTokens: "bad",
+      outputTokens: "-1",
+      cachedTokens: "999999999",
+      imageCount: "invalid",
+    },
+  ])
+    assert.deepEqual(calculatePackPricing(plan(patch), [lite]), expected);
+  assert.equal(
+    normalizePackPricing(plan({ inputTokens: "bad" })).inputPrice,
+    "5",
+  );
+  assert.throws(() => normalizePackPricing(null));
+  assert.throws(() => normalizePackPricing([]));
+  assert.throws(() => normalizePackPricing(plan({ inputRate: "bad" })));
+});
+
+test("每项独立计算赠送、采购折扣、负优惠和整数数量，不把多个用途的原价相加", () => {
+  const base = plan({ inputRate: "1", outputRate: "3" });
+  const a = calculatePackPricing(base, [lite]).rows[0];
+  assert.equal(a.channels.input.wholePack.original, "2.5");
+  assert.equal(a.channels.input.wholePack.discountPercent, "-296");
+  assert.equal(a.channels.output.wholePack.original, "4.99998");
+  const gift = calculatePackPricing({ ...base, costDiscount: "0.5" }, [
+    { ...lite, bonus: "500" },
+  ]).rows[0];
+  assert.equal(gift.channels.input.capacity, "1000000");
+  assert.equal(gift.channels.input.wholePack.original, "5");
+  assert.equal(gift.channels.input.wholePack.cost, "2.5");
+  const noCost = calculatePackPricing({ ...base, costDiscount: "0" }, [lite])
+    .rows[0];
+  assert.equal(
+    noCost.channels.input.wholePack.discountPercent,
+    a.channels.input.wholePack.discountPercent,
+  );
+  assert.equal(noCost.channels.input.wholePack.cost, "0");
+});
+
+test("资源包按可用整张图片算原价；零费率、零原价、免费商品和不足一张时各有明确定义", () => {
+  const x = plan({
+    kind: "image",
+    imagePrice: "0.5",
+    imageRate: "3",
+    costDiscount: "0.2",
+  });
+  const a = calculatePackPricing(x, [lite]).rows[0];
+  assert.equal(a.channels.image.capacity, "166");
+  assert.equal(a.channels.image.wholePack.original, "83");
+  assert.equal(a.channels.image.wholePack.cost, "16.6");
+  assert(a.hasLoss);
+  const tiny = calculatePackPricing(x, [{ ...lite, credits: "1" }]).rows[0];
+  assert.equal(tiny.channels.image.capacity, "0");
+  assert.equal(tiny.channels.image.wholePack, null);
+  const zeroRate = calculatePackPricing({ ...x, imageRate: "0" }, [lite])
+    .rows[0];
+  assert.equal(zeroRate.channels.image.capacity, null);
+  assert.equal(zeroRate.channels.image.wholePack, null);
+  const zeroOriginal = calculatePackPricing({ ...x, imagePrice: "0" }, [lite])
+    .rows[0];
+  assert.equal(zeroOriginal.channels.image.wholePack.discountPercent, null);
+  const free = calculatePackPricing(x, [{ ...lite, price: "0" }]).rows[0];
+  assert.equal(free.channels.image.wholePack.discountPercent, "100");
+  assert.equal(free.channels.image.wholePack.marginPercent, null);
+});
 
 test("截图人民币成本与小数费率：一组收费、八档折扣和整包毛利不混淆", () => {
   const r = calculatePricingSimulation(plan(), [lite, flagship]);

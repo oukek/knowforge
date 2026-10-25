@@ -11,7 +11,7 @@ import {
 } from "../../../shared/model-cost.mjs";
 import {
   PRICING_SIMULATION_DEFAULTS as defaults,
-  normalizePricingSimulation,
+  normalizePackPricing,
 } from "../../../shared/pricing-simulation.mjs";
 const props = defineProps({
   open: Boolean,
@@ -30,8 +30,7 @@ const formId = useId(),
 const draft = ref({}),
   costEnabled = ref(false),
   original = ref({}),
-  costDiscount = ref("1"),
-  usage = ref({});
+  costDiscount = ref("1");
 let generation = 0;
 const image = computed(() => draft.value.kind === "image");
 const legacyCost = computed(
@@ -65,11 +64,10 @@ const plan = computed(() => ({
   inputRate: draft.value.policy?.inputRate ?? "",
   cachedRate: draft.value.policy?.cachedRate ?? "",
   outputRate: draft.value.policy?.outputRate ?? "",
-  ...usage.value,
 }));
 const validation = computed(() => {
   try {
-    const normalized = normalizePricingSimulation(plan.value);
+    const normalized = normalizePackPricing(plan.value);
     if (image.value) {
       if (Number(normalized.imageRate) <= 0)
         throw Error("每张图片扣费额度必须大于 0");
@@ -133,12 +131,6 @@ watch(
       perImage: "",
       specification: model.pricing?.specification || "",
       ...(costEnabled.value ? model.pricing : {}),
-    };
-    usage.value = {
-      inputTokens: "8000",
-      cachedTokens: "0",
-      outputTokens: "2000",
-      imageCount: "1",
     };
     pane.value = "edit";
     localError.value = "";
@@ -306,27 +298,6 @@ function save() {
                 : "保存后作为此模型的正式费率；技术失败不扣用户额度。"
             }}
           </p>
-        </fieldset>
-        <fieldset :disabled="busy">
-          <legend>预览样例 · 不随模型价格保存</legend>
-          <div class="price-input-grid">
-            <template v-if="!image"
-              ><label
-                >总输入 Token<AppField
-                  v-model="usage.inputTokens"
-                  inputmode="numeric" /></label
-              ><label
-                >其中缓存 Token<AppField
-                  v-model="usage.cachedTokens"
-                  inputmode="numeric" /></label
-              ><label
-                >输出 Token<AppField
-                  v-model="usage.outputTokens"
-                  inputmode="numeric" /></label></template
-            ><label v-else
-              >图片数量<AppField v-model="usage.imageCount" inputmode="numeric"
-            /></label>
-          </div>
         </fieldset>
         <p v-if="validation.error" class="info-banner" role="status">
           {{ validation.error }}

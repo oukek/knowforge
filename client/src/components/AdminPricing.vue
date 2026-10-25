@@ -8,10 +8,11 @@ import AppChoice from "./AppChoice.vue";
 import AppDisclosure from "./AppDisclosure.vue";
 import Icon from "./Icon.vue";
 import PackPriceComparison from "./PackPriceComparison.vue";
+import PackUsageBreakdown from "./PackUsageBreakdown.vue";
 import {
   PRICING_SIMULATION_DEFAULTS,
-  normalizePricingSimulation,
-  calculatePricingSimulation,
+  normalizePackPricing,
+  calculatePackPricing,
   formatPricingNumber,
 } from "../../../shared/pricing-simulation.mjs";
 
@@ -25,7 +26,6 @@ const examplePlan = ref(null),
   modelOptions = ref([]),
   selectedModel = ref("");
 const isImage = computed(() => plan.value.kind === "image");
-const priceUnit = computed(() => (isImage.value ? "元／张" : "元／百万 Token"));
 const savedPlan = ref(""),
   busy = ref(false),
   ready = ref(false),
@@ -33,7 +33,6 @@ const savedPlan = ref(""),
   formError = ref("");
 const dialog = ref(""),
   source = ref("published"),
-  basis = ref("sample"),
   detailId = ref(null);
 const fmt = formatPricingNumber;
 const money = (value, digits = 4) => {
@@ -54,25 +53,6 @@ const costName = computed(() =>
   Number(plan.value.extraCostPercent) ? "测算成本" : "采购成本",
 );
 const dirty = computed(() => JSON.stringify(plan.value) !== savedPlan.value);
-const scope = computed(() =>
-  isImage.value
-    ? "图片样例用量"
-    : {
-        sample: "样例用量",
-        input: "每百万普通输入",
-        output: "每百万输出",
-        cached: "每百万缓存输入",
-      }[basis.value],
-);
-const effective = computed(() => {
-  const x = { ...plan.value };
-  if (!isImage.value && basis.value !== "sample") {
-    x.inputTokens = basis.value === "output" ? "0" : "1000000";
-    x.cachedTokens = basis.value === "cached" ? "1000000" : "0";
-    x.outputTokens = basis.value === "output" ? "1000000" : "0";
-  }
-  return x;
-});
 const packages = computed(() =>
   products.value
     .filter(
@@ -87,7 +67,7 @@ const packages = computed(() =>
 );
 const result = computed(() => {
   try {
-    return calculatePricingSimulation(effective.value, packages.value);
+    return calculatePackPricing(plan.value, packages.value);
   } catch (e) {
     return { error: e.message, rows: [] };
   }
@@ -140,7 +120,7 @@ async function load() {
       request("/admin/ai/pricing-simulation"),
       request("/admin/ai/products"),
     ]);
-    plan.value = normalizePricingSimulation(data.plan);
+    plan.value = normalizePackPricing(data.plan);
     savedPlan.value = JSON.stringify(plan.value);
     revision.value = data.revision;
     updatedAt.value = data.updatedAt;
@@ -150,8 +130,6 @@ async function load() {
     products.value = rows.rows;
     ready.value = true;
     dialog.value = "";
-    if (isImage.value || (!plan.value.useCache && basis.value === "cached"))
-      basis.value = "sample";
   });
 }
 async function save() {
@@ -175,9 +153,7 @@ function edit() {
 }
 function apply() {
   try {
-    plan.value = normalizePricingSimulation(draft.value);
-    if (isImage.value || (!plan.value.useCache && basis.value === "cached"))
-      basis.value = "sample";
+    plan.value = normalizePackPricing(draft.value);
     dialog.value = "";
     formError.value = "";
   } catch (e) {
@@ -229,11 +205,6 @@ function importRates() {
 function reload() {
   if (dirty.value) dialog.value = "reload";
   else void load();
-}
-function costLabel() {
-  return Number(plan.value.extraCostPercent)
-    ? "含额外成本的估算"
-    : "仅模型采购成本";
 }
 onMounted(load);
 </script>
@@ -340,224 +311,55 @@ onMounted(load);
               { value: 'draft', label: '全部资源包草稿（含下架）' },
             ]"
           />
-          <AppSelect
-            v-if="!isImage"
-            v-model="basis"
-            label="毛利测算用量"
-            :options="[
-              { value: 'sample', label: '按样例输入输出比例' },
-              { value: 'input', label: '按纯普通输入测算' },
-              { value: 'output', label: '按纯输出测算' },
-              ...(plan.useCache
-                ? [{ value: 'cached', label: '按纯缓存输入测算' }]
-                : []),
-            ]"
-          />
           <span class="tiny muted"
             >{{ result.rows.length }} 档 · 含赠送额度</span
           >
         </div>
-        <div class="pricing-sample-banner">
-          <div>
-            <strong>{{ scope }}</strong>
-            <p class="tiny muted">
-              <template v-if="isImage"
-                >{{ fmt(effective.imageCount, 0) }} 张图片</template
-              ><template v-else
-                >总输入 {{ fmt(effective.inputTokens, 0)
-                }}<template v-if="plan.useCache"
-                  >，其中缓存 {{ fmt(effective.cachedTokens, 0) }}</template
-                >
-                · 输出 {{ fmt(effective.outputTokens, 0) }} Token</template
-              >
-            </p>
-          </div>
-          <div>
-            <span class="tiny muted">本组消耗</span
-            ><strong>{{ fmt(result.sample.points, 6) }} 额度</strong>
-          </div>
-          <div>
-            <span class="tiny muted">本组模型成本</span
-            ><strong>{{ money(result.sample.cost, 6) }}</strong
-            ><span v-if="Number(plan.extraCostPercent)" class="tiny muted"
-              >包含 {{ fmt(plan.extraCostPercent, 2) }}% 额外模型成本</span
-            >
-          </div>
-        </div>
-        <p v-if="lossCount" class="pricing-loss-note" role="status">
-          {{ lossCount }}
-          档资源包在至少一种用量下低于{{ costName }}。{{
+        <p class="info-banner">
+          {{
             isImage
-              ? "请检查每张图片的扣费额度和成本。"
-              : "请查看纯输入、纯输出或缓存视角。"
-          }}负毛利保留显示。
+              ? "按当前规格计算可用整张图片。"
+              : "普通输入、缓存输入和输出分别按全部额度单独换算，是独立上限，不能同时获得或相加。"
+          }}不需要填写样例 Token。
         </p>
-        <p class="tiny muted pricing-table-caption">
-          用户单价单位：{{ priceUnit }}。整包毛利按“{{
-            scope
-          }}”的比例、全部额度用完测算，{{
-            costLabel()
-          }}，不计用户额度过期收益，不代表净利润。
+        <p v-if="lossCount" class="pricing-loss-note" role="status">
+          {{ lossCount }} 档资源包在至少一种用途下低于{{
+            costName
+          }}，请查看对应项的成本与毛利。
         </p>
-        <div
-          v-if="result.rows.length"
-          class="pricing-table-scroll"
-          tabindex="0"
-          role="region"
-          aria-label="资源包定价测算对比表"
+        <PackUsageBreakdown
+          v-for="row in result.rows"
+          :key="row.id"
+          :row="row"
+          :fields="fields"
+          :image="isImage"
+          :has-original="!plan.directCosts"
+          :cost-label="costName"
         >
-          <table class="pricing-table">
-            <thead>
-              <tr>
-                <th scope="col">资源包</th>
-                <th scope="col">用户实际单价／{{ isImage ? "张" : "百万" }}</th>
-                <th scope="col">用户价与{{ costName }}</th>
-                <th scope="col">整包原价与优惠</th>
-                <th scope="col">本组用量的收费与毛利</th>
-                <th scope="col">整包用完的毛利</th>
-                <th scope="col">明细</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="row in result.rows"
-                :key="row.id"
-                :class="{ 'pricing-row-loss': row.hasLoss }"
-              >
-                <td data-label="资源包">
-                  <strong>{{ row.name }}</strong
-                  ><template v-if="!row.error"
-                    ><span
-                      >{{ money(row.price, 2) }} /
-                      {{ fmt(row.totalCredits, 6) }} 额度</span
-                    ><small v-if="Number(row.bonus)"
-                      >已计入赠送 {{ fmt(row.bonus, 6) }} 额度</small
-                    ><small
-                      >{{
-                        source === "draft" ? "草稿" : "已发布 v" + row.version
-                      }}
-                      ·
-                      {{
-                        row.validDays === null ? "永久" : row.validDays + " 天"
-                      }}</small
-                    ></template
-                  >
-                </td>
-                <td v-if="row.error" colspan="6">
-                  <p class="ai-error">{{ row.error }}</p>
-                </td>
-                <template v-else>
-                  <td
-                    :data-label="'用户实际单价／' + (isImage ? '张' : '百万')"
-                  >
-                    <div
-                      v-for="[key, label] in fields"
-                      :key="key"
-                      class="pricing-cell-channel"
-                    >
-                      <span
-                        >{{ label }}
-                        <strong>{{
-                          money(row.channels[key].revenue, 4)
-                        }}</strong></span
-                      ><small v-if="!plan.directCosts">{{
-                        row.channels[key].originalPercent === null
-                          ? "上游原价为 0，无法比较"
-                          : "相对上游原价 " +
-                            percent(row.channels[key].originalPercent)
-                      }}</small>
-                    </div>
-                  </td>
-                  <td :data-label="'用户价与' + costName">
-                    <div
-                      v-for="[key, label] in fields"
-                      :key="key"
-                      class="pricing-cell-channel"
-                    >
-                      <span
-                        :class="{
-                          'pricing-negative':
-                            row.channels[key].state === 'loss',
-                        }"
-                        >{{ label }} {{ multiplier(row.channels[key]) }}</span
-                      >
-                    </div>
-                    <small v-if="row.hasLoss" class="pricing-negative"
-                      >部分用量存在亏损</small
-                    >
-                  </td>
-                  <td data-label="整包原价与优惠">
-                    <PackPriceComparison
-                      :pack="row.fullPack"
-                      :price="row.price"
-                      :has-original="!plan.directCosts"
-                    />
-                    <small>按{{ scope }}折算</small>
-                  </td>
-                  <td data-label="本组用量的收费与毛利">
-                    <span
-                      >收费
-                      <strong>{{ money(row.sample.revenue, 6) }}</strong></span
-                    ><span
-                      :class="{
-                        'pricing-negative': row.sample.state === 'loss',
-                      }"
-                      >毛利 {{ money(row.sample.profit, 6) }}</span
-                    ><small>{{
-                      row.sample.hasRevenue
-                        ? "毛利率 " + percent(row.sample.marginPercent)
-                        : "无收入，毛利率不适用"
-                    }}</small>
-                  </td>
-                  <td data-label="整包用完的毛利">
-                    <template v-if="row.fullPack"
-                      ><strong
-                        :class="{
-                          'pricing-negative': row.fullPack.state === 'loss',
-                        }"
-                        >{{ money(row.fullPack.profit, 2) }}</strong
-                      ><span>模型成本 {{ money(row.fullPack.cost, 2) }}</span
-                      ><small>{{
-                        row.fullPack.hasRevenue
-                          ? "毛利率 " + percent(row.fullPack.marginPercent)
-                          : "无收入，毛利率不适用"
-                      }}</small
-                      ><small
-                        >约
-                        {{ fmt(row.fullPack.estimatedRuns, 2) }}
-                        组同等用量</small
-                      ></template
-                    ><span v-else>扣费为 0，无法推算整包次数和成本</span>
-                  </td>
-                  <td data-label="明细">
-                    <button
-                      class="text-btn"
-                      :aria-label="'查看' + row.name + '测算明细'"
-                      @click="
-                        detailId = row.id;
-                        dialog = 'detail';
-                      "
-                    >
-                      查看计算<Icon name="ArrowUpRight" :size="14" />
-                    </button>
-                  </td>
-                </template>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div v-else class="ai-empty">
-          当前没有{{
-            source === "published" ? "已上架的已发布" : "可测算的草稿"
-          }}资源包，可切换版本范围或先到“资源包与预算”配置。
+          <template #actions
+            ><button
+              v-if="!row.error"
+              class="text-btn"
+              :aria-label="'查看' + row.name + '测算明细'"
+              @click="
+                detailId = row.id;
+                dialog = 'detail';
+              "
+            >
+              查看计算<Icon name="ArrowUpRight" :size="14" /></button
+          ></template>
+        </PackUsageBreakdown>
+        <div v-if="!result.rows.length" class="ai-empty">
+          当前范围暂无资源包，可切换版本或先到“资源包与预算”配置。
         </div>
         <AppDisclosure title="计算口径与边界"
           ><div class="pricing-formulas">
             <p>每额度价格＝资源包人民币售价 ÷（基础额度＋赠送额度）。</p>
             <p>
-              整包原价＝总额度 ÷ 本组扣费额度 × 本组原价费用；实收＝资源包售价；
-              用户优惠率＝（整包原价－实收）÷ 整包原价 ×
-              100%。负优惠显示“高于原价”，原价为 0 不计算优惠率。
+              每项可用 Token＝总额度 ÷ 该项每千 Token 扣费额度 ×
+              1000，向下取整； 对应原价费用＝可用 Token ÷ 1000000 ×
+              该项原价；实收＝资源包售价。 用户优惠率＝（对应原价费用－实收）÷
+              对应原价费用 × 100%。负优惠显示“高于原价”，原价为 0 不计算优惠率。
             </p>
             <p>
               用户每张图片价格＝每张扣费额度 × 每额度价格；整包图片数＝总额度 ÷
@@ -572,15 +374,16 @@ onMounted(load);
               表示付原价的 15%，即 1.5 折。
             </p>
             <p>
-              本组毛利＝本组收费－模型成本；毛利率＝毛利 ÷
+              每项毛利＝资源包实收－对应可用数量的模型成本；毛利率＝毛利 ÷
               收费。零收入不计算毛利率，零成本不显示无穷倍数。
             </p>
             <p>
-              总输入已包含缓存命中 Token，普通输入只计算扣除缓存后的部分。输出
-              Token 应包含服务商计入输出用量的推理 Token，不再另外累加。
+              普通输入与缓存输入分别列出。实际调用时，缓存是总输入的子集，不重复收费；推理
+              Token 若已计入输出，也不再累加。
             </p>
             <p>
-              整包成本与毛利依赖选定的输入输出比例；纯输入、纯输出可能不同。按同等用量折算的次数为理论值，不保证最后剩余额度恰好支持一次完整调用。
+              成本与毛利按每项实际可用的整数
+              Token／整张图片分别计算；剩余额度不计入已用数量，毛利不包含其他运营费用。
             </p>
             <p>
               额度计算与正式账本一样，每次只向上取整到百万分之一额度；其他运算使用精确分数，显示时再四舍五入。未扣服务器、支付手续费、税费等费用。
@@ -588,7 +391,7 @@ onMounted(load);
             <p>
               原价表示同等用量在未优惠时本应支付的费用；实际采购成本＝原价 ×
               上游优惠倍率。
-              倍率只影响采购成本，不改变用户优惠率。整包原价依赖输入输出比例，不将不同通道分别使用全部额度后的费用相加。
+              倍率只影响采购成本，不改变用户优惠率。输入、缓存和输出各自按全部额度计算，不能同时获得或相加，不需要样例或用量比例。
             </p>
           </div></AppDisclosure
         >
@@ -756,36 +559,6 @@ onMounted(load);
             0.125、0.75。扣费额度不是人民币，也不是采购折扣。
           </p>
         </fieldset>
-        <fieldset>
-          <legend>一组典型用量</legend>
-          <div class="ai-admin-grid">
-            <label v-if="draft.kind === 'image'"
-              >图片数量<AppField
-                v-model="draft.imageCount"
-                inputmode="numeric"
-                maxlength="5" /></label
-            ><template v-else>
-              <label
-                >总输入 Token · 已含缓存<AppField
-                  v-model="draft.inputTokens"
-                  inputmode="numeric"
-                  maxlength="9"
-              /></label>
-              <label
-                >输出 Token<AppField
-                  v-model="draft.outputTokens"
-                  inputmode="numeric"
-                  maxlength="9"
-              /></label>
-              <label v-if="draft.useCache"
-                >其中缓存命中 Token<AppField
-                  v-model="draft.cachedTokens"
-                  inputmode="numeric"
-                  maxlength="9"
-              /></label>
-            </template>
-          </div>
-        </fieldset>
         <div class="row wrap">
           <button type="button" class="btn" @click="dialog = ''">取消</button
           ><button class="btn primary">更新测算结果</button>
@@ -820,17 +593,31 @@ onMounted(load);
           {{ fmt(detail.totalCredits, 6) }} 额度＝每额度
           {{ money(detail.unitPrice, 8) }}；已计入赠送额度。
         </p>
-        <PackPriceComparison
-          :pack="detail.fullPack"
-          :price="detail.price"
-          :has-original="!plan.directCosts"
-        />
         <div
           v-for="[key, label] in fields"
           :key="key"
           class="pricing-detail-channel"
         >
           <h3>{{ label }} · {{ isImage ? "每张图片" : "每百万 Token" }}</h3>
+          <p>
+            {{ label }}可用数量：{{
+              detail.channels[key].capacity === null
+                ? "零扣费，无法从余额推算上限"
+                : fmt(detail.channels[key].capacity, 0) +
+                  (isImage ? " 张" : " Token")
+            }}
+          </p>
+          <PackPriceComparison
+            v-if="detail.channels[key].wholePack"
+            :pack="detail.channels[key].wholePack"
+            :price="detail.price"
+            :has-original="!plan.directCosts"
+          />
+          <p v-if="detail.channels[key].wholePack">
+            {{ costName }}
+            {{ money(detail.channels[key].wholePack.cost, 6) }}；毛利
+            {{ money(detail.channels[key].wholePack.profit, 6) }}。
+          </p>
           <dl>
             <div v-if="!plan.directCosts">
               <dt>上游原价</dt>
@@ -984,26 +771,6 @@ onMounted(load);
 .pricing-controls :deep(.app-select) {
   min-width: 220px;
 }
-.pricing-sample-banner {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18px 36px;
-  align-items: center;
-  padding: 16px 20px;
-  border: 1px solid #d9e5dd;
-  border-radius: 10px;
-  background: #eaf2ec;
-}
-.pricing-sample-banner > div {
-  display: flex;
-  flex-direction: column;
-}
-.pricing-sample-banner p {
-  margin: 4px 0 0;
-}
-.pricing-sample-banner strong {
-  font-variant-numeric: tabular-nums;
-}
 .pricing-loss-note {
   background: #fff0e9;
   border: 1px solid #eac3b4;
@@ -1011,77 +778,6 @@ onMounted(load);
   color: #98462c;
   padding: 12px 16px;
   font-size: 12px;
-}
-.pricing-table-caption {
-  margin: 16px 0 10px;
-  line-height: 1.8;
-}
-.pricing-table-scroll {
-  overflow: auto;
-  border: 1px solid #d6e0d9;
-  border-radius: 10px;
-  margin-bottom: 20px;
-  background: #fff;
-}
-.pricing-table-scroll:focus-visible {
-  outline: 2px solid #176b58;
-  outline-offset: 3px;
-}
-.pricing-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 1130px;
-  font-size: 12px;
-}
-.pricing-table th {
-  text-align: left;
-  padding: 13px 14px;
-  background: #eaf0ec;
-  color: #536c5e;
-  font-size: 11px;
-  font-weight: 600;
-  border-right: 1px solid #d6e0d9;
-}
-.pricing-table td {
-  padding: 15px 14px;
-  border-top: 1px solid #dce5de;
-  border-right: 1px solid #e5eae7;
-  vertical-align: top;
-  line-height: 1.9;
-  font-variant-numeric: tabular-nums;
-}
-.pricing-table td:last-child,
-.pricing-table th:last-child {
-  border-right: 0;
-}
-.pricing-table td > span,
-.pricing-table td > small,
-.pricing-table td > strong {
-  display: block;
-}
-.pricing-table small {
-  font-size: 10px;
-  color: #728278;
-  display: block;
-}
-.pricing-table td:first-child > strong {
-  font-size: 13px;
-}
-.pricing-table tr:nth-child(even) {
-  background: #fafcfb;
-}
-.pricing-table .pricing-row-loss {
-  background: #fff7f2;
-}
-.pricing-cell-channel + .pricing-cell-channel {
-  margin-top: 7px;
-}
-.pricing-negative {
-  color: #aa432c !important;
-}
-.pricing-table .text-btn {
-  white-space: nowrap;
-  font-size: 11px;
 }
 .pricing-formulas {
   color: #65786d;
@@ -1176,77 +872,6 @@ onMounted(load);
   .pricing-controls {
     gap: 8px;
   }
-  .pricing-sample-banner {
-    padding: 14px;
-    gap: 14px 24px;
-  }
-  .pricing-table-scroll {
-    border: 0;
-    border-radius: 0;
-    overflow: visible;
-    background: transparent;
-  }
-  .pricing-table {
-    display: block;
-    min-width: 0;
-  }
-  .pricing-table thead {
-    position: absolute;
-    clip-path: inset(50%);
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-  }
-  .pricing-table tbody {
-    display: grid;
-    gap: 14px;
-  }
-  .pricing-table tr {
-    display: block;
-    border: 1px solid #d6e0d9;
-    border-radius: 10px;
-    background: #fff;
-    padding: 6px 14px;
-    overflow: hidden;
-  }
-  .pricing-table td {
-    display: block;
-    padding: 10px 0;
-    border-right: 0;
-    border-top: 1px solid #e5eae7;
-  }
-  .pricing-table td:first-child {
-    border: 0;
-    padding-top: 12px;
-  }
-  .pricing-table td[data-label]:not(:first-child)::before {
-    content: attr(data-label);
-    display: block;
-    font-size: 10px;
-    color: #7e8c86;
-    margin-bottom: 5px;
-  }
-  .pricing-table td:first-child > strong {
-    font-size: 16px;
-  }
-  .pricing-table td:first-child > span {
-    font-size: 12px;
-  }
-  .pricing-cell-channel {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 4px 12px;
-  }
-  .pricing-cell-channel + .pricing-cell-channel {
-    margin-top: 4px;
-  }
-  .pricing-table td:last-child {
-    padding: 8px 0;
-  }
-  .pricing-table td:last-child::before {
-    display: none !important;
-  }
   .pricing-detail-channel dl {
     grid-template-columns: 1fr;
   }
@@ -1264,9 +889,6 @@ onMounted(load);
 .pricing-model-import :deep(.app-select) {
   min-width: 0;
   flex: 1;
-}
-.pricing-quota-line {
-  margin-top: 6px;
 }
 @media (max-width: 700px) {
   .pricing-model-import {
