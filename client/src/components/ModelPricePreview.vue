@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from "vue";
 import AppSelect from "./AppSelect.vue";
+import PackPriceComparison from "./PackPriceComparison.vue";
 import {
   calculatePricingSimulation,
   formatPricingNumber as fmt,
@@ -9,6 +10,7 @@ const props = defineProps({
   plan: Object,
   products: Array,
   hasCost: Boolean,
+  hasOriginal: Boolean,
 });
 const version = ref("published"),
   basis = ref("sample");
@@ -92,6 +94,12 @@ const view = computed(() => {
     <template v-else>
       <div class="preview-sample">
         <span
+          >本组原价
+          <strong>{{
+            hasOriginal ? money(view.sample.original, 6) : "未配置"
+          }}</strong></span
+        >
+        <span
           >本组扣费 <strong>{{ fmt(view.sample.points, 6) }} 额度</strong></span
         ><span
           >模型成本
@@ -118,7 +126,7 @@ const view = computed(() => {
             <tr>
               <th>资源包</th>
               <th>用户实际单价</th>
-              <th>整包理论用量</th>
+              <th>整包原价与优惠</th>
               <th>整包成本与毛利</th>
             </tr>
           </thead>
@@ -146,14 +154,25 @@ const view = computed(() => {
                     >
                   </div>
                 </td>
-                <td data-label="整包理论用量">
-                  <div v-for="[key, label] in fields" :key="key">
-                    <span
-                      >{{ label }} {{ fmt(row.channels[key].capacity, 0) }}
-                      {{ image ? "张" : "Token" }}</span
-                    >
-                  </div>
-                  <small v-if="!image">各项分别使用全部额度，不相加</small>
+                <td data-label="整包原价与优惠">
+                  <PackPriceComparison
+                    :pack="row.fullPack"
+                    :price="row.price"
+                    :has-original="hasOriginal"
+                  />
+                  <small
+                    >{{
+                      image
+                        ? "按当前图片规格"
+                        : basis === "sample"
+                          ? "按样例输入输出比例"
+                          : basis === "input"
+                            ? "按纯普通输入"
+                            : basis === "cached"
+                              ? "按纯缓存输入"
+                              : "按纯输出"
+                    }}折算</small
+                  >
                 </td>
                 <td data-label="整包成本与毛利">
                   <template v-if="hasCost && row.fullPack"
@@ -184,9 +203,9 @@ const view = computed(() => {
             ? "用户每张价格＝每张扣费额度"
             : "用户每百万 Token 单价＝每千 Token 扣费额度 × 1000"
         }}
-        × 资源包售价 ÷
-        总额度。用量按扣费额度换算，图片向下取整；多次小额调用的取整可能减少可用
-        Token。
+        × 资源包售价 ÷ 总额度。整包原价＝总额度 ÷ 本组扣费 ×
+        本组原价；用户优惠＝（整包原价－实收）÷
+        整包原价。采购倍率不改变原价与用户优惠。
       </p>
     </template>
   </section>

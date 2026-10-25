@@ -211,6 +211,90 @@ test("当前费率下纯输入盈利但纯输出亏损时仍提示风险", () =>
   assert(r.hasLoss);
 });
 
+test("500 额度按原价价值 20 元，实收 9.9 元即优惠 50.5%，上游折扣不改变用户优惠", () => {
+  const row = calculatePricingSimulation(plan(), [lite]).rows[0];
+  assert.equal(row.fullPack.original, "20");
+  assert.equal(row.fullPack.revenue, "9.9");
+  assert.equal(row.fullPack.savings, "10.1");
+  assert.equal(row.fullPack.discountPercent, "50.5");
+  assert.equal(row.fullPack.cost, "3");
+  const changed = calculatePricingSimulation(plan({ costDiscount: "0.3" }), [
+    lite,
+  ]).rows[0];
+  assert.equal(changed.fullPack.original, "20");
+  assert.equal(changed.fullPack.discountPercent, "50.5");
+  assert.equal(changed.fullPack.cost, "6");
+  const gift = calculatePricingSimulation(plan(), [{ ...lite, bonus: "500" }])
+    .rows[0];
+  assert.equal(gift.fullPack.original, "40");
+  assert.equal(gift.fullPack.discountPercent, "75.25");
+});
+
+test("整包原价按选定输入输出比例折算，实收高于原价时保留负优惠，不伪装优惠", () => {
+  const input = calculatePricingSimulation(
+    plan({
+      inputRate: "1",
+      outputRate: "3",
+      inputTokens: "1000000",
+      outputTokens: "0",
+    }),
+    [lite],
+  ).rows[0];
+  const output = calculatePricingSimulation(
+    plan({
+      inputRate: "1",
+      outputRate: "3",
+      inputTokens: "0",
+      outputTokens: "1000000",
+    }),
+    [lite],
+  ).rows[0];
+  assert.equal(input.fullPack.original, "2.5");
+  assert.equal(input.fullPack.discountPercent, "-296");
+  assert.equal(output.fullPack.original, "5");
+  assert.equal(output.fullPack.discountPercent, "-98");
+  const zero = calculatePricingSimulation(
+    plan({ inputPrice: "0", outputPrice: "0" }),
+    [lite],
+  ).rows[0];
+  assert.equal(zero.fullPack.original, "0");
+  assert.equal(zero.fullPack.discountPercent, null);
+  const free = calculatePricingSimulation(plan(), [{ ...lite, price: "0" }])
+    .rows[0];
+  assert.equal(free.fullPack.discountPercent, "100");
+  const cache = calculatePricingSimulation(
+    plan({
+      useCache: true,
+      cachedPrice: "1",
+      cachedRate: "0.05",
+      cachedTokens: "4000",
+    }),
+    [lite],
+  ).rows[0];
+  assert.equal(cache.fullPack.original, "19.090909090909090909");
+});
+
+test("图片原价与上游倍率分开计算，整包用户优惠独立于采购倍率和样例张数", () => {
+  const x = plan({
+    kind: "image",
+    imagePrice: "0.5",
+    costDiscount: "0.2",
+    imageRate: "10",
+    imageCount: "2",
+  });
+  const row = calculatePricingSimulation(x, [lite]).rows[0];
+  assert.equal(row.fullPack.original, "25");
+  assert.equal(row.fullPack.discountPercent, "60.4");
+  assert.equal(row.fullPack.cost, "5");
+  const other = calculatePricingSimulation(
+    { ...x, imageCount: "10", costDiscount: "1" },
+    [lite],
+  ).rows[0];
+  assert.equal(other.fullPack.original, "25");
+  assert.equal(other.fullPack.discountPercent, "60.4");
+  assert.equal(other.fullPack.cost, "25");
+});
+
 test("测算接口仅管理员可用，遵守 CSRF，读取不写入配置", async (t) => {
   const f = await fixture(t),
     url = "/admin/ai/pricing-simulation";
@@ -234,7 +318,8 @@ test("测算接口仅管理员可用，遵守 CSRF，读取不写入配置", asy
   assert.equal(current.status, 200);
   assert.equal(current.data.revision, null);
   assert.equal(current.data.plan.inputPrice, "5");
-  assert.equal(current.data.plan.costDiscount, "0.15");
+  assert.equal(current.data.plan.costDiscount, "1");
+  assert.equal(current.data.examplePlan.costDiscount, "0.15");
   assert.equal(current.data.plan.inputRate, "1");
   assert.equal(current.data.examplePlan.inputRate, "0.125");
   assert.equal(

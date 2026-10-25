@@ -6,6 +6,10 @@ import AppField from "./AppField.vue";
 import AppChoice from "./AppChoice.vue";
 import ModelPricePreview from "./ModelPricePreview.vue";
 import {
+  derivedProcurement,
+  discountedPrice,
+} from "../../../shared/model-cost.mjs";
+import {
   PRICING_SIMULATION_DEFAULTS as defaults,
   normalizePricingSimulation,
 } from "../../../shared/pricing-simulation.mjs";
@@ -25,10 +29,18 @@ const formId = useId(),
   pane = ref("edit");
 const draft = ref({}),
   costEnabled = ref(false),
-  cost = ref({}),
+  original = ref({}),
+  costDiscount = ref("1"),
   usage = ref({});
 let generation = 0;
 const image = computed(() => draft.value.kind === "image");
+const legacyCost = computed(
+  () =>
+    props.model?.costDiscount == null &&
+    (image.value
+      ? props.model?.imageProcurement != null
+      : !!props.model?.procurement),
+);
 const channels = [
   ["input", "普通输入"],
   ["cached", "缓存输入"],
@@ -38,12 +50,17 @@ const plan = computed(() => ({
   ...defaults,
   kind: draft.value.kind || "text",
   modelName: draft.value.model || "当前模型",
-  directCosts: true,
+  directCosts: !costEnabled.value,
   useCache: !image.value,
-  inputCost: costEnabled.value ? cost.value.input : "0",
-  cachedCost: costEnabled.value ? cost.value.cached : "0",
-  outputCost: costEnabled.value ? cost.value.output : "0",
-  imageCost: costEnabled.value ? cost.value.perImage : "0",
+  inputPrice: costEnabled.value ? original.value.input : "0",
+  cachedPrice: costEnabled.value ? original.value.cached : "0",
+  outputPrice: costEnabled.value ? original.value.output : "0",
+  imagePrice: costEnabled.value ? original.value.perImage : "0",
+  costDiscount: costEnabled.value ? costDiscount.value : "1",
+  inputCost: legacyCost.value ? (props.model.procurement?.input ?? "0") : "0",
+  cachedCost: legacyCost.value ? (props.model.procurement?.cached ?? "0") : "0",
+  outputCost: legacyCost.value ? (props.model.procurement?.output ?? "0") : "0",
+  imageCost: legacyCost.value ? (props.model.imageProcurement ?? "0") : "0",
   imageRate: draft.value.imageCredits || "",
   inputRate: draft.value.policy?.inputRate ?? "",
   cachedRate: draft.value.policy?.cachedRate ?? "",
@@ -65,6 +82,23 @@ const validation = computed(() => {
     return { error: e.message };
   }
 });
+const netCosts = computed(() => {
+  if (!costEnabled.value || validation.value.error) return [];
+  const p = validation.value.normalized;
+  return (image.value ? [["image", "每张图片"]] : channels).map(
+    ([key, label]) => ({
+      label,
+      value: discountedPrice(p[key + "Price"], p.costDiscount),
+    }),
+  );
+});
+const legacyCostText = computed(() =>
+  image.value
+    ? `¥${props.model?.imageProcurement}／张`
+    : channels
+        .map(([key, label]) => `${label} ${props.model?.procurement?.[key]}`)
+        .join(" / ") + " 元／百万 Token",
+);
 async function loadProducts() {
   const current = ++generation;
   loading.value = true;
@@ -90,21 +124,15 @@ watch(
       ...model,
       policy: { ...props.legacyPolicy, ...(model.policy || {}) },
     };
-    costEnabled.value =
-      model.kind === "image"
-        ? model.imageProcurement !== null &&
-          model.imageProcurement !== undefined
-        : !!model.procurement;
-    cost.value = {
+    costEnabled.value = model.costDiscount != null && !!model.pricing;
+    costDiscount.value = costEnabled.value ? model.costDiscount : "1";
+    original.value = {
       input: "",
       cached: "",
       output: "",
       perImage: "",
-      ...model.procurement,
-      ...(model.imageProcurement !== null &&
-      model.imageProcurement !== undefined
-        ? { perImage: model.imageProcurement }
-        : {}),
+      specification: model.pricing?.specification || "",
+      ...(costEnabled.value ? model.pricing : {}),
     };
     usage.value = {
       inputTokens: "8000",
@@ -125,12 +153,27 @@ function save() {
     return;
   const p = validation.value.normalized,
     model = JSON.parse(JSON.stringify(draft.value));
-  model.procurement =
-    costEnabled.value && !image.value
-      ? { input: p.inputCost, cached: p.cachedCost, output: p.outputCost }
-      : null;
-  model.imageProcurement =
-    costEnabled.value && image.value ? p.imageCost : null;
+  if (costEnabled.value) {
+    model.costDiscount = p.costDiscount;
+    model.pricing = image.value
+      ? {
+          unit: "image",
+          perImage: p.imagePrice,
+          specification: original.value.specification.trim(),
+        }
+      : {
+          unit: "token",
+          input: p.inputPrice,
+          cached: p.cachedPrice,
+          output: p.outputPrice,
+        };
+    Object.assign(model, derivedProcurement(model));
+  } else if (!legacyCost.value) {
+    model.pricing = null;
+    model.costDiscount = null;
+    model.procurement = null;
+    model.imageProcurement = null;
+  }
   if (image.value) model.imageCredits = p.imageRate;
   else
     for (const key of ["inputRate", "cachedRate", "outputRate"])
@@ -142,7 +185,7 @@ function save() {
   <AppDialog
     :open="open"
     :title="(model?.model || '模型') + ' · 配置价格'"
-    description="配置实际采购成本和扣费额度，用户人民币单价由资源包售价与总额度自动换算。保存后只影响当前模型的新任务。"
+    description="填写原价和上游优惠倍率，自动计算采购成本；结合扣费额度与资源包价格，比较用户实际收费和优惠。"
     :busy="busy"
     :width="1320"
     @close="emit('close')"
@@ -190,25 +233,54 @@ function save() {
       >
         <fieldset :disabled="busy">
           <legend>
-            实际采购成本 · {{ image ? "元／张" : "元／百万 Token" }}
+            原价与采购成本 · {{ image ? "元／张" : "元／百万 Token" }}
           </legend>
-          <AppChoice v-model="costEnabled">配置折扣后实际成本</AppChoice>
+          <AppChoice v-model="costEnabled">配置原价与上游优惠倍率</AppChoice>
           <div v-if="costEnabled" class="price-input-grid">
             <template v-if="!image"
               ><label v-for="[key, label] in channels" :key="key"
-                >{{ label }}实际成本<AppField
-                  v-model="cost[key]"
+                >{{ label }}原价<AppField
+                  v-model="original[key]"
                   inputmode="decimal"
                   maxlength="20" /></label></template
-            ><label v-else
-              >每张图片实际成本（元）<AppField
-                v-model="cost.perImage"
+            ><template v-else
+              ><label
+                >每张图片原价（元）<AppField
+                  v-model="original.perImage"
+                  inputmode="decimal"
+                  maxlength="20" /></label
+              ><label
+                >适用图片规格<AppField
+                  v-model="original.specification"
+                  maxlength="120"
+                  placeholder="例如 1024 × 1024，标准质量" /></label
+            ></template>
+            <label
+              >上游优惠倍率<AppField
+                v-model="costDiscount"
                 inputmode="decimal"
-                maxlength="20"
+                maxlength="10"
             /></label>
           </div>
+          <p v-if="costEnabled" class="tiny muted">
+            倍率默认 1；0.15 表示采购成本＝原价 × 0.15，即支付原价的
+            15%。此倍率仅影响采购成本。
+          </p>
+          <div v-if="netCosts.length" class="price-net-costs" role="status">
+            <strong>实际采购成本</strong
+            ><span v-for="item in netCosts" :key="item.label"
+              >{{ item.label }}：¥{{ item.value }}／{{
+                image ? "张" : "百万 Token"
+              }}</span
+            >
+          </div>
+          <p v-if="legacyCost && !costEnabled" class="info-banner">
+            现有折后成本：{{
+              legacyCostText
+            }}。旧数据无法可靠推断原价与倍率，补填后可比较优惠；未补填时保留现有成本。
+          </p>
           <p class="tiny muted">
-            填写实际采购金额，不再重复乘折扣。未配置成本时，预览不计算毛利。
+            原价用于计算同等用量本应支付的费用；用户实收价由资源包和扣费额度换算。未配置原价时不比较优惠；未记录成本时不计算毛利。
           </p>
         </fieldset>
         <fieldset :disabled="busy">
@@ -269,7 +341,8 @@ function save() {
           v-else
           :plan="plan"
           :products="products"
-          :has-cost="costEnabled"
+          :has-cost="costEnabled || legacyCost"
+          :has-original="costEnabled"
         />
       </div>
     </div>
@@ -330,6 +403,17 @@ function save() {
 }
 .price-mobile-tabs {
   display: none;
+}
+.price-net-costs {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  margin-top: 12px;
+  border-radius: 8px;
+  background: #eaf2ec;
+  color: #176b58;
+  font-size: 12px;
+  overflow-wrap: anywhere;
 }
 .model-price-form .tiny {
   line-height: 1.8;

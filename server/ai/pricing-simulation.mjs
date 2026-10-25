@@ -13,7 +13,7 @@ const receipt = {
   modelName: "截图模型示例",
   inputPrice: "5",
   outputPrice: "30",
-  costDiscount: "0.15",
+  costDiscount: "1",
 };
 const inputSchema = z
   .object({
@@ -63,6 +63,8 @@ export class PricingSimulation {
             model: m.model,
             providerName: p.name,
             kind: m.kind || "text",
+            pricing: m.costDiscount != null ? m.pricing : null,
+            costDiscount: m.costDiscount ?? null,
             procurement: m.procurement || null,
             imageProcurement: m.imageProcurement ?? null,
             imageCredits: m.imageCredits || "1",
@@ -73,6 +75,7 @@ export class PricingSimulation {
           ...PRICING_SIMULATION_DEFAULTS,
           ...receipt,
           modelName: "截图模型 · 建议费率试算",
+          costDiscount: "0.15",
           inputRate: "0.125",
           outputRate: "0.75",
         }),

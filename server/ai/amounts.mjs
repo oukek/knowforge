@@ -1,4 +1,5 @@
 import { AiError, inputBudget } from "./policy.mjs";
+import { costUnits } from "../../shared/model-cost.mjs";
 export const SCALE = 1000000n;
 export const MAX = 1000000000n * SCALE;
 export function micro(value, { signed = false, max = MAX } = {}) {
@@ -54,10 +55,10 @@ export function procurementCost(usage, rate) {
   if (!usage || !rate) return null;
   return points(
     ceilDiv(
-      BigInt(usage.input - usage.cached) * micro(rate.input) +
-        BigInt(usage.cached) * micro(rate.cached) +
-        BigInt(usage.output) * micro(rate.output),
-      1000000n,
+      BigInt(usage.input - usage.cached) * costUnits(rate.input) +
+        BigInt(usage.cached) * costUnits(rate.cached) +
+        BigInt(usage.output) * costUnits(rate.output),
+      1000000000000n,
     ),
   );
 }

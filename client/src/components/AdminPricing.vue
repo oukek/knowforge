@@ -7,6 +7,7 @@ import AppSelect from "./AppSelect.vue";
 import AppChoice from "./AppChoice.vue";
 import AppDisclosure from "./AppDisclosure.vue";
 import Icon from "./Icon.vue";
+import PackPriceComparison from "./PackPriceComparison.vue";
 import {
   PRICING_SIMULATION_DEFAULTS,
   normalizePricingSimulation,
@@ -195,22 +196,23 @@ function importModel() {
   if (!m) return;
   const image = m.kind === "image";
   const hasCost = image ? m.imageProcurement != null : !!m.procurement;
+  const hasOriginal = m.costDiscount != null && !!m.pricing;
   Object.assign(draft.value, {
     kind: m.kind,
     modelName: m.providerName + " · " + m.model,
-    costDiscount: "1",
-    directCosts: true,
+    costDiscount: hasOriginal ? m.costDiscount : "1",
+    directCosts: !hasOriginal,
     useCache: !image,
   });
   if (image)
     Object.assign(draft.value, {
-      imagePrice: "0",
+      imagePrice: hasOriginal ? m.pricing.perImage : "0",
       imageCost: m.imageProcurement ?? "",
       imageRate: m.imageCredits,
     });
   else
     for (const k of ["input", "cached", "output"]) {
-      draft.value[k + "Price"] = "0";
+      draft.value[k + "Price"] = hasOriginal ? m.pricing[k] : "0";
       draft.value[k + "Cost"] = m.procurement?.[k] ?? "";
     }
   if (!image && m.rates) Object.assign(draft.value, m.rates);
@@ -277,7 +279,7 @@ onMounted(load);
             ? (dirty ? "上次保存于 " : "保存于 ") + dateLabel(updatedAt)
             : dirty
               ? "本页方案尚未保存。"
-              : "初始成本采用截图示例，可选择模型载入其实际采购成本及费率。"
+              : "可选择模型载入其原价、上游优惠倍率与扣费额度；初始倍率为 1。"
         }}</span>
       </div>
       <div class="pricing-cost-strip">
@@ -410,7 +412,7 @@ onMounted(load);
                 <th scope="col">资源包</th>
                 <th scope="col">用户实际单价／{{ isImage ? "张" : "百万" }}</th>
                 <th scope="col">用户价与{{ costName }}</th>
-                <th scope="col">整包理论用量</th>
+                <th scope="col">整包原价与优惠</th>
                 <th scope="col">本组用量的收费与毛利</th>
                 <th scope="col">整包用完的毛利</th>
                 <th scope="col">明细</th>
@@ -484,22 +486,13 @@ onMounted(load);
                       >部分用量存在亏损</small
                     >
                   </td>
-                  <td data-label="整包理论用量">
-                    <div
-                      v-for="[key, label] in fields"
-                      :key="key"
-                      class="pricing-quota-line"
-                    >
-                      <small
-                        >{{ label }}单独换算：{{
-                          row.channels[key].capacity === null
-                            ? "零扣费，余额不限制此项"
-                            : fmt(row.channels[key].capacity, 0) +
-                              (isImage ? " 张" : " Token")
-                        }}</small
-                      >
-                    </div>
-                    <small v-if="!isImage">各项分别使用全部额度，不相加</small>
+                  <td data-label="整包原价与优惠">
+                    <PackPriceComparison
+                      :pack="row.fullPack"
+                      :price="row.price"
+                      :has-original="!plan.directCosts"
+                    />
+                    <small>按{{ scope }}折算</small>
                   </td>
                   <td data-label="本组用量的收费与毛利">
                     <span
@@ -562,10 +555,9 @@ onMounted(load);
           ><div class="pricing-formulas">
             <p>每额度价格＝资源包人民币售价 ÷（基础额度＋赠送额度）。</p>
             <p>
-              整包单项理论 Token 数＝总额度 ÷ 该项每千 Token 扣费额度 ×
-              1000，向下取整。
-              普通输入、缓存、输出分别假设全部额度只用于该项，不能相加。多次小额调用的取整可能减少可用
-              Token。
+              整包原价＝总额度 ÷ 本组扣费额度 × 本组原价费用；实收＝资源包售价；
+              用户优惠率＝（整包原价－实收）÷ 整包原价 ×
+              100%。负优惠显示“高于原价”，原价为 0 不计算优惠率。
             </p>
             <p>
               用户每张图片价格＝每张扣费额度 × 每额度价格；整包图片数＝总额度 ÷
@@ -594,7 +586,9 @@ onMounted(load);
               额度计算与正式账本一样，每次只向上取整到百万分之一额度；其他运算使用精确分数，显示时再四舍五入。未扣服务器、支付手续费、税费等费用。
             </p>
             <p>
-              上游原价仅用于采购折扣测算，不是另一套客户售价。用户人民币单价由资源包与模型扣费额度唯一确定。
+              原价表示同等用量在未优惠时本应支付的费用；实际采购成本＝原价 ×
+              上游优惠倍率。
+              倍率只影响采购成本，不改变用户优惠率。整包原价依赖输入输出比例，不将不同通道分别使用全部额度后的费用相加。
             </p>
           </div></AppDisclosure
         >
@@ -624,7 +618,7 @@ onMounted(load);
         <div class="pricing-model-import">
           <AppSelect
             v-model="selectedModel"
-            label="载入已配置模型成本与费率"
+            label="载入已配置模型原价与费率"
             :options="[
               { value: '', label: '选择模型，或手动填写' },
               ...modelOptions.map((m) => ({
@@ -642,7 +636,7 @@ onMounted(load);
             :disabled="!selectedModel"
             @click="importModel"
           >
-            载入模型成本与费率
+            载入模型原价与费率
           </button>
         </div>
         <label class="pricing-full-label"
@@ -658,7 +652,7 @@ onMounted(load);
           >方案名称<AppField v-model="draft.modelName" maxlength="80"
         /></label>
         <fieldset>
-          <legend>采购成本</legend>
+          <legend>原价与采购成本</legend>
           <AppChoice v-model="draft.directCosts"
             >直接填写折扣后实际采购成本</AppChoice
           >
@@ -682,7 +676,7 @@ onMounted(load);
                 maxlength="20"
             /></label>
             <label v-if="!draft.directCosts"
-              >采购倍率 · 0.15 表示支付原价的 15%<AppField
+              >上游优惠倍率 · 默认 1，0.15 表示支付原价的 15%<AppField
                 v-model="draft.costDiscount"
                 inputmode="decimal"
                 maxlength="10"
@@ -826,6 +820,11 @@ onMounted(load);
           {{ fmt(detail.totalCredits, 6) }} 额度＝每额度
           {{ money(detail.unitPrice, 8) }}；已计入赠送额度。
         </p>
+        <PackPriceComparison
+          :pack="detail.fullPack"
+          :price="detail.price"
+          :has-original="!plan.directCosts"
+        />
         <div
           v-for="[key, label] in fields"
           :key="key"

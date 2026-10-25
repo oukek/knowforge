@@ -55,16 +55,19 @@ function decimal(v, digits = 18) {
     (tail ? "." + tail : "")
   );
 }
-function parseDecimal(value, label, max = 1000000n) {
+function parseDecimal(value, label, max = 1000000n, precision = 6) {
   if (typeof value !== "string" && typeof value !== "number")
     throw new Error(`${label}须为数字`);
   const text = String(value ?? "").trim();
-  if (!/^\d{1,12}(?:\.\d{1,6})?$/.test(text))
-    throw new Error(`${label}须为非负数，最多六位小数`);
+  if (!new RegExp(`^\\d{1,12}(?:\\.\\d{1,${precision}})?$`).test(text))
+    throw new Error(
+      `${label}须为非负数，最多${precision === 6 ? "六" : "十二"}位小数`,
+    );
   const [whole, dec = ""] = text.split(".");
-  const scaled = BigInt(whole) * SCALE + BigInt(dec.padEnd(6, "0"));
-  if (scaled > max * SCALE) throw new Error(`${label}不能超过 ${max}`);
-  return fraction(scaled, SCALE);
+  const scale = 10n ** BigInt(precision);
+  const scaled = BigInt(whole) * scale + BigInt(dec.padEnd(precision, "0"));
+  if (scaled > max * scale) throw new Error(`${label}不能超过 ${max}`);
+  return fraction(scaled, scale);
 }
 function parseTokens(value, label) {
   if (typeof value !== "string" && typeof value !== "number")
@@ -140,7 +143,7 @@ export function normalizePricingSimulation(input) {
     reset(["inputPrice", "cachedPrice", "outputPrice", "imagePrice"]);
     if (x.useCache) x.cachedPrice = "0";
   } else reset(["inputCost", "cachedCost", "outputCost", "imageCost"]);
-  for (const [key, label, max] of [
+  for (const [key, label, max, precision = 6] of [
     ["inputPrice", "输入原价"],
     ["outputPrice", "输出原价"],
     ["costDiscount", "采购倍率", 1n],
@@ -148,14 +151,14 @@ export function normalizePricingSimulation(input) {
     ["cachedRate", "缓存扣费额度"],
     ["outputRate", "输出扣费额度"],
     ["extraCostPercent", "额外模型成本比例", 1000n],
-    ["inputCost", "普通输入实际成本"],
-    ["cachedCost", "缓存输入实际成本"],
-    ["outputCost", "输出实际成本"],
-    ["imageCost", "图片实际成本"],
+    ["inputCost", "普通输入实际成本", 1000000000n, 12],
+    ["cachedCost", "缓存输入实际成本", 1000000000n, 12],
+    ["outputCost", "输出实际成本", 1000000000n, 12],
+    ["imageCost", "图片实际成本", 1000000000n, 12],
     ["imagePrice", "图片上游原价"],
     ["imageRate", "每张图片扣费额度"],
   ])
-    x[key] = decimal(parseDecimal(x[key], label, max), 6);
+    x[key] = decimal(parseDecimal(x[key], label, max, precision), precision);
   if (x.kind === "image") x.useCache = false;
   x.cachedPrice = x.useCache
     ? decimal(parseDecimal(x.cachedPrice, "缓存原价"), 6)
@@ -182,6 +185,11 @@ function metrics(revenue, cost, original) {
   const profit = sub(revenue, cost);
   const margin = div(profit, revenue);
   return {
+    original: decimal(original),
+    savings: decimal(sub(original, revenue)),
+    discountPercent: original.n
+      ? decimal(mul(div(sub(original, revenue), original), hundred))
+      : null,
     revenue: decimal(revenue),
     cost: decimal(cost),
     profit: decimal(profit),
@@ -209,7 +217,7 @@ export function calculatePricingSimulation(input, products) {
   ).map((key) => {
     const original = parseDecimal(x[key + "Price"], "原价");
     const cost = x.directCosts
-      ? parseDecimal(x[key + "Cost"], "实际采购成本")
+      ? parseDecimal(x[key + "Cost"], "实际采购成本", 1000000000n, 12)
       : mul(original, discount);
     return {
       key,

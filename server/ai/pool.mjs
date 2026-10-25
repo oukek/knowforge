@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AiError, encrypt, decrypt, now } from "./policy.mjs";
 import { micro, points } from "./amounts.mjs";
 import { effectivePolicy } from "./model-policy.mjs";
+import { derivedProcurement, normalizeCost } from "../../shared/model-cost.mjs";
 
 const integer = (min, max, fallback) =>
   z.number().int().min(min).max(max).default(fallback);
@@ -12,6 +13,21 @@ const price = z
 const tokenPrices = z
   .object({ input: price, cached: price, output: price })
   .strict();
+const actualCost = z.union([z.string(), z.number()]).transform((value, ctx) => {
+  try {
+    return normalizeCost(value);
+  } catch (error) {
+    ctx.addIssue({ code: "custom", message: error.message });
+    return z.NEVER;
+  }
+});
+const costPrices = z
+  .object({ input: actualCost, cached: actualCost, output: actualCost })
+  .strict();
+const supplierDiscount = price.refine(
+  (value) => micro(value) <= 1000000n,
+  "上游优惠倍率须在 0～1 之间",
+);
 const modelPricing = z.discriminatedUnion("unit", [
   tokenPrices.extend({ unit: z.literal("token") }),
   z
@@ -55,8 +71,11 @@ const modelSchema = z
     model: z.string().trim().min(1).max(160),
     kind: z.enum(["text", "image"]).default("text"),
     pricing: modelPricing.nullable().default(null),
+    // null denotes a legacy record with manually entered net costs. Never infer
+    // an original price or supplier discount from those historical values.
+    costDiscount: supplierDiscount.nullable().default(null),
     policy: modelPolicySchema.nullable().default(null),
-    imageProcurement: price.nullable().default(null),
+    imageProcurement: actualCost.nullable().default(null),
     imageCredits: price.default("1"),
     enabled: z.boolean().default(true),
     features: z
@@ -70,24 +89,27 @@ const modelSchema = z
     tokenParameter: z
       .enum(["max_completion_tokens", "max_tokens"])
       .default("max_completion_tokens"),
-    procurement: tokenPrices.nullable().default(null),
+    procurement: costPrices.nullable().default(null),
   })
   .strict()
   .superRefine((m, ctx) => {
     const issue = (message) => ctx.addIssue({ code: "custom", message });
+    if (m.costDiscount !== null && !m.pricing)
+      issue("配置上游倍率时必须填写原价");
     if (m.kind === "text") {
       if (!m.features.length) issue("文本模型至少选择一种用途");
       if (m.pricing && m.pricing.unit !== "token")
-        issue("文本模型须按 Token 配置标价");
+        issue("文本模型须按 Token 配置原价");
       if (m.imageProcurement !== null) issue("文本模型不能配置图片采购价");
     } else {
       if (m.features.length) issue("图片模型不能用于文本评阅、出题或面试");
       if (m.pricing && m.pricing.unit !== "image")
-        issue("图片模型须按张配置标价");
+        issue("图片模型须按张配置原价");
       if (m.procurement !== null) issue("图片模型不能配置 Token 采购价");
       if (micro(m.imageCredits) <= 0n) issue("每张图片额度必须大于 0");
     }
-  });
+  })
+  .transform((m) => ({ ...m, ...derivedProcurement(m) }));
 export const poolSchema = z
   .object({
     revision: z.string().uuid().optional(),

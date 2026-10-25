@@ -205,7 +205,7 @@ try {
   assert.equal(pricingResponse.status, 200);
   const pricing = await pricingResponse.json();
   assert.equal(pricing.revision, null);
-  assert.equal(pricing.plan.costDiscount, "0.15");
+  assert.equal(pricing.plan.costDiscount, "1");
   const pricingSave = await fetch(base + "/api/admin/ai/pricing-simulation", {
     method: "PUT",
     headers: {

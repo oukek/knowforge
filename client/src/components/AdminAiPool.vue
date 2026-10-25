@@ -85,6 +85,11 @@ function priceText(m) {
     ? `输入 ${value.input} / 缓存 ${value.cached} / 输出 ${value.output} 元／百万 Token`
     : "未配置";
 }
+function originalText(m) {
+  return m.kind === "image"
+    ? `¥${m.pricing.perImage}／张`
+    : `输入 ${m.pricing.input} / 缓存 ${m.pricing.cached} / 输出 ${m.pricing.output} 元／百万 Token`;
+}
 function accept(data) {
   pool.revision = data.revision;
   pool.policy = { ...data.policy };
@@ -198,6 +203,7 @@ function changeKind(kind) {
   draft.value.features =
     kind === "image" ? [] : ["grade", "variants", "interview"];
   draft.value.pricing = null;
+  draft.value.costDiscount = null;
   draft.value.procurement = null;
   draft.value.imageProcurement = null;
   draft.value.imageCredits = "1";
@@ -421,7 +427,7 @@ onMounted(() => void act(load));
           <div>
             <h2>模型与定价</h2>
             <p class="tiny muted">
-              每个模型分别配置实际采购成本与扣费额度，用户价格按资源包自动换算，图片按张计价。
+              填写原价与上游优惠倍率，自动计算采购成本；用户价格按资源包和扣费额度换算，图片按张计价。
             </p>
           </div>
           <div class="row wrap">
@@ -521,6 +527,10 @@ onMounted(() => void act(load));
           </div>
         </div>
         <div class="ai-model-price-summary">
+          <template v-if="m.costDiscount != null && m.pricing"
+            ><span><strong>原价</strong> {{ originalText(m) }}</span
+            ><span>上游优惠倍率 {{ m.costDiscount }}</span></template
+          >
           <span><strong>实际采购成本</strong> {{ priceText(m) }}</span
           ><span v-if="m.kind !== 'image'"
             >扣费额度／千 Token：输入
