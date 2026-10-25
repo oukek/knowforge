@@ -192,42 +192,31 @@ function example() {
 }
 function importModel() {
   const m = modelOptions.value.find((x) => x.id === selectedModel.value);
-  if (!m?.pricing) {
-    formError.value = "请先到模型管理配置该模型的人民币标价。";
-    return;
-  }
+  if (!m) return;
   const image = m.kind === "image";
+  const hasCost = image ? m.imageProcurement != null : !!m.procurement;
   Object.assign(draft.value, {
     kind: m.kind,
     modelName: m.providerName + " · " + m.model,
     costDiscount: "1",
-    directCosts: image ? m.imageProcurement !== null : !!m.procurement,
+    directCosts: true,
     useCache: !image,
   });
   if (image)
     Object.assign(draft.value, {
-      imagePrice: m.pricing.perImage,
-      imageCost: m.imageProcurement ?? "0",
+      imagePrice: "0",
+      imageCost: m.imageProcurement ?? "",
       imageRate: m.imageCredits,
     });
   else
     for (const k of ["input", "cached", "output"]) {
-      draft.value[k + "Price"] = m.pricing[k];
-      draft.value[k + "Cost"] = m.procurement?.[k] ?? "0";
+      draft.value[k + "Price"] = "0";
+      draft.value[k + "Cost"] = m.procurement?.[k] ?? "";
     }
   if (!image && m.rates) Object.assign(draft.value, m.rates);
-  formError.value = draft.value.directCosts
+  formError.value = hasCost
     ? ""
-    : "该模型未记录实际采购成本，现按原价采购试算；请填写采购折扣或实际成本。";
-}
-function quotaDifference(row) {
-  if (!row.atModelPrice) return "";
-  const d = row.atModelPrice.difference;
-  return Number(d) === 0
-    ? "与当前总额度一致"
-    : "较当前总额度" +
-        (d.startsWith("-") ? "少 " : "多 ") +
-        fmt(d.replace(/^-/, ""), 6);
+    : "已载入模型扣费额度。该模型未配置实际采购成本，请填写后再测算毛利。";
 }
 function importRates() {
   const selected = modelOptions.value.find((m) => m.id === selectedModel.value);
@@ -288,7 +277,7 @@ onMounted(load);
             ? (dirty ? "上次保存于 " : "保存于 ") + dateLabel(updatedAt)
             : dirty
               ? "本页方案尚未保存。"
-              : "初始价格采用截图示例，可选择模型载入其标价、成本及费率。"
+              : "初始成本采用截图示例，可选择模型载入其实际采购成本及费率。"
         }}</span>
       </div>
       <div class="pricing-cost-strip">
@@ -397,7 +386,7 @@ onMounted(load);
           {{ lossCount }}
           档资源包在至少一种用量下低于{{ costName }}。{{
             isImage
-              ? "请检查每张图片的标价、扣费额度和成本。"
+              ? "请检查每张图片的扣费额度和成本。"
               : "请查看纯输入、纯输出或缓存视角。"
           }}负毛利保留显示。
         </p>
@@ -421,7 +410,7 @@ onMounted(load);
                 <th scope="col">资源包</th>
                 <th scope="col">用户实际单价／{{ isImage ? "张" : "百万" }}</th>
                 <th scope="col">用户价与{{ costName }}</th>
-                <th scope="col">按模型标价应得额度</th>
+                <th scope="col">整包理论用量</th>
                 <th scope="col">本组用量的收费与毛利</th>
                 <th scope="col">整包用完的毛利</th>
                 <th scope="col">明细</th>
@@ -469,10 +458,10 @@ onMounted(load);
                         <strong>{{
                           money(row.channels[key].revenue, 4)
                         }}</strong></span
-                      ><small>{{
+                      ><small v-if="!plan.directCosts">{{
                         row.channels[key].originalPercent === null
-                          ? "原价为 0，无法比较"
-                          : "相对原价 " +
+                          ? "上游原价为 0，无法比较"
+                          : "相对上游原价 " +
                             percent(row.channels[key].originalPercent)
                       }}</small>
                     </div>
@@ -495,14 +484,7 @@ onMounted(load);
                       >部分用量存在亏损</small
                     >
                   </td>
-                  <td data-label="按模型标价应得额度">
-                    <template v-if="row.atModelPrice"
-                      ><strong
-                        >{{ fmt(row.atModelPrice.credits, 6) }} 额度</strong
-                      ><small
-                        >充值 {{ money(row.price, 2) }} · 按{{ scope }}</small
-                      ><small>{{ quotaDifference(row) }}</small></template
-                    ><small v-else>本组标价或扣费为 0，无法换算</small>
+                  <td data-label="整包理论用量">
                     <div
                       v-for="[key, label] in fields"
                       :key="key"
@@ -510,13 +492,14 @@ onMounted(load);
                     >
                       <small
                         >{{ label }}单独换算：{{
-                          row.channels[key].creditsAtListPrice === null
-                            ? "标价为 0，无法换算"
-                            : fmt(row.channels[key].creditsAtListPrice, 6) +
-                              " 额度"
+                          row.channels[key].capacity === null
+                            ? "零扣费，余额不限制此项"
+                            : fmt(row.channels[key].capacity, 0) +
+                              (isImage ? " 张" : " Token")
                         }}</small
                       >
                     </div>
+                    <small v-if="!isImage">各项分别使用全部额度，不相加</small>
                   </td>
                   <td data-label="本组用量的收费与毛利">
                     <span
@@ -579,12 +562,14 @@ onMounted(load);
           ><div class="pricing-formulas">
             <p>每额度价格＝资源包人民币售价 ÷（基础额度＋赠送额度）。</p>
             <p>
-              按模型标价应得额度＝充值金额 ÷ 本组按模型标价计算的费用 ×
-              本组扣费额度；按当前用量比例换算，与折后采购成本无关。输入、输出比例不一致时结果会不同，不会直接发放或修改额度。
+              整包单项理论 Token 数＝总额度 ÷ 该项每千 Token 扣费额度 ×
+              1000，向下取整。
+              普通输入、缓存、输出分别假设全部额度只用于该项，不能相加。多次小额调用的取整可能减少可用
+              Token。
             </p>
             <p>
-              图片单价单位为元／张：本组费用＝单张价格 ×
-              张数，本组扣费＝每张额度 × 张数；规格、质量不同应分别测算。
+              用户每张图片价格＝每张扣费额度 × 每额度价格；整包图片数＝总额度 ÷
+              每张扣费额度，向下取整。规格、质量不同应分别测算。
             </p>
             <p>
               用户每百万 Token 单价＝每千 Token 扣费额度 × 1000 × 每额度价格。
@@ -609,7 +594,7 @@ onMounted(load);
               额度计算与正式账本一样，每次只向上取整到百万分之一额度；其他运算使用精确分数，显示时再四舍五入。未扣服务器、支付手续费、税费等费用。
             </p>
             <p>
-              这里的原价来自管理员填写，不自动视为官方报价；若要和官方比较，应使用同型号、同规格、同处理方式且已换算为人民币的价格。
+              上游原价仅用于采购折扣测算，不是另一套客户售价。用户人民币单价由资源包与模型扣费额度唯一确定。
             </p>
           </div></AppDisclosure
         >
@@ -639,7 +624,7 @@ onMounted(load);
         <div class="pricing-model-import">
           <AppSelect
             v-model="selectedModel"
-            label="载入已配置模型价格"
+            label="载入已配置模型成本与费率"
             :options="[
               { value: '', label: '选择模型，或手动填写' },
               ...modelOptions.map((m) => ({
@@ -657,7 +642,7 @@ onMounted(load);
             :disabled="!selectedModel"
             @click="importModel"
           >
-            载入模型标价与成本
+            载入模型成本与费率
           </button>
         </div>
         <label class="pricing-full-label"
@@ -673,22 +658,25 @@ onMounted(load);
           >方案名称<AppField v-model="draft.modelName" maxlength="80"
         /></label>
         <fieldset>
-          <legend>模型标价与采购成本</legend>
+          <legend>采购成本</legend>
+          <AppChoice v-model="draft.directCosts"
+            >直接填写折扣后实际采购成本</AppChoice
+          >
           <div class="ai-admin-grid">
-            <template v-if="draft.kind !== 'image'"
+            <template v-if="!draft.directCosts && draft.kind !== 'image'"
               ><label
-                >普通输入标价 · 元／百万 Token<AppField
+                >普通输入上游原价 · 元／百万 Token<AppField
                   v-model="draft.inputPrice"
                   inputmode="decimal"
                   maxlength="20" /></label
               ><label
-                >输出标价 · 元／百万 Token<AppField
+                >输出上游原价 · 元／百万 Token<AppField
                   v-model="draft.outputPrice"
                   inputmode="decimal"
                   maxlength="20" /></label
             ></template>
-            <label v-else
-              >每张图片标价 · 元／张<AppField
+            <label v-else-if="!draft.directCosts"
+              >图片上游原价 · 元／张<AppField
                 v-model="draft.imagePrice"
                 inputmode="decimal"
                 maxlength="20"
@@ -711,15 +699,14 @@ onMounted(load);
           </div>
           <template v-if="draft.kind !== 'image'"
             ><AppChoice v-model="draft.useCache">单独测算缓存输入</AppChoice
-            ><label v-if="draft.useCache" class="pricing-full-label"
-              >缓存输入标价 · 元／百万 Token<AppField
+            ><label
+              v-if="draft.useCache && !draft.directCosts"
+              class="pricing-full-label"
+              >缓存输入上游原价 · 元／百万 Token<AppField
                 v-model="draft.cachedPrice"
                 inputmode="decimal"
                 maxlength="20" /></label
           ></template>
-          <AppChoice v-model="draft.directCosts"
-            >分别填写实际采购成本，不再乘采购折扣</AppChoice
-          >
           <div v-if="draft.directCosts" class="ai-admin-grid">
             <template v-if="draft.kind !== 'image'"
               ><label
@@ -839,14 +826,6 @@ onMounted(load);
           {{ fmt(detail.totalCredits, 6) }} 额度＝每额度
           {{ money(detail.unitPrice, 8) }}；已计入赠送额度。
         </p>
-        <p class="info-banner">
-          本次 {{ money(detail.price, 2) }} 若按模型标价收费，按{{ scope }}可换
-          {{
-            detail.atModelPrice
-              ? fmt(detail.atModelPrice.credits, 6) + " 额度"
-              : "—（本组标价或扣费为 0）"
-          }}。这里只作比较，不发放额度。
-        </p>
         <div
           v-for="[key, label] in fields"
           :key="key"
@@ -854,8 +833,8 @@ onMounted(load);
         >
           <h3>{{ label }} · {{ isImage ? "每张图片" : "每百万 Token" }}</h3>
           <dl>
-            <div>
-              <dt>对比原价</dt>
+            <div v-if="!plan.directCosts">
+              <dt>上游原价</dt>
               <dd>{{ money(result.channels[key].original) }}</dd>
             </div>
             <div>
@@ -872,8 +851,8 @@ onMounted(load);
               <dt>用户实际支付</dt>
               <dd>{{ money(detail.channels[key].revenue, 6) }}</dd>
             </div>
-            <div>
-              <dt>用户价／原价</dt>
+            <div v-if="!plan.directCosts">
+              <dt>用户价／上游原价</dt>
               <dd>{{ percent(detail.channels[key].originalPercent) }}</dd>
             </div>
             <div>

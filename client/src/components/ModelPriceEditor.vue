@@ -24,9 +24,7 @@ const formId = useId(),
   products = ref([]),
   pane = ref("edit");
 const draft = ref({}),
-  listEnabled = ref(false),
   costEnabled = ref(false),
-  list = ref({}),
   cost = ref({}),
   usage = ref({});
 let generation = 0;
@@ -42,13 +40,9 @@ const plan = computed(() => ({
   modelName: draft.value.model || "当前模型",
   directCosts: true,
   useCache: !image.value,
-  inputPrice: listEnabled.value ? list.value.input : "0",
-  cachedPrice: listEnabled.value ? list.value.cached : "0",
-  outputPrice: listEnabled.value ? list.value.output : "0",
   inputCost: costEnabled.value ? cost.value.input : "0",
   cachedCost: costEnabled.value ? cost.value.cached : "0",
   outputCost: costEnabled.value ? cost.value.output : "0",
-  imagePrice: listEnabled.value ? list.value.perImage : "0",
   imageCost: costEnabled.value ? cost.value.perImage : "0",
   imageRate: draft.value.imageCredits || "",
   inputRate: draft.value.policy?.inputRate ?? "",
@@ -96,20 +90,11 @@ watch(
       ...model,
       policy: { ...props.legacyPolicy, ...(model.policy || {}) },
     };
-    listEnabled.value = !!model.pricing;
     costEnabled.value =
       model.kind === "image"
         ? model.imageProcurement !== null &&
           model.imageProcurement !== undefined
         : !!model.procurement;
-    list.value = {
-      input: "",
-      cached: "",
-      output: "",
-      perImage: "",
-      specification: "",
-      ...model.pricing,
-    };
     cost.value = {
       input: "",
       cached: "",
@@ -140,20 +125,6 @@ function save() {
     return;
   const p = validation.value.normalized,
     model = JSON.parse(JSON.stringify(draft.value));
-  model.pricing = !listEnabled.value
-    ? null
-    : image.value
-      ? {
-          unit: "image",
-          perImage: p.imagePrice,
-          specification: (list.value.specification || "").trim(),
-        }
-      : {
-          unit: "token",
-          input: p.inputPrice,
-          cached: p.cachedPrice,
-          output: p.outputPrice,
-        };
   model.procurement =
     costEnabled.value && !image.value
       ? { input: p.inputCost, cached: p.cachedCost, output: p.outputCost }
@@ -171,7 +142,7 @@ function save() {
   <AppDialog
     :open="open"
     :title="(model?.model || '模型') + ' · 配置价格'"
-    description="人民币标价、实际采购成本与扣费额度分别配置。实时预览随输入更新，保存后只影响当前模型的新任务。"
+    description="配置实际采购成本和扣费额度，用户人民币单价由资源包售价与总额度自动换算。保存后只影响当前模型的新任务。"
     :busy="busy"
     :width="1320"
     @close="emit('close')"
@@ -217,33 +188,6 @@ function save() {
         novalidate
         @submit.prevent="save"
       >
-        <fieldset :disabled="busy">
-          <legend>模型标价 · {{ image ? "元／张" : "元／百万 Token" }}</legend>
-          <AppChoice v-model="listEnabled">配置人民币标价</AppChoice>
-          <div v-if="listEnabled" class="price-input-grid">
-            <template v-if="!image"
-              ><label v-for="[key, label] in channels" :key="key"
-                >{{ label }}标价<AppField
-                  v-model="list[key]"
-                  inputmode="decimal"
-                  maxlength="20" /></label></template
-            ><template v-else
-              ><label
-                >每张图片标价（元）<AppField
-                  v-model="list.perImage"
-                  inputmode="decimal"
-                  maxlength="20" /></label
-              ><label
-                >适用图片规格<AppField
-                  v-model="list.specification"
-                  maxlength="120"
-                  placeholder="例如 1024 × 1024，标准质量" /></label
-            ></template>
-          </div>
-          <p class="tiny muted">
-            用于和用户实际单价比较、反推充值应得额度。手填标价不自动代表官方报价。
-          </p>
-        </fieldset>
         <fieldset :disabled="busy">
           <legend>
             实际采购成本 · {{ image ? "元／张" : "元／百万 Token" }}
@@ -326,7 +270,6 @@ function save() {
           :plan="plan"
           :products="products"
           :has-cost="costEnabled"
-          :has-list-price="listEnabled"
         />
       </div>
     </div>

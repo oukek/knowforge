@@ -135,8 +135,11 @@ export function normalizePricingSimulation(input) {
   } else reset(["imagePrice", "imageRate", "imageCount", "imageCost"]);
   if (!x.useCache)
     reset(["cachedPrice", "cachedRate", "cachedTokens", "cachedCost"]);
-  if (x.directCosts) x.costDiscount = "1";
-  else reset(["inputCost", "cachedCost", "outputCost", "imageCost"]);
+  if (x.directCosts) {
+    x.costDiscount = "1";
+    reset(["inputPrice", "cachedPrice", "outputPrice", "imagePrice"]);
+    if (x.useCache) x.cachedPrice = "0";
+  } else reset(["inputCost", "cachedCost", "outputCost", "imageCost"]);
   for (const [key, label, max] of [
     ["inputPrice", "输入原价"],
     ["outputPrice", "输出原价"],
@@ -149,7 +152,7 @@ export function normalizePricingSimulation(input) {
     ["cachedCost", "缓存输入实际成本"],
     ["outputCost", "输出实际成本"],
     ["imageCost", "图片实际成本"],
-    ["imagePrice", "图片标价"],
+    ["imagePrice", "图片上游原价"],
     ["imageRate", "每张图片扣费额度"],
   ])
     x[key] = decimal(parseDecimal(x[key], label, max), 6);
@@ -255,41 +258,38 @@ export function calculatePricingSimulation(input, products) {
       if (credits.n === 0n) throw new Error("总额度必须大于零");
       const unit = div(price, credits);
       const channelViews = Object.fromEntries(
-        channels.map((channel) => [
-          channel.key,
-          {
-            ...metrics(
-              mul(
-                mul(channel.rate, channel.key === "image" ? one : thousand),
-                unit,
+        channels.map((channel) => {
+          const capacity = channel.rate.n
+            ? div(
+                mul(credits, channel.key === "image" ? one : thousand),
+                channel.rate,
+              )
+            : null;
+          return [
+            channel.key,
+            {
+              ...metrics(
+                mul(
+                  mul(channel.rate, channel.key === "image" ? one : thousand),
+                  unit,
+                ),
+                channel.cost,
+                channel.original,
               ),
-              channel.cost,
-              channel.original,
-            ),
-            breakEvenRate: unit.n
-              ? decimal(
-                  div(
-                    channel.cost,
-                    mul(unit, channel.key === "image" ? one : thousand),
-                  ),
-                )
-              : null,
-            creditsAtListPrice: channel.original.n
-              ? decimal(
-                  div(
-                    mul(
-                      price,
-                      mul(
-                        channel.rate,
-                        channel.key === "image" ? one : thousand,
-                      ),
+              breakEvenRate: unit.n
+                ? decimal(
+                    div(
+                      channel.cost,
+                      mul(unit, channel.key === "image" ? one : thousand),
                     ),
-                    channel.original,
-                  ),
-                )
-              : null,
-          },
-        ]),
+                  )
+                : null,
+              // Single-channel capacity, with all credits spent on that channel.
+              // Floor whole tokens/images so the display never overpromises a unit.
+              capacity: capacity ? String(capacity.n / capacity.d) : null,
+            },
+          ];
+        }),
       );
       const sample = metrics(mul(spent, unit), cost, original);
       let fullPack = null;
@@ -312,15 +312,6 @@ export function calculatePricingSimulation(input, products) {
         channels: channelViews,
         sample,
         fullPack,
-        atModelPrice:
-          original.n && spent.n
-            ? {
-                credits: decimal(div(mul(price, spent), original)),
-                difference: decimal(
-                  sub(div(mul(price, spent), original), credits),
-                ),
-              }
-            : null,
         hasLoss: Object.values(channelViews).some(
           (view) => view.state === "loss",
         ),

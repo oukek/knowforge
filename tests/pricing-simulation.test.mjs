@@ -135,7 +135,7 @@ test("零采购价、零折扣、零收费及亏损保留各自含义", () => {
   );
   assert.equal(free.sample.points, "0");
   assert.equal(free.rows[0].fullPack, null);
-  assert.equal(free.rows[0].atModelPrice, null);
+  assert.equal(free.rows[0].channels.input.capacity, null);
   assert(free.rows[0].hasLoss);
   assert.equal(free.rows[0].sample.profit, "-0.015");
   const loss = calculatePricingSimulation(
@@ -310,24 +310,39 @@ test("无效测算保存返回 400 且不改变上次方案", async (t) => {
   assert.deepEqual((await f.admin.api(url)).data, saved);
 });
 
-test("按模型标价反推充值额度：区分输入、输出与混合比例，赠送及采购折扣不改变换算", () => {
+test("用户单价与整包用量仅由资源包及扣费额度换算，不依赖额外标价或采购折扣", () => {
   const x = plan({ inputRate: "1", outputRate: "3" });
   const r = calculatePricingSimulation(x, [lite]).rows[0];
-  assert.equal(r.channels.input.creditsAtListPrice, "1980");
-  assert.equal(r.channels.output.creditsAtListPrice, "990");
-  assert.equal(r.atModelPrice.credits, "1386");
-  assert.equal(r.atModelPrice.difference, "886");
-  const other = calculatePricingSimulation({ ...x, costDiscount: "0.5" }, [
-    { ...lite, bonus: "500" },
-  ]).rows[0];
-  assert.equal(other.atModelPrice.credits, "1386");
-  assert.equal(other.atModelPrice.difference, "386");
+  assert.equal(r.channels.input.capacity, "500000");
+  assert.equal(r.channels.output.capacity, "166666");
+  const other = calculatePricingSimulation(
+    { ...x, inputPrice: "0", outputPrice: "0", costDiscount: "0.5" },
+    [{ ...lite, bonus: "500" }],
+  ).rows[0];
+  assert.equal(other.channels.input.capacity, "1000000");
+  assert.equal(other.channels.output.capacity, "333333");
+  assert.equal(other.channels.input.revenue, "9.9");
   const low = calculatePricingSimulation(plan(), [lite]).rows[0];
-  assert.equal(low.atModelPrice.credits, "247.5");
-  assert.equal(low.atModelPrice.difference, "-252.5");
+  assert.equal(low.channels.input.capacity, "4000000");
+  assert.equal(low.channels.output.capacity, "666666");
+  const differentSale = calculatePricingSimulation(plan(), [
+    { ...lite, price: "19.8" },
+  ]).rows[0];
+  assert.equal(differentSale.channels.input.revenue, "4.95");
+  assert.equal(
+    differentSale.channels.input.capacity,
+    low.channels.input.capacity,
+  );
+  // Whole-unit floor: the remaining credits cannot cover one more output token.
+  assert(
+    usageCharge({ input: 0, output: 666666, cached: 0 }, plan()) <= 500000000n,
+  );
+  assert(
+    usageCharge({ input: 0, output: 666667, cached: 0 }, plan()) > 500000000n,
+  );
 });
 
-test("图片按张测算：无百万 Token 换算、无缓存重复收费，固定规格按次数反推额度", () => {
+test("图片用户价格与可用张数直接按扣费额度换算，向下取整整张图片", () => {
   const r = calculatePricingSimulation(
     plan({
       kind: "image",
@@ -346,21 +361,25 @@ test("图片按张测算：无百万 Token 换算、无缓存重复收费，固�
   assert.equal(r.channels.image.baseCost, "0.1");
   assert.equal(r.sample.points, "20");
   assert.equal(r.sample.cost, "0.2");
-  assert.equal(r.sample.original, "1");
+  assert.equal(r.sample.original, "0");
   const a = r.rows[0];
   assert.equal(a.channels.image.revenue, "0.198");
   assert.equal(a.fullPack.cost, "5");
   assert.equal(a.fullPack.profit, "4.9");
-  assert.equal(a.atModelPrice.credits, "198");
-  assert.equal(a.channels.image.creditsAtListPrice, "198");
+  assert.equal(a.channels.image.capacity, "50");
   const many = calculatePricingSimulation({ ...r.config, imageCount: "10" }, [
     lite,
   ]).rows[0];
-  assert.equal(many.atModelPrice.credits, "198");
+  assert.equal(many.channels.image.capacity, "50");
   assert.equal(many.fullPack.profit, "4.9");
+  const fractional = calculatePricingSimulation(
+    { ...r.config, imageRate: "3" },
+    [lite],
+  ).rows[0];
+  assert.equal(fractional.channels.image.capacity, "166");
 });
 
-test("实际成本直接填入不会再次打折；无标价不编造可换额度，旧版方案默认文本", () => {
+test("实际成本直接填入不会再次打折；不填原价仍可算出用户价格与毛利，旧版方案默认文本", () => {
   const r = calculatePricingSimulation(
     plan({
       directCosts: true,
@@ -374,10 +393,17 @@ test("实际成本直接填入不会再次打折；无标价不编造可换额�
   assert.equal(r.channels.output.baseCost, "4.5");
   assert.equal(r.rows[0].fullPack.profit, "6.9");
   assert.equal(
-    calculatePricingSimulation(plan({ inputPrice: "0", outputPrice: "0" }), [
-      lite,
-    ]).rows[0].atModelPrice,
-    null,
+    calculatePricingSimulation(
+      plan({
+        directCosts: true,
+        inputCost: "0.75",
+        outputCost: "4.5",
+        inputPrice: "",
+        outputPrice: "",
+      }),
+      [lite],
+    ).rows[0].channels.input.revenue,
+    "2.475",
   );
   assert.equal(
     normalizePricingSimulation({ modelName: "旧版方案" }).kind,
@@ -413,8 +439,8 @@ test("切换计价单位或采购模式清理隐藏字段，保留有效的当�
   assert.equal(image.costDiscount, "1");
   assert.equal(image.inputCost, "0");
   assert.equal(
-    calculatePricingSimulation(image, [lite]).rows[0].atModelPrice.credits,
-    "198",
+    calculatePricingSimulation(image, [lite]).rows[0].channels.image.capacity,
+    "50",
   );
   const text = normalizePricingSimulation(
     plan({

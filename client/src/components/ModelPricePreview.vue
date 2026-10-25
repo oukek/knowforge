@@ -9,7 +9,6 @@ const props = defineProps({
   plan: Object,
   products: Array,
   hasCost: Boolean,
-  hasListPrice: Boolean,
 });
 const version = ref("published"),
   basis = ref("sample");
@@ -99,18 +98,10 @@ const view = computed(() => {
           <strong>{{
             hasCost ? money(view.sample.cost, 6) : "未配置"
           }}</strong></span
-        ><span
-          >标价费用
-          <strong>{{
-            hasListPrice ? money(view.sample.original, 6) : "未配置"
-          }}</strong></span
         >
       </div>
       <p v-if="!hasCost" class="tiny muted">
         采购成本未配置，毛利不作零成本估算。
-      </p>
-      <p v-if="!hasListPrice" class="tiny muted">
-        模型标价未配置，暂不反推应得额度。
       </p>
       <p class="tiny muted">
         用户单价随资源包售价与总额度变化，赠送额度已计入。整包毛利假设同等用量比例、全部用完，不含运营费用。
@@ -127,7 +118,7 @@ const view = computed(() => {
             <tr>
               <th>资源包</th>
               <th>用户实际单价</th>
-              <th>按模型标价应得额度</th>
+              <th>整包理论用量</th>
               <th>整包成本与毛利</th>
             </tr>
           </thead>
@@ -149,23 +140,20 @@ const view = computed(() => {
                       <strong>{{
                         money(row.channels[key].revenue)
                       }}</strong></span
-                    ><small
-                      v-if="
-                        hasListPrice &&
-                        row.channels[key].originalPercent !== null
-                      "
-                      >标价的
-                      {{ fmt(row.channels[key].originalPercent, 2) }}%</small
+                    ><small v-if="hasCost && !row.channels[key].zeroCost"
+                      >成本的
+                      {{ fmt(row.channels[key].costMultiple, 2) }} 倍</small
                     >
                   </div>
                 </td>
-                <td data-label="按模型标价应得额度">
-                  <strong>{{
-                    hasListPrice && row.atModelPrice
-                      ? fmt(row.atModelPrice.credits, 6) + " 额度"
-                      : "—"
-                  }}</strong
-                  ><small>按所选用量比例换算</small>
+                <td data-label="整包理论用量">
+                  <div v-for="[key, label] in fields" :key="key">
+                    <span
+                      >{{ label }} {{ fmt(row.channels[key].capacity, 0) }}
+                      {{ image ? "张" : "Token" }}</span
+                    >
+                  </div>
+                  <small v-if="!image">各项分别使用全部额度，不相加</small>
                 </td>
                 <td data-label="整包成本与毛利">
                   <template v-if="hasCost && row.fullPack"
@@ -191,8 +179,14 @@ const view = computed(() => {
         当前范围暂无资源包，可切换版本或到“资源包与预算”配置。
       </p>
       <p class="tiny muted">
-        应得额度＝充值金额 ÷ 本组标价费用 ×
-        本组扣费额度。只作定价比较，不自动发放资源包。
+        {{
+          image
+            ? "用户每张价格＝每张扣费额度"
+            : "用户每百万 Token 单价＝每千 Token 扣费额度 × 1000"
+        }}
+        × 资源包售价 ÷
+        总额度。用量按扣费额度换算，图片向下取整；多次小额调用的取整可能减少可用
+        Token。
       </p>
     </template>
   </section>

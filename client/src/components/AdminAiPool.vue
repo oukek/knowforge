@@ -72,15 +72,15 @@ const modelRows = computed(() =>
             .includes(search.value.trim().toLowerCase())),
     ),
 );
-function priceText(m, cost = false) {
+function priceText(m) {
   if (m.kind === "image") {
-    const value = cost ? m.imageProcurement : m.pricing?.perImage;
+    const value = m.imageProcurement;
     return value === null || value === undefined
       ? "未配置"
       : `¥${value}／张` +
           (m.pricing?.specification ? ` · ${m.pricing.specification}` : "");
   }
-  const value = cost ? m.procurement : m.pricing;
+  const value = m.procurement;
   return value
     ? `输入 ${value.input} / 缓存 ${value.cached} / 输出 ${value.output} 元／百万 Token`
     : "未配置";
@@ -421,7 +421,7 @@ onMounted(() => void act(load));
           <div>
             <h2>模型与定价</h2>
             <p class="tiny muted">
-              每个模型分别保存人民币标价与实际采购成本，图片按张计价。
+              每个模型分别配置实际采购成本与扣费额度，用户价格按资源包自动换算，图片按张计价。
             </p>
           </div>
           <div class="row wrap">
@@ -521,8 +521,7 @@ onMounted(() => void act(load));
           </div>
         </div>
         <div class="ai-model-price-summary">
-          <span><strong>模型标价</strong> {{ priceText(m) }}</span
-          ><span><strong>实际采购成本</strong> {{ priceText(m, true) }}</span
+          <span><strong>实际采购成本</strong> {{ priceText(m) }}</span
           ><span v-if="m.kind !== 'image'"
             >扣费额度／千 Token：输入
             {{ (m.policy || pool.policy).inputRate }} / 缓存

@@ -61,7 +61,7 @@ test("服务商编辑保留多个模型的独立标价和采购成本，不传�
   assert.equal((await f.admin.api(endpoint, "PUT", body(saved))).status, 409);
   const pricing = (await f.admin.api("/admin/ai/pricing-simulation")).data;
   assert.equal(pricing.models.length, 3);
-  assert.deepEqual(pricing.models[0].pricing, tokenPrice);
+  assert(!Object.hasOwn(pricing.models[0], "pricing"));
   assert.deepEqual(pricing.models[1].procurement, {
     input: "0.3",
     cached: "0.075",

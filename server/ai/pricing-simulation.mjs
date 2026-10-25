@@ -63,7 +63,6 @@ export class PricingSimulation {
             model: m.model,
             providerName: p.name,
             kind: m.kind || "text",
-            pricing: m.pricing || null,
             procurement: m.procurement || null,
             imageProcurement: m.imageProcurement ?? null,
             imageCredits: m.imageCredits || "1",
