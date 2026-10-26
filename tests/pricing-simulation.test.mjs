@@ -4,6 +4,7 @@ import {
   PRICING_SIMULATION_DEFAULTS as defaults,
   calculatePricingSimulation,
   calculatePackPricing,
+  calculateBlendedPackPricing,
   normalizePackPricing,
   normalizePricingSimulation,
   formatPricingNumber,
@@ -11,6 +12,10 @@ import {
 import { usageCharge } from "../server/ai/amounts.mjs";
 import { fixture } from "./helpers/ai.mjs";
 import { PricingSimulation } from "../server/ai/pricing-simulation.mjs";
+import {
+  normalizeUsageMix,
+  DEFAULT_USAGE_MIX,
+} from "../shared/pricing-usage.mjs";
 const plan = (patch) => ({
   ...defaults,
   inputPrice: "5",
@@ -36,6 +41,151 @@ const flagship = {
   credits: "50000",
   bonus: "0",
 };
+
+test("综合估算按输入缓存输出共同消耗一份额度，缓存属于输入，总量不重复加缓存", () => {
+  const x = plan({
+    useCache: true,
+    cachedPrice: "1",
+    inputRate: "1",
+    cachedRate: "0.5",
+    outputRate: "3",
+    usageMix: { inputRatio: "1", outputRatio: "3", cacheHitPercent: "30" },
+  });
+  const row = calculateBlendedPackPricing(x, [
+    { ...lite, credits: "98.5", price: "0.5" },
+  ]).rows[0];
+  assert.equal(row.blended.inputTokens, "10000");
+  assert.equal(row.blended.cachedTokens, "3000");
+  assert.equal(row.blended.uncachedTokens, "7000");
+  assert.equal(row.blended.outputTokens, "30000");
+  assert.equal(row.blended.totalTokens, "40000");
+  assert.equal(row.blended.creditsUsed, "98.5");
+  assert.equal(row.blended.creditsLeft, "0");
+  assert.equal(row.blended.original, "0.938");
+  assert.equal(row.blended.cost, "0.1407");
+  assert.equal(row.blended.profit, "0.3593");
+});
+
+test("默认比例仅作参考，比例等比放大不改结果，分项取整后的总消耗不超资源包且与账本一致", () => {
+  const a = calculateBlendedPackPricing(plan(), [lite]);
+  assert.deepEqual(a.config.usageMix, DEFAULT_USAGE_MIX);
+  assert.equal(a.rows[0].blended.inputTokens, "2857142");
+  assert.equal(a.rows[0].blended.outputTokens, "190476");
+  assert.equal(a.rows[0].blended.cachedTokens, "0");
+  assert.equal(a.rows[0].blended.creditsUsed, "499.99975");
+  assert.equal(a.rows[0].blended.original, "19.99999");
+  const b = calculateBlendedPackPricing(
+    plan({
+      usageMix: { inputRatio: "150", outputRatio: "10", cacheHitPercent: "0" },
+    }),
+    [lite],
+  );
+  assert.deepEqual(a.rows[0].blended, b.rows[0].blended);
+  for (const hit of ["0", "30", "100", "99.999999"]) {
+    const x = plan({
+      useCache: true,
+      cachedPrice: "1",
+      cachedRate: "0.05",
+      usageMix: { inputRatio: "1", outputRatio: "3", cacheHitPercent: hit },
+    });
+    const row = calculateBlendedPackPricing(x, [lite]).rows[0];
+    assert(BigInt(row.blended.cachedTokens) <= BigInt(row.blended.inputTokens));
+    const used = usageCharge(
+      {
+        input: Number(row.blended.inputTokens),
+        cached: Number(row.blended.cachedTokens),
+        output: Number(row.blended.outputTokens),
+      },
+      x,
+    );
+    assert(used <= 500000000n);
+    assert.equal(Number(row.blended.creditsUsed), Number(used) / 1000000);
+    assert.equal(
+      BigInt(row.blended.totalTokens),
+      BigInt(row.blended.inputTokens) + BigInt(row.blended.outputTokens),
+    );
+  }
+});
+
+test("倍率只改变采购成本；缓存关闭、零原价、零权重费率、免费包和图片均有独立口径", () => {
+  const a = calculateBlendedPackPricing(plan(), [lite]).rows[0];
+  const b = calculateBlendedPackPricing(plan({ costDiscount: "0.3" }), [lite])
+    .rows[0];
+  assert.equal(a.blended.discountPercent, b.blended.discountPercent);
+  assert.equal(Number(b.blended.cost), Number(a.blended.cost) * 2);
+  const none = calculateBlendedPackPricing(
+    plan({ inputRate: "0", outputRate: "0" }),
+    [lite],
+  ).rows[0];
+  assert.equal(none.blended, null);
+  assert.equal(none.estimateState, "zero_rate");
+  const noOriginal = calculateBlendedPackPricing(
+    plan({ inputPrice: "0", outputPrice: "0" }),
+    [lite],
+  ).rows[0];
+  assert.equal(noOriginal.blended.discountPercent, null);
+  const free = calculateBlendedPackPricing(plan(), [{ ...lite, price: "0" }])
+    .rows[0];
+  assert.equal(free.blended.discountPercent, "100");
+  assert.equal(free.blended.marginPercent, null);
+  const noCache = calculateBlendedPackPricing(
+    plan({
+      usageMix: { inputRatio: "1", outputRatio: "1", cacheHitPercent: "100" },
+    }),
+    [lite],
+  );
+  assert.equal(noCache.config.usageMix.cacheHitPercent, "0");
+  assert.equal(noCache.rows[0].blended.cachedTokens, "0");
+  const image = calculateBlendedPackPricing(
+    plan({
+      kind: "image",
+      imagePrice: "0.5",
+      imageRate: "10",
+      costDiscount: "0.2",
+    }),
+    [lite],
+  ).rows[0];
+  assert.equal(image.blended.imageCount, "50");
+  assert.equal(image.blended.original, "25");
+  assert.equal(image.blended.discountPercent, "60.4");
+});
+
+test("比例字段严格校验且兼容旧配置；管理员方案的比例持久化，不改变真实费率和余额", async (t) => {
+  for (const patch of [
+    { inputRatio: "0", outputRatio: "0" },
+    { cacheHitPercent: "101" },
+    { inputRatio: "-1" },
+    { outputRatio: "NaN" },
+    { inputRatio: "0.0000001" },
+    { inputRatio: [] },
+    { extra: "x" },
+  ])
+    assert.throws(() => normalizeUsageMix({ ...DEFAULT_USAGE_MIX, ...patch }));
+  assert.deepEqual(normalizeUsageMix({}), DEFAULT_USAGE_MIX);
+  assert.throws(() => normalizeUsageMix(null));
+  const f = await fixture(t),
+    url = "/admin/ai/pricing-simulation";
+  const before = (await f.user.api("/ai/status")).data;
+  const mix = { inputRatio: "1", outputRatio: "3", cacheHitPercent: "30" };
+  const save = await f.admin.api(url, "PUT", {
+    revision: null,
+    plan: plan({ useCache: true, cachedPrice: "1", usageMix: mix }),
+  });
+  assert.equal(save.status, 200, JSON.stringify(save));
+  assert.deepEqual(
+    (await new PricingSimulation(f.ai.repo, f.ai.pool).read()).plan.usageMix,
+    mix,
+  );
+  const bad = await f.admin.api(url, "PUT", {
+    revision: save.data.revision,
+    plan: plan({
+      usageMix: { inputRatio: "0", outputRatio: "0", cacheHitPercent: "0" },
+    }),
+  });
+  assert.equal(bad.status, 400);
+  assert.deepEqual((await f.user.api("/ai/status")).data, before);
+  assert.equal(f.calls(), 0);
+});
 
 test("资源包直接换算：9.9 元的 500 额度分别得到输入和输出 Token，再用这些数量算原价", () => {
   const r = calculatePackPricing(

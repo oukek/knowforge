@@ -79,30 +79,11 @@ onMounted(async () => {
           </article>
         </div>
       </section>
-      <section v-if="ai.tariff || ai.tariffs?.length" class="ai-detail">
-        <h2>额度消耗规则</h2>
-        <p v-if="ai.tariff" class="tiny">
-          每 1000 Token：普通输入 {{ ai.tariff.inputRate }} 额度，缓存输入
-          {{ ai.tariff.cachedRate }} 额度，输出
-          {{ ai.tariff.outputRate }} 额度。
-          缓存属于输入明细、推理属于输出明细，不重复计费。
-        </p>
-        <div v-if="!ai.tariff" class="ai-record-list">
-          <article
-            v-for="rate in ai.tariffs"
-            :key="rate.targetId"
-            class="ai-record-row"
-          >
-            <strong>{{ rate.model }}</strong
-            ><span class="tiny"
-              >每千 Token：输入 {{ rate.inputRate }} / 缓存
-              {{ rate.cachedRate }} / 输出 {{ rate.outputRate }} 额度</span
-            >
-          </article>
-        </div>
+      <section class="ai-detail">
+        <h2>任务额度说明</h2>
         <p class="tiny muted">
-          各模型费率独立，按候选模型最高预计费用预占，按最终成功模型的费率结算一次。缓存与推理不重复计数。
-          每次调用固定费率快照，按实际用量精确结算到六位小数。调用前根据上下文及输出上限预占，成功后释放差额；技术失败不扣，回答错误但已完成评阅仍正常计费。自动切换只按最终有效结果结算一次。
+          每条任务记录实际消耗额度，可在 AI
+          历史中查看。任务开始时预占额度，完成后结算并释放差额；技术失败不扣费。免费资格、免扣与退款会单独标记。
         </p>
         <p v-if="ai.budgets" class="tiny muted">
           单次任务最多 {{ ai.budgets.maxTaskPoints }} 额度，近 24 小时预算

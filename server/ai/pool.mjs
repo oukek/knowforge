@@ -4,6 +4,10 @@ import { AiError, encrypt, decrypt, now } from "./policy.mjs";
 import { micro, points } from "./amounts.mjs";
 import { effectivePolicy } from "./model-policy.mjs";
 import { derivedProcurement, normalizeCost } from "../../shared/model-cost.mjs";
+import {
+  DEFAULT_USAGE_MIX,
+  normalizeUsageMix,
+} from "../../shared/pricing-usage.mjs";
 
 const integer = (min, max, fallback) =>
   z.number().int().min(min).max(max).default(fallback);
@@ -74,6 +78,17 @@ const modelSchema = z
     // null denotes a legacy record with manually entered net costs. Never infer
     // an original price or supplier discount from those historical values.
     costDiscount: supplierDiscount.nullable().default(null),
+    usageMix: z
+      .unknown()
+      .default(() => ({ ...DEFAULT_USAGE_MIX }))
+      .transform((value, ctx) => {
+        try {
+          return normalizeUsageMix(value);
+        } catch (e) {
+          ctx.addIssue({ code: "custom", message: e.message });
+          return z.NEVER;
+        }
+      }),
     policy: modelPolicySchema.nullable().default(null),
     imageProcurement: actualCost.nullable().default(null),
     imageCredits: price.default("1"),

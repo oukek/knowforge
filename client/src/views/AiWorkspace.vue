@@ -286,7 +286,10 @@ onMounted(async () => {
             }}</span
             ><strong
               >{{
-                item.chargedPoints === null || item.chargedPoints === undefined
+                item.status === "running" ||
+                item.billingStatus === "pending" ||
+                item.chargedPoints === null ||
+                item.chargedPoints === undefined
                   ? "预占 " + item.reservedPoints
                   : item.chargedPoints
               }}

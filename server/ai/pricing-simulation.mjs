@@ -6,6 +6,7 @@ import {
   normalizePricingSimulation,
 } from "../../shared/pricing-simulation.mjs";
 import { effectivePolicy, ratesOf } from "./model-policy.mjs";
+import { DEFAULT_USAGE_MIX } from "../../shared/pricing-usage.mjs";
 const key = "pricing-simulation";
 // Procurement assumptions are returned only by authenticated admin endpoints,
 // never embedded in the public frontend bundle or learner bootstrap.
@@ -65,6 +66,7 @@ export class PricingSimulation {
             kind: m.kind || "text",
             pricing: m.costDiscount != null ? m.pricing : null,
             costDiscount: m.costDiscount ?? null,
+            usageMix: m.usageMix || { ...DEFAULT_USAGE_MIX },
             procurement: m.procurement || null,
             imageProcurement: m.imageProcurement ?? null,
             imageCredits: m.imageCredits || "1",

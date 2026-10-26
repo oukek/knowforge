@@ -1,5 +1,6 @@
 // Admin-only planning arithmetic. Fractions keep product discounts and bonuses
 // exact; only presentation is rounded. This module never settles real charges.
+import { DEFAULT_USAGE_MIX, normalizeUsageMix } from "./pricing-usage.mjs";
 const SCALE = 1000000n;
 const fraction = (n, d = 1n) => ({ n, d });
 const add = (a, b) => fraction(a.n * b.d + b.n * a.d, a.d * b.d);
@@ -100,6 +101,7 @@ export const PRICING_SIMULATION_DEFAULTS = Object.freeze({
   outputTokens: "2000",
   useCache: false,
   extraCostPercent: "0",
+  usageMix: DEFAULT_USAGE_MIX,
 });
 export function normalizePricingSimulation(input) {
   if (!input || typeof input !== "object" || Array.isArray(input))
@@ -160,6 +162,11 @@ export function normalizePricingSimulation(input) {
   ])
     x[key] = decimal(parseDecimal(x[key], label, max, precision), precision);
   if (x.kind === "image") x.useCache = false;
+  x.usageMix =
+    x.kind === "image"
+      ? { ...DEFAULT_USAGE_MIX }
+      : normalizeUsageMix(x.usageMix);
+  if (!x.useCache) x.usageMix.cacheHitPercent = "0";
   x.cachedPrice = x.useCache
     ? decimal(parseDecimal(x.cachedPrice, "缓存原价"), 6)
     : null;
@@ -402,5 +409,132 @@ export function calculatePackPricing(input, products) {
             ),
           },
     ),
+  };
+}
+
+// One blended estimate per pack. Cached tokens are a subset of total input,
+// never an additional third stream. Fractions avoid premature rounding; flooring
+// each disjoint stream guarantees the estimate cannot overspend the pack.
+export function calculateBlendedPackPricing(input, products) {
+  const result = calculatePackPricing(input, products);
+  const { config: x } = result;
+  const i = parseDecimal(x.usageMix.inputRatio, "总输入比例");
+  const o = parseDecimal(x.usageMix.outputRatio, "输出比例");
+  const cached = mul(
+    i,
+    div(parseDecimal(x.usageMix.cacheHitPercent, "缓存命中率", 100n), hundred),
+  );
+  const shares = { input: sub(i, cached), cached, output: o };
+  return {
+    config: x,
+    mix: {
+      input: decimal(i),
+      cached: decimal(cached),
+      uncached: decimal(shares.input),
+      output: decimal(o),
+    },
+    rows: result.rows.map((row) => {
+      if (row.error) return row;
+      if (x.kind === "image")
+        return {
+          ...row,
+          blended: row.channels.image.wholePack
+            ? {
+                ...row.channels.image.wholePack,
+                imageCount: row.channels.image.capacity,
+                totalTokens: null,
+              }
+            : null,
+        };
+      let weighted = zero;
+      for (const key of ["input", "cached", "output"])
+        weighted = add(
+          weighted,
+          mul(shares[key], parseDecimal(x[key + "Rate"], "客户扣费")),
+        );
+      if (!weighted.n)
+        return {
+          ...row,
+          blended: null,
+          hasLoss: false,
+          estimateState: "zero_rate",
+        };
+      const scale = div(
+        mul(parseDecimal(row.totalCredits, "总额度", 2000000000n), thousand),
+        weighted,
+      );
+      const counts = Object.fromEntries(
+        Object.entries(shares).map(([key, share]) => {
+          const count = mul(share, scale);
+          return [key, count.n / count.d];
+        }),
+      );
+      const total = counts.input + counts.cached + counts.output;
+      if (!total)
+        return {
+          ...row,
+          blended: null,
+          hasLoss: false,
+          estimateState: "insufficient",
+        };
+      let original = zero,
+        cost = zero,
+        points = zero;
+      for (const key of ["input", "cached", "output"]) {
+        if (!counts[key]) continue;
+        const volume = fraction(counts[key], SCALE);
+        original = add(
+          original,
+          mul(volume, parseDecimal(result.channels[key].original, "原价")),
+        );
+        // Overhead/discount can produce more than six decimals; retain the
+        // rational cost directly rather than parse a rounded display value.
+        const base = x.directCosts
+          ? parseDecimal(x[key + "Cost"], "采购成本", 1000000000n, 12)
+          : mul(
+              parseDecimal(x[key + "Price"], "原价"),
+              parseDecimal(x.costDiscount, "采购倍率", 1n),
+            );
+        const adjusted = mul(
+          base,
+          add(
+            one,
+            div(parseDecimal(x.extraCostPercent, "额外成本", 1000n), hundred),
+          ),
+        );
+        cost = add(cost, mul(volume, adjusted));
+        points = add(
+          points,
+          mul(
+            fraction(counts[key], 1000n),
+            parseDecimal(x[key + "Rate"], "客户扣费"),
+          ),
+        );
+      }
+      const used = fraction(
+        (points.n * SCALE + points.d - 1n) / points.d,
+        SCALE,
+      );
+      const price = parseDecimal(row.price, "资源包售价");
+      const blended = {
+        ...metrics(price, cost, original),
+        inputTokens: String(counts.input + counts.cached),
+        uncachedTokens: String(counts.input),
+        cachedTokens: String(counts.cached),
+        outputTokens: String(counts.output),
+        totalTokens: String(total),
+        creditsUsed: decimal(used),
+        creditsLeft: decimal(
+          sub(parseDecimal(row.totalCredits, "总额度", 2000000000n), used),
+        ),
+        userPricePerMillion: decimal(div(price, fraction(total, SCALE))),
+      };
+      return {
+        ...row,
+        blended,
+        hasLoss: blended.state === "loss",
+        aboveOriginal: Number(blended.discountPercent) < 0,
+      };
+    }),
   };
 }

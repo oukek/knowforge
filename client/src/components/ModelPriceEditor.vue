@@ -5,6 +5,7 @@ import AppDialog from "./AppDialog.vue";
 import AppField from "./AppField.vue";
 import AppChoice from "./AppChoice.vue";
 import ModelPricePreview from "./ModelPricePreview.vue";
+import UsageMixControls from "./UsageMixControls.vue";
 import {
   derivedProcurement,
   discountedPrice,
@@ -64,6 +65,7 @@ const plan = computed(() => ({
   inputRate: draft.value.policy?.inputRate ?? "",
   cachedRate: draft.value.policy?.cachedRate ?? "",
   outputRate: draft.value.policy?.outputRate ?? "",
+  usageMix: draft.value.usageMix || defaults.usageMix,
 }));
 const validation = computed(() => {
   try {
@@ -121,6 +123,7 @@ watch(
     draft.value = {
       ...model,
       policy: { ...props.legacyPolicy, ...(model.policy || {}) },
+      usageMix: { ...defaults.usageMix, ...model.usageMix },
     };
     costEnabled.value = model.costDiscount != null && !!model.pricing;
     costDiscount.value = costEnabled.value ? model.costDiscount : "1";
@@ -145,6 +148,7 @@ function save() {
     return;
   const p = validation.value.normalized,
     model = JSON.parse(JSON.stringify(draft.value));
+  model.usageMix = p.usageMix;
   if (costEnabled.value) {
     model.costDiscount = p.costDiscount;
     model.pricing = image.value
@@ -299,6 +303,7 @@ function save() {
             }}
           </p>
         </fieldset>
+        <UsageMixControls v-if="!image" v-model="draft.usageMix" :busy="busy" />
         <p v-if="validation.error" class="info-banner" role="status">
           {{ validation.error }}
         </p>

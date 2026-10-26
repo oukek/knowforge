@@ -74,6 +74,29 @@ test("服务商编辑保留多个模型的独立标价和采购成本，不传�
   assert.equal(f.calls(), 0);
 });
 
+test("每模型独立保存综合估算比例，管理员测算可载入；比例不影响真实任务扣费", async (t) => {
+  const { f, pool, p, m } = await configured(t);
+  const mix = { inputRatio: "1", outputRatio: "3", cacheHitPercent: "30" };
+  p.models = [{ ...m, usageMix: mix }];
+  const saved = await f.admin.api(endpoint, "PUT", body(pool));
+  assert.equal(saved.status, 200, JSON.stringify(saved));
+  assert.deepEqual(saved.data.pool.providers[0].models[0].usageMix, mix);
+  assert.deepEqual(
+    (await f.admin.api("/admin/ai/pricing-simulation")).data.models[0].usageMix,
+    mix,
+  );
+  const bad = structuredClone(saved.data.pool);
+  bad.providers[0].models[0].usageMix.cacheHitPercent = "101";
+  assert.equal((await f.admin.api(endpoint, "PUT", body(bad))).status, 400);
+  await f.grant();
+  const started = await f.user.api("/ai/grade", "POST", f.input());
+  assert.equal(started.status, 202);
+  const run = await f.settled(f.user, started.data.run.id);
+  assert.equal(run.status, "succeeded");
+  assert.equal(run.chargedPoints, "0.7");
+  assert(!JSON.stringify(run).includes("usageMix"));
+});
+
 test("图片与 Token 单位严格隔离，负价、混合单位、图片用途和无效单张额度拒绝保存", async (t) => {
   const { f, pool, p, m } = await configured(t);
   for (const invalid of [

@@ -7,12 +7,12 @@ import AppSelect from "./AppSelect.vue";
 import AppChoice from "./AppChoice.vue";
 import AppDisclosure from "./AppDisclosure.vue";
 import Icon from "./Icon.vue";
-import PackPriceComparison from "./PackPriceComparison.vue";
+import UsageMixControls from "./UsageMixControls.vue";
 import PackUsageBreakdown from "./PackUsageBreakdown.vue";
 import {
   PRICING_SIMULATION_DEFAULTS,
   normalizePackPricing,
-  calculatePackPricing,
+  calculateBlendedPackPricing,
   formatPricingNumber,
 } from "../../../shared/pricing-simulation.mjs";
 
@@ -43,12 +43,6 @@ const money = (value, digits = 4) => {
   if (text.startsWith("−")) return "−¥" + text.slice(1);
   return "¥" + text;
 };
-const percent = (value) =>
-  value === null || value === undefined ? "—" : fmt(value, 2) + "%";
-const multiplier = (view) =>
-  view.zeroCost
-    ? costName.value + "为 0"
-    : fmt(view.costMultiple, 2) + " 倍" + costName.value;
 const costName = computed(() =>
   Number(plan.value.extraCostPercent) ? "测算成本" : "采购成本",
 );
@@ -67,7 +61,7 @@ const packages = computed(() =>
 );
 const result = computed(() => {
   try {
-    return calculatePackPricing(plan.value, packages.value);
+    return calculateBlendedPackPricing(plan.value, packages.value);
   } catch (e) {
     return { error: e.message, rows: [] };
   }
@@ -179,6 +173,7 @@ function importModel() {
     costDiscount: hasOriginal ? m.costDiscount : "1",
     directCosts: !hasOriginal,
     useCache: !image,
+    usageMix: { ...PRICING_SIMULATION_DEFAULTS.usageMix, ...m.usageMix },
   });
   if (image)
     Object.assign(draft.value, {
@@ -319,11 +314,11 @@ onMounted(load);
           {{
             isImage
               ? "按当前规格计算可用整张图片。"
-              : "普通输入、缓存输入和输出分别按全部额度单独换算，是独立上限，不能同时获得或相加。"
-          }}不需要填写样例 Token。
+              : `按总输入∶输出＝${plan.usageMix.inputRatio}∶${plan.usageMix.outputRatio}、输入缓存命中率 ${plan.usageMix.cacheHitPercent}% 加权估算。`
+          }}实际任务仍按真实用量结算。
         </p>
         <p v-if="lossCount" class="pricing-loss-note" role="status">
-          {{ lossCount }} 档资源包在至少一种用途下低于{{
+          {{ lossCount }} 档资源包的综合实收低于{{
             costName
           }}，请查看对应项的成本与毛利。
         </p>
@@ -331,7 +326,6 @@ onMounted(load);
           v-for="row in result.rows"
           :key="row.id"
           :row="row"
-          :fields="fields"
           :image="isImage"
           :has-original="!plan.directCosts"
           :cost-label="costName"
@@ -356,10 +350,15 @@ onMounted(load);
           ><div class="pricing-formulas">
             <p>每额度价格＝资源包人民币售价 ÷（基础额度＋赠送额度）。</p>
             <p>
-              每项可用 Token＝总额度 ÷ 该项每千 Token 扣费额度 ×
-              1000，向下取整； 对应原价费用＝可用 Token ÷ 1000000 ×
-              该项原价；实收＝资源包售价。 用户优惠率＝（对应原价费用－实收）÷
-              对应原价费用 × 100%。负优惠显示“高于原价”，原价为 0 不计算优惠率。
+              先根据总输入∶输出比例与缓存命中率，计算普通输入、缓存、输出的
+              Token 占比；再按各自每千 Token 扣费加权，换算整包预计可用
+              Token。缓存属于总输入，不能重复计入总量。
+            </p>
+            <p>
+              综合原价＝普通输入预计数量 × 普通输入原价＋缓存预计数量 ×
+              缓存原价＋输出预计数量 × 输出原价，Token
+              价格按每百万换算。实收＝资源包售价；优惠率＝（综合原价－实收）÷
+              综合原价。采购成本使用同一组数量计算。
             </p>
             <p>
               用户每张图片价格＝每张扣费额度 × 每额度价格；整包图片数＝总额度 ÷
@@ -374,7 +373,7 @@ onMounted(load);
               表示付原价的 15%，即 1.5 折。
             </p>
             <p>
-              每项毛利＝资源包实收－对应可用数量的模型成本；毛利率＝毛利 ÷
+              综合毛利＝资源包实收－预计总采购成本；毛利率＝毛利 ÷
               收费。零收入不计算毛利率，零成本不显示无穷倍数。
             </p>
             <p>
@@ -391,7 +390,7 @@ onMounted(load);
             <p>
               原价表示同等用量在未优惠时本应支付的费用；实际采购成本＝原价 ×
               上游优惠倍率。
-              倍率只影响采购成本，不改变用户优惠率。输入、缓存和输出各自按全部额度计算，不能同时获得或相加，不需要样例或用量比例。
+              倍率只影响采购成本，不改变用户优惠率。用量比例是可调整的估算假设，不是用户的真实用量或扣费标准。
             </p>
           </div></AppDisclosure
         >
@@ -559,6 +558,11 @@ onMounted(load);
             0.125、0.75。扣费额度不是人民币，也不是采购折扣。
           </p>
         </fieldset>
+        <UsageMixControls
+          v-if="draft.kind !== 'image'"
+          v-model="draft.usageMix"
+          :cache-enabled="draft.useCache"
+        />
         <div class="row wrap">
           <button type="button" class="btn" @click="dialog = ''">取消</button
           ><button class="btn primary">更新测算结果</button>
@@ -593,82 +597,21 @@ onMounted(load);
           {{ fmt(detail.totalCredits, 6) }} 额度＝每额度
           {{ money(detail.unitPrice, 8) }}；已计入赠送额度。
         </p>
-        <div
-          v-for="[key, label] in fields"
-          :key="key"
-          class="pricing-detail-channel"
-        >
-          <h3>{{ label }} · {{ isImage ? "每张图片" : "每百万 Token" }}</h3>
-          <p>
-            {{ label }}可用数量：{{
-              detail.channels[key].capacity === null
-                ? "零扣费，无法从余额推算上限"
-                : fmt(detail.channels[key].capacity, 0) +
-                  (isImage ? " 张" : " Token")
-            }}
-          </p>
-          <PackPriceComparison
-            v-if="detail.channels[key].wholePack"
-            :pack="detail.channels[key].wholePack"
-            :price="detail.price"
-            :has-original="!plan.directCosts"
-          />
-          <p v-if="detail.channels[key].wholePack">
-            {{ costName }}
-            {{ money(detail.channels[key].wholePack.cost, 6) }}；毛利
-            {{ money(detail.channels[key].wholePack.profit, 6) }}。
-          </p>
-          <dl>
-            <div v-if="!plan.directCosts">
-              <dt>上游原价</dt>
-              <dd>{{ money(result.channels[key].original) }}</dd>
-            </div>
-            <div>
-              <dt>
-                {{ plan.directCosts ? "已配置实际采购成本" : "折扣后采购成本" }}
-              </dt>
-              <dd>{{ money(result.channels[key].baseCost, 6) }}</dd>
-            </div>
-            <div v-if="Number(plan.extraCostPercent)">
-              <dt>加入额外成本后</dt>
-              <dd>{{ money(result.channels[key].cost, 6) }}</dd>
-            </div>
-            <div>
-              <dt>用户实际支付</dt>
-              <dd>{{ money(detail.channels[key].revenue, 6) }}</dd>
-            </div>
-            <div v-if="!plan.directCosts">
-              <dt>用户价／上游原价</dt>
-              <dd>{{ percent(detail.channels[key].originalPercent) }}</dd>
-            </div>
-            <div>
-              <dt>用户价／{{ costName }}</dt>
-              <dd>{{ multiplier(detail.channels[key]) }}</dd>
-            </div>
-            <div>
-              <dt>该用量的毛利率</dt>
-              <dd>
-                {{
-                  detail.channels[key].hasRevenue
-                    ? percent(detail.channels[key].marginPercent)
-                    : "无收入，毛利率不适用"
-                }}
-              </dd>
-            </div>
-            <div>
-              <dt>{{ isImage ? "每张图片" : "每千 Token" }}保本额度（约）</dt>
-              <dd>
-                {{
-                  detail.channels[key].breakEvenRate === null
-                    ? "资源包免费，无法反推"
-                    : fmt(detail.channels[key].breakEvenRate, 6) + " 额度"
-                }}
-              </dd>
-            </div>
-          </dl>
-        </div>
+        <p v-if="!isImage" class="info-banner">
+          总输入∶输出＝{{ plan.usageMix.inputRatio }}∶{{
+            plan.usageMix.outputRatio
+          }}，缓存命中率
+          {{ plan.usageMix.cacheHitPercent }}%。缓存是输入子集，不额外增加总
+          Token。
+        </p>
+        <PackUsageBreakdown
+          :row="detail"
+          :image="isImage"
+          :has-original="!plan.directCosts"
+          :cost-label="costName"
+        />
         <p class="tiny muted">
-          保本仅覆盖当前测算中的模型成本，不含其他运营费用。
+          原价和采购成本均按预计普通输入、缓存输入和输出数量加总，再与资源包实收比较。此处是估算，不影响用户真实扣费。
         </p>
       </template>
     </AppDialog>

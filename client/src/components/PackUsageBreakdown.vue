@@ -3,7 +3,6 @@ import { formatPricingNumber as fmt } from "../../../shared/pricing-simulation.m
 import PackPriceComparison from "./PackPriceComparison.vue";
 defineProps({
   row: Object,
-  fields: Array,
   image: Boolean,
   hasOriginal: Boolean,
   hasCost: { type: Boolean, default: true },
@@ -36,76 +35,67 @@ const money = (value, digits = 6) => {
       class="pack-table-scroll"
       tabindex="0"
       role="region"
-      :aria-label="row.name + '各用途价格对比'"
+      :aria-label="row.name + '综合价格估算'"
     >
       <table>
         <thead>
           <tr>
-            <th scope="col">全部额度用于</th>
-            <th scope="col">{{ image ? "可用图片" : "可用 Token" }}</th>
+            <th scope="col">{{ image ? "可用图片" : "综合预计用量" }}</th>
             <th scope="col">原价、实收与优惠</th>
             <th scope="col">{{ costLabel }}与毛利</th>
           </tr>
         </thead>
         <tbody>
           <tr
-            v-for="[key, label] in fields"
-            :key="key"
-            :class="{
-              loss: hasCost && row.channels[key].wholePack?.state === 'loss',
-            }"
+            v-if="row.blended"
+            :class="{ loss: hasCost && row.blended.state === 'loss' }"
           >
-            <th scope="row">
-              <strong>{{ label }}</strong
-              ><small
-                >用户单价 {{ money(row.channels[key].revenue) }}／{{
-                  image ? "张" : "百万 Token"
-                }}</small
-              >
-            </th>
-            <td :data-label="image ? '可用图片' : '可用 Token'">
+            <td :data-label="image ? '可用图片' : '综合预计用量'">
               <strong>{{
-                row.channels[key].capacity === null
-                  ? "不按余额设上限"
-                  : fmt(row.channels[key].capacity, 0) +
-                    (image ? " 张" : " Token")
-              }}</strong
-              ><small>仅用于{{ label }}</small>
+                image
+                  ? fmt(row.blended.imageCount, 0) + " 张"
+                  : "约 " + fmt(row.blended.totalTokens, 0) + " Token"
+              }}</strong>
+              <template v-if="!image"
+                ><small>总输入 {{ fmt(row.blended.inputTokens, 0) }}</small
+                ><small
+                  >其中缓存
+                  {{ fmt(row.blended.cachedTokens, 0) }}，已含在输入内</small
+                ><small>输出 {{ fmt(row.blended.outputTokens, 0) }}</small
+                ><small
+                  >综合单价 {{ money(row.blended.userPricePerMillion) }}／百万
+                  Token</small
+                ></template
+              >
             </td>
             <td data-label="原价、实收与优惠">
               <PackPriceComparison
-                v-if="row.channels[key].wholePack"
-                :pack="row.channels[key].wholePack"
+                :pack="row.blended"
                 :price="row.price"
                 :has-original="hasOriginal"
               />
-              <small v-else>{{
-                row.channels[key].capacity === null
-                  ? "零扣费，无法从额度反推用量和原价"
-                  : "额度不足一个完整单位，无法使用此项"
-              }}</small>
             </td>
             <td :data-label="costLabel + '与毛利'">
-              <template v-if="hasCost && row.channels[key].wholePack"
-                ><span
-                  >{{ costLabel }}
-                  {{ money(row.channels[key].wholePack.cost) }}</span
-                ><strong
-                  :class="{
-                    negative: row.channels[key].wholePack.state === 'loss',
-                  }"
-                  >毛利 {{ money(row.channels[key].wholePack.profit) }}</strong
+              <template v-if="hasCost"
+                ><span>{{ costLabel }} {{ money(row.blended.cost) }}</span
+                ><strong :class="{ negative: row.blended.state === 'loss' }"
+                  >毛利 {{ money(row.blended.profit) }}</strong
                 ><small>{{
-                  row.channels[key].wholePack.marginPercent === null
+                  row.blended.marginPercent === null
                     ? "无收入，不计算毛利率"
-                    : "毛利率 " +
-                      fmt(row.channels[key].wholePack.marginPercent, 2) +
-                      "%"
+                    : "毛利率 " + fmt(row.blended.marginPercent, 2) + "%"
                 }}</small></template
               >
-              <small v-else>{{
-                hasCost ? "无法换算此项成本与毛利" : "采购成本未配置"
-              }}</small>
+              <small v-else>采购成本未配置</small>
+            </td>
+          </tr>
+          <tr v-else>
+            <td colspan="3">
+              {{
+                row.estimateState === "zero_rate"
+                  ? "加权扣费为 0，无法推算额度对应的综合用量"
+                  : "额度不足完整单位，无法估算可用数量和价值"
+              }}
             </td>
           </tr>
         </tbody>
