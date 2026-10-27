@@ -98,11 +98,12 @@ export class AiRepository {
   async runRaw(id, db = this.store) {
     return decodeRun(await db.get("SELECT * FROM ai_runs WHERE id=?", id));
   }
-  async saveRun(db, run) {
+  async saveRun(db, run, expectedUpdatedAt) {
     run.updatedAt = now();
     const { data, ...payload } = run;
     await db.run(
-      "UPDATE ai_runs SET status=?,data=?,inputTokens=?,outputTokens=?,chargedPoints=?,updatedAt=? WHERE id=?",
+      "UPDATE ai_runs SET status=?,data=?,inputTokens=?,outputTokens=?,chargedPoints=?,updatedAt=? WHERE id=?" +
+        (expectedUpdatedAt ? " AND status='running' AND updatedAt=?" : ""),
       run.status,
       JSON.stringify(payload),
       run.usage?.input ?? null,
@@ -114,6 +115,17 @@ export class AiRepository {
           : run.chargedPoints,
       run.updatedAt,
       run.id,
+      ...(expectedUpdatedAt ? [expectedUpdatedAt] : []),
+    );
+  }
+  async heartbeat(id) {
+    return this.read((db) =>
+      db.run(
+        "UPDATE ai_runs SET updatedAt=? WHERE id=? AND status=?",
+        now(),
+        id,
+        "running",
+      ),
     );
   }
   async insertRun(db, run) {
@@ -201,7 +213,7 @@ export class AiRepository {
         run.status = "pending";
         run.error = "任务租约已过期，用量待管理员核对；预占额度暂不释放";
         run.errorCode = "AI_INTERRUPTED";
-        await this.saveRun(db, run);
+        await this.saveRun(db, run, row.updatedAt);
       }
     });
   }

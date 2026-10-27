@@ -4,6 +4,7 @@ import { lookup } from "node:dns/promises";
 import { isIP, BlockList } from "node:net";
 import { z } from "zod";
 import { AiError, normalizeUsage } from "./policy.mjs";
+import { setLongTimeout } from "./long-timeout.mjs";
 
 const redact = (value, key, max = 1500) =>
   String(value ?? "")
@@ -70,14 +71,14 @@ export function createProvider(options = {}) {
     const timeoutMs = config.timeoutMs || options.timeoutMs || 75000;
     const target = await new Promise((resolve, reject) => {
       const cleanup = () => {
-        clearTimeout(timer);
+        cancelTimer();
         signal?.removeEventListener("abort", abort);
       };
       const abort = () => {
         cleanup();
         reject(new AiError(499, "任务已取消", "AI_CANCELLED"));
       };
-      const timer = setTimeout(() => {
+      const cancelTimer = setLongTimeout(() => {
         cleanup();
         reject(new AiError(504, "服务商域名解析超时", "AI_TIMEOUT"));
       }, timeoutMs);
@@ -97,7 +98,7 @@ export function createProvider(options = {}) {
       const finish = (error, data) => {
         if (finished) return;
         finished = true;
-        clearTimeout(deadline);
+        cancelDeadline();
         signal?.removeEventListener("abort", abort);
         if (error) {
           error.sent = sent;
@@ -216,7 +217,7 @@ export function createProvider(options = {}) {
           new AiError(409, "调用已取消，用量可能需要核对", "AI_CANCELLED"),
         );
       };
-      const deadline = setTimeout(
+      const cancelDeadline = setLongTimeout(
         () => {
           req.destroy();
           finish(

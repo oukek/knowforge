@@ -55,9 +55,9 @@ const fields = [
   ["perQuestionRuns", "每题近 24 小时评阅次数", 1, 10],
 ];
 const schedulingFields = [
-  ["maxAttempts", "每任务最多尝试次数（含首次）", 1, 3],
-  ["attemptTimeoutMs", "单次上游超时（毫秒）", 10000, 60000],
-  ["totalTimeoutMs", "任务总超时（毫秒）", 10000, 90000],
+  ["maxAttempts", "每任务最多尝试次数（含首次）"],
+  ["attemptTimeoutMs", "单次上游超时（毫秒）"],
+  ["totalTimeoutMs", "任务总超时（毫秒）"],
 ];
 const title = computed(
   () =>
@@ -276,15 +276,9 @@ async function save() {
       const values = Object.fromEntries(
         schedulingFields.map(([key]) => [key, Number(draft.value[key])]),
       );
-      for (const [key, label, min, max] of schedulingFields)
-        if (
-          !Number.isInteger(values[key]) ||
-          values[key] < min ||
-          values[key] > max
-        )
-          throw Error(`${label}必须是 ${min}–${max} 之间的整数。`);
-      if (values.totalTimeoutMs < values.attemptTimeoutMs)
-        throw Error("任务总超时不能小于单次上游超时。");
+      for (const [key, label] of schedulingFields)
+        if (!Number.isSafeInteger(values[key]) || values[key] <= 0)
+          throw Error(`${label}必须是有效的正整数。`);
       const data = await request("/admin/ai/scheduling", "PUT", {
         revision: pool.revision,
         ...values,
@@ -833,16 +827,11 @@ onMounted(() => void act(load));
         @submit.prevent="save"
       >
         <p class="tiny muted">
-          所有模型使用同一套超时和重试规则，仅影响新任务。最多尝试次数包含首次调用；自动切换时每次仍受单次超时限制，整项任务受总时限限制。单模型连接测试只调用目标模型一次。
+          所有模型使用同一套规则，仅影响新任务。最多尝试次数包含首次调用，每个候选模型最多尝试一次；可用模型不足或达到总时限时会提前停止。单次超时超过总时限时，按总时限结束。单模型连接测试只调用目标模型一次。
         </p>
         <div class="ai-admin-grid">
-          <label v-for="[key, label, min, max] in schedulingFields" :key="key"
-            >{{ label
-            }}<AppField
-              v-model="draft[key]"
-              type="number"
-              :min="min"
-              :max="max"
+          <label v-for="[key, label] in schedulingFields" :key="key"
+            >{{ label }}<AppField v-model="draft[key]" type="number"
           /></label>
         </div>
         <button class="btn primary" :disabled="busy">保存统一调用设置</button>

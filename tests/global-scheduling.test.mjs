@@ -79,7 +79,7 @@ test("模型残留的超时和尝试次数不覆盖全局策略；修改保留�
   );
 });
 
-test("统一设置只允许管理员和有效 CSRF，校验范围、冲突、审计，不重置健康状态", async (t) => {
+test("统一设置只允许管理员和有效 CSRF，校验数据类型、冲突、审计，不重置健康状态", async (t) => {
   const f = await fixture(t);
   await f.configure();
   const pool = (await f.admin.api("/admin/ai/pool")).data.pool;
@@ -108,10 +108,10 @@ test("统一设置只允许管理员和有效 CSRF，校验范围、冲突、审
   );
   for (const invalid of [
     { maxAttempts: 0 },
-    { maxAttempts: 4 },
-    { attemptTimeoutMs: 9999 },
-    { totalTimeoutMs: 90001 },
-    { attemptTimeoutMs: 30000, totalTimeoutMs: 20000 },
+    { maxAttempts: -1 },
+    { attemptTimeoutMs: 0 },
+    { totalTimeoutMs: -1 },
+    { maxAttempts: 1.5 },
     { maxAttempts: "2" },
     { unexpected: true },
   ])
@@ -147,6 +147,166 @@ test("统一设置只允许管理员和有效 CSRF，校验范围、冲突、审
   );
   assert.equal(audits.length, 1);
   assert(!JSON.stringify(audits).includes("server-only-key"));
+});
+
+test("统一设置不再限制次数、超时范围或总时限与单次时限的大小关系", async (t) => {
+  const f = await fixture(t);
+  await f.configure();
+  let pool = (await f.admin.api("/admin/ai/pool")).data.pool;
+  for (const values of [
+    { maxAttempts: 8, attemptTimeoutMs: 120000, totalTimeoutMs: 5000 },
+    { maxAttempts: 4, attemptTimeoutMs: 1, totalTimeoutMs: 3000000000 },
+  ]) {
+    const saved = await f.admin.api(
+      "/admin/ai/scheduling",
+      "PUT",
+      scheduling(pool.revision, values),
+    );
+    assert.equal(saved.status, 200, JSON.stringify(saved.data));
+    pool = saved.data.pool;
+    for (const [key, value] of Object.entries(values))
+      assert.equal(pool.policy[key], value);
+  }
+  const oldClient = await f.admin.api("/admin/ai/pool", "PUT", {
+    revision: pool.revision,
+    policy: pool.policy,
+    providers: pool.providers.map(({ hasKey, ...p }) => p),
+  });
+  assert.equal(oldClient.status, 200, JSON.stringify(oldClient.data));
+});
+
+test("配置超过三次尝试时，可以依次切换更多模型", async (t) => {
+  const f = await fixture(t);
+  await f.configure();
+  await f.grant();
+  let pool = (await f.admin.api("/admin/ai/pool")).data.pool;
+  const first = pool.providers[0];
+  for (let i = 1; i < 5; i++)
+    pool.providers.push({
+      ...first,
+      id: randomUUID(),
+      name: `备用服务商 ${i}`,
+      apiKey: "server-only-key",
+      models: [
+        {
+          ...first.models[0],
+          id: randomUUID(),
+          model: `备用模型 ${i}`,
+          priority: i,
+        },
+      ],
+    });
+  const saved = await f.admin.api("/admin/ai/pool", "PUT", {
+    revision: pool.revision,
+    policy: { ...pool.policy, maxAttempts: 5 },
+    providers: pool.providers.map(({ hasKey, ...p }) => p),
+  });
+  assert.equal(saved.status, 200, JSON.stringify(saved.data));
+  const generate = f.provider.generate;
+  let calls = 0;
+  f.provider.generate = async (...args) => {
+    calls++;
+    if (calls < 5) {
+      const e = new AiError(502, "临时失败", "AI_PROVIDER_HTTP");
+      e.upstreamStatus = 503;
+      e.noCharge = true;
+      throw e;
+    }
+    return generate(...args);
+  };
+  const started = await f.user.api("/ai/grade", "POST", f.input());
+  assert.equal(started.status, 202, JSON.stringify(started.data));
+  const run = await f.settled(f.user, started.data.run.id);
+  assert.equal(run.status, "succeeded", JSON.stringify(run));
+  assert.equal(calls, 5);
+});
+
+test("运行中的长任务自动更新租约，过期恢复不会中断它", async (t) => {
+  const f = await fixture(t, { heartbeatMs: 10 });
+  await f.configure();
+  await f.grant();
+  let release, entered;
+  const gate = new Promise((resolve) => (release = resolve));
+  const started = new Promise((resolve) => (entered = resolve));
+  t.after(() => release());
+  const generate = f.provider.generate;
+  f.provider.generate = async (...args) => {
+    entered();
+    await gate;
+    return generate(...args);
+  };
+  const call = await f.user.api("/ai/grade", "POST", f.input());
+  await started;
+  const id = call.data.run.id;
+  const stale = new Date(Date.now() - 121000).toISOString();
+  await f.ai.repo.read((db) =>
+    db.run("UPDATE ai_runs SET updatedAt=? WHERE id=?", stale, id),
+  );
+  let row;
+  for (let i = 0; i < 100; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    row = await f.ai.repo.read((db) =>
+      db.get("SELECT * FROM ai_runs WHERE id=?", id),
+    );
+    if (row.updatedAt !== stale) break;
+  }
+  assert.notEqual(row.updatedAt, stale, "heartbeat must renew the task");
+  await f.ai.repo.recoverExpired();
+  await f.ai.repo.transaction(async (db) => {
+    const unit = await f.ai.billing.unit(db, id);
+    unit.expiresAt = new Date(Date.now() - 1000).toISOString();
+    await f.ai.billing.saveUnit(db, unit);
+  });
+  await f.ai.billing.recovery();
+  row = await f.ai.repo.read((db) =>
+    db.get("SELECT * FROM ai_runs WHERE id=?", id),
+  );
+  assert.equal(row.status, "running");
+  assert.equal(
+    (await f.ai.repo.read((db) => f.ai.billing.unit(db, id))).status,
+    "reserved",
+  );
+  release();
+  assert.equal((await f.settled(f.user, id)).status, "succeeded");
+});
+
+test("任务总时限短于单次时限时按总时限结束", async (t) => {
+  const f = await fixture(t);
+  await f.configure();
+  await f.grant();
+  const pool = (await f.admin.api("/admin/ai/pool")).data.pool;
+  const saved = await f.admin.api(
+    "/admin/ai/scheduling",
+    "PUT",
+    scheduling(pool.revision, {
+      attemptTimeoutMs: 10000,
+      totalTimeoutMs: 100,
+      maxAttempts: 5,
+    }),
+  );
+  assert.equal(saved.status, 200);
+  let configuredTimeout;
+  f.provider.generate = async (
+    config,
+    key,
+    messages,
+    schema,
+    signal,
+    onSend,
+  ) => {
+    configuredTimeout = config.timeoutMs;
+    onSend();
+    await new Promise((resolve, reject) =>
+      signal.addEventListener("abort", () => reject(new Error("aborted")), {
+        once: true,
+      }),
+    );
+  };
+  const call = await f.user.api("/ai/grade", "POST", f.input());
+  assert.equal(call.status, 202);
+  const run = await f.settled(f.user, call.data.run.id);
+  assert.equal(run.status, "released");
+  assert(configuredTimeout <= 100 && configuredTimeout > 0);
 });
 
 test("进行中的任务在切换模型时继续使用启动时的统一配置，后续任务使用新配置", async (t) => {

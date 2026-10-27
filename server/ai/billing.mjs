@@ -977,6 +977,9 @@ export class AiBilling {
         const u = decode(raw);
         const run = await this.repo.runRaw(u.id, db);
         if (!run) continue;
+        // The reconciliation deadline is not a deadline for an active call.
+        // Long-running tasks keep their reservation until they actually finish.
+        if (run.status === "running") continue;
         if (u.status === "reserved" && run.status === "pending") {
           u.status = "pending";
           await this.saveUnit(db, u);

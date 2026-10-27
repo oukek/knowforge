@@ -51,15 +51,12 @@ const policyObject = z
     dailyRuns: integer(1, 100, 20),
     siteDailyRuns: integer(1, 10000, 200),
     perQuestionRuns: integer(1, 10, 3),
-    maxAttempts: integer(1, 3, 3),
-    attemptTimeoutMs: integer(10000, 60000, 25000),
-    totalTimeoutMs: integer(10000, 90000, 80000),
+    maxAttempts: z.number().int().positive().default(3),
+    attemptTimeoutMs: z.number().int().positive().default(25000),
+    totalTimeoutMs: z.number().int().positive().default(80000),
   })
   .strict();
-export const policySchema = policyObject.refine(
-  (x) => x.totalTimeoutMs >= x.attemptTimeoutMs,
-  "总超时不能小于单次超时",
-);
+export const policySchema = policyObject;
 const modelRate = price.refine(
   (value) => micro(value) > 0n && micro(value) <= 1000n * 1000000n,
   "每千 Token 扣费须大于 0 且不超过 1000，最多六位小数",
@@ -79,15 +76,11 @@ export const modelPolicySchema = policyObject
 export const schedulingSchema = z
   .object({
     revision: z.string().uuid(),
-    maxAttempts: z.number().int().min(1).max(3),
-    attemptTimeoutMs: z.number().int().min(10000).max(60000),
-    totalTimeoutMs: z.number().int().min(10000).max(90000),
+    maxAttempts: z.number().int().positive(),
+    attemptTimeoutMs: z.number().int().positive(),
+    totalTimeoutMs: z.number().int().positive(),
   })
-  .strict()
-  .refine(
-    (x) => x.totalTimeoutMs >= x.attemptTimeoutMs,
-    "总超时不能小于单次超时",
-  );
+  .strict();
 const modelSchema = z
   .object({
     id: z.string().uuid(),

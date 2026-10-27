@@ -3,6 +3,7 @@ import { AiRepository, decodeRun } from "./repository.mjs";
 import { createProvider } from "./provider.mjs";
 import { AiPool } from "./pool.mjs";
 import { AiRunEvents } from "./run-events.mjs";
+import { setLongTimeout } from "./long-timeout.mjs";
 import { invalidOutput, runFailure } from "./diagnostics.mjs";
 import {
   effectivePolicy,
@@ -40,6 +41,7 @@ export class AiService {
     this.pool = new AiPool(this.repo, this.provider, this.rootKey, options);
     this.billing = new AiBilling(this.repo, options);
     this.jobs = new Map();
+    this.heartbeatMs = options.heartbeatMs ?? 30000;
     this.events = new AiRunEvents(options.events);
     this.ipLimits = new Map();
   }
@@ -555,6 +557,23 @@ export class AiService {
       const controller = new AbortController();
       const job = { controller };
       this.jobs.set(operation.run.id, job);
+      job.heartbeat = setInterval(() => {
+        if (job.heartbeatPending) return;
+        job.heartbeatPending = true;
+        this.repo
+          .heartbeat(operation.run.id)
+          .catch((e) =>
+            console.error(
+              "AI task heartbeat error:",
+              operation.run.id,
+              e.code || e.name,
+            ),
+          )
+          .finally(() => {
+            job.heartbeatPending = false;
+          });
+      }, this.heartbeatMs);
+      job.heartbeat.unref?.();
       job.promise = this.execute(operation, prepared.schema, controller.signal)
         .catch((e) =>
           console.error(
@@ -563,7 +582,10 @@ export class AiService {
             e.code || e.name,
           ),
         )
-        .finally(() => this.jobs.delete(operation.run.id));
+        .finally(() => {
+          clearInterval(job.heartbeat);
+          this.jobs.delete(operation.run.id);
+        });
     }
     return {
       run: await this.publicRun(operation.run, user.id),
@@ -594,7 +616,14 @@ export class AiService {
         }
         const remaining =
           operation.config.totalTimeoutMs - (Date.now() - started);
-        if (remaining <= 0) break;
+        if (remaining <= 0) {
+          error = {
+            message: "任务总时限已到",
+            code: "AI_TIMEOUT",
+            noCharge: attempts.every((a) => a.noCharge),
+          };
+          break;
+        }
         if (!lease) {
           let candidateLease;
           try {
@@ -653,15 +682,20 @@ export class AiService {
         const abort = () => controller.abort();
         signal.addEventListener("abort", abort, { once: true });
         if (signal.aborted) controller.abort();
+        const remainingBeforeSend =
+          operation.config.totalTimeoutMs - (Date.now() - started);
+        const totalExpiredBeforeSend = remainingBeforeSend <= 0;
         config.timeoutMs = Math.max(
           1,
-          Math.min(
-            config.timeoutMs,
-            operation.config.totalTimeoutMs - (Date.now() - started),
-          ),
+          Math.min(config.timeoutMs, remainingBeforeSend),
         );
-        const timer = setTimeout(abort, config.timeoutMs);
+        const cancelTimer = setLongTimeout(abort, config.timeoutMs);
         try {
+          if (totalExpiredBeforeSend) {
+            const timeout = new AiError(504, "任务总时限已到", "AI_TIMEOUT");
+            timeout.noCharge = true;
+            throw timeout;
+          }
           response = await this.provider.generate(
             config,
             decrypt(encryptedKey, this.rootKey),
@@ -795,7 +829,7 @@ export class AiService {
           attempt.noCharge = !!error.noCharge;
           attempt.requestId = e.requestId || "";
         } finally {
-          clearTimeout(timer);
+          cancelTimer();
           signal.removeEventListener("abort", abort);
           attempt.endedAt = now();
           attempt.durationMs =
@@ -818,7 +852,8 @@ export class AiService {
           attempt.costBasis = target.procurement || null;
           await this.saveAttempts(operation.run.id, attempts);
           try {
-            await this.pool.outcome(target, failure, lease.observed);
+            if (!totalExpiredBeforeSend)
+              await this.pool.outcome(target, failure, lease.observed);
           } finally {
             lease.release();
             lease = null;
