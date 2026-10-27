@@ -8,6 +8,7 @@ import AppSelect from "../components/AppSelect.vue";
 import AppDisclosure from "../components/AppDisclosure.vue";
 import AiEvaluation from "../components/AiEvaluation.vue";
 import AiRunMeta from "../components/AiRunMeta.vue";
+import AiTaskProgress from "../components/AiTaskProgress.vue";
 import MyAiCredits from "../components/MyAiCredits.vue";
 import Icon from "../components/Icon.vue";
 const route = useRoute(),
@@ -32,6 +33,7 @@ const mode = ref("practice"),
 const task = useAiTask(),
   run = task.run,
   busy = task.busy,
+  connection = task.connection,
   taskError = task.error;
 let historyVersion = 0,
   detailVersion = 0;
@@ -47,7 +49,11 @@ async function loadHistory() {
     }))
       if (value) query.set(key, value);
     const data = await request("/ai/runs?" + query);
-    if (version === historyVersion) history.value = data;
+    if (version === historyVersion) {
+      history.value = data;
+      const active = data.rows.find((row) => row.status === "running");
+      if (active && !busy.value && !route.query.run) task.resume(active.id);
+    }
   } catch (e) {
     message.value = e.message;
   }
@@ -160,6 +166,9 @@ watch(
 watch(run, async (value) => {
   if (!value) return;
   if (route.query.run === value.id) selected.value = value;
+  const index = history.value.rows.findIndex((row) => row.id === value.id);
+  if (index >= 0)
+    history.value.rows[index] = { ...history.value.rows[index], ...value };
   if (value.status !== "running") {
     if (value.sessionId && session.value?.id === value.sessionId) {
       const prior = session.value.turns.length;
@@ -228,6 +237,11 @@ onMounted(async () => {
       {{ message || taskError }}
     </p>
     <template v-if="tab === 'history'">
+      <AiTaskProgress
+        v-if="run && !selected"
+        :run="run"
+        :connection="connection"
+      />
       <div class="ai-form-row">
         <AppSelect
           v-model="feature"
@@ -328,6 +342,7 @@ onMounted(async () => {
             收起详情
           </button>
         </div>
+        <AiTaskProgress :run="selected" :connection="connection" />
         <AiRunMeta :run="selected" /><button
           v-if="selected.status === 'running'"
           class="btn small"
@@ -495,6 +510,11 @@ onMounted(async () => {
               取消当前调用
             </button>
           </div>
+          <AiTaskProgress
+            v-if="(busy && !run) || run?.sessionId === session.id"
+            :run="run"
+            :busy="busy"
+            :connection="connection" />
           <AiRunMeta v-if="run?.sessionId === session.id" :run="run"
         /></template>
         <section v-if="session.report" class="ai-report">

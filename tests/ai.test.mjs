@@ -800,7 +800,7 @@ test("加权分配、并发溢出、恢复单探测与健康状态持久化", as
   const first = f.ai.pool.acquire(snapshot.targets),
     second = f.ai.pool.acquire(snapshot.targets);
   assert.notEqual(first.target.id, second.target.id);
-  assert.throws(() => f.ai.pool.acquire(snapshot.targets), /繁忙/);
+  assert.throws(() => f.ai.pool.acquire(snapshot.targets), { code: "AI_POOL_UNAVAILABLE" });
   first.release();
   first.release();
   second.release();
@@ -813,7 +813,7 @@ test("加权分配、并发溢出、恢复单探测与健康状态持久化", as
   restored.clock = () => Date.now() + 130000;
   assert.equal(restored.ready(target), true);
   const probe = restored.acquire([target]);
-  assert.throws(() => restored.acquire([target]), /繁忙/);
+  assert.throws(() => restored.acquire([target]), { code: "AI_POOL_UNAVAILABLE" });
   await restored.outcome(target, null, probe.observed);
   probe.release();
   assert.equal(restored.health.has(target.providerId), false);

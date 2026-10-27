@@ -34,6 +34,18 @@ defineProps({ run: Object });
     <RouterLink :to="'/ai?run=' + run.id" class="text-link"
       >完整记录</RouterLink
     >
-    <p v-if="run.error" class="ai-error">{{ run.error }}</p>
+    <p v-if="run.error" class="ai-error" role="alert">
+      <strong>{{ run.failure?.title || run.error }}</strong>
+      <template v-if="run.failure?.suggestion"
+        ><br />{{ run.failure.suggestion }}</template
+      >
+      <br /><span class="tiny"
+        >{{ run.errorCode || "AI_ERROR"
+        }}{{
+          run.failure?.httpStatus ? " · HTTP " + run.failure.httpStatus : ""
+        }}
+        · 调用编号 {{ run.id }}</span
+      >
+    </p>
   </div>
 </template>

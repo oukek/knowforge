@@ -22,10 +22,11 @@ export function toast(message) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (store.toast = ""), 3500);
 }
-export async function request(path, method = "GET", body) {
+export async function request(path, method = "GET", body, options = {}) {
   const userId = store.user?.id;
   const response = await fetch(apiUrl(path), {
     method,
+    signal: options.signal,
     credentials: "include",
     headers: {
       ...(body ? { "Content-Type": "application/json" } : {}),
@@ -38,6 +39,7 @@ export async function request(path, method = "GET", body) {
     },
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (response.ok && options.raw) return response;
   let data;
   try {
     data = await response.json();

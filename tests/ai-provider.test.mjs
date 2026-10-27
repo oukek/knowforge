@@ -84,6 +84,10 @@ test("真实 HTTP 适配 Chat/Responses、输出上限、凭据头、模型列�
       schema,
     );
     assert.equal(result.complete, true);
+    assert.equal(
+      result.finishReason,
+      protocol === "responses" ? "completed" : "stop",
+    );
     assert.equal(result.usage.total, 300);
     assert.equal(result.usage.reasoning, 30);
     assert.equal(result.actualModel, "actual-model");
@@ -270,4 +274,61 @@ test("HTTP 故障保留状态、限额错误码、请求 ID 与 Retry-After，�
     ),
     (e) => e.code === "AI_CANCELLED" && !e.sent,
   );
+});
+
+test("保留 Chat/Responses 输出截断原因；HTTP 200 的非 JSON 响应也保留脱敏诊断", async (t) => {
+  let mode = "chat";
+  const baseUrl = await endpoint(t, (req, res) => {
+    res.setHeader(
+      "Content-Type",
+      mode === "html" ? "text/html" : "application/json",
+    );
+    if (mode === "html") return res.end("gateway error Bearer private-key");
+    res.end(
+      JSON.stringify(
+        mode === "chat"
+          ? {
+              model: "mock",
+              choices: [
+                {
+                  message: { content: '{"questions":[' },
+                  finish_reason: "length",
+                },
+              ],
+              usage: { prompt_tokens: 10, completion_tokens: 512 },
+            }
+          : {
+              model: "mock",
+              status: "incomplete",
+              incomplete_details: { reason: "max_output_tokens" },
+              output: [],
+              usage: { input_tokens: 10, output_tokens: 512 },
+            },
+      ),
+    );
+  });
+  const provider = createProvider({ allowLocalTest: true });
+  for (const protocol of ["chat", "responses"]) {
+    mode = protocol;
+    const result = await provider.generate(
+      { baseUrl, protocol, model: "mock", format: "json", outputLimit: 512 },
+      "private-key",
+      [],
+      z.object({ ok: z.boolean() }),
+    );
+    assert.equal(result.complete, false);
+    assert.equal(
+      result.finishReason,
+      protocol === "chat" ? "length" : "max_output_tokens",
+    );
+    assert.equal(result.usage.output, 512);
+  }
+  mode = "html";
+  await assert.rejects(provider.models({ baseUrl }, "private-key"), (error) => {
+    assert.equal(error.code, "AI_PROVIDER_JSON");
+    assert.equal(error.upstreamStatus, 200);
+    assert.match(error.providerDetail, /gateway error/);
+    assert(!error.providerDetail.includes("private-key"));
+    return true;
+  });
 });

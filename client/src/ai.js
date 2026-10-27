@@ -1,5 +1,6 @@
 import { reactive, ref, watch, onBeforeUnmount } from "vue";
 import { store, request, mutate } from "./store.js";
+import { monitorAiRun } from "./ai-task-monitor.mjs";
 export const ai = reactive({
   loaded: false,
   configured: false,
@@ -55,35 +56,52 @@ export async function refreshAiLearning() {
 export function useAiTask() {
   const run = ref(null),
     busy = ref(false),
-    error = ref("");
-  let timer,
+    error = ref(""),
+    connection = ref("idle");
+  let controller,
+    disposed = false,
     generation = 0,
     reused = false;
   const stop = () => {
     generation++;
-    clearTimeout(timer);
+    controller?.abort();
+    controller = null;
     busy.value = false;
+    connection.value = "idle";
   };
-  const poll = async (id, current) => {
+  const accept = (value, current) => {
+    if (generation !== current) return;
+    run.value = { ...value, reused };
+    if (value.status !== "running") {
+      busy.value = false;
+      connection.value = "idle";
+      // Delivery succeeded even if a secondary balance/learning refresh fails.
+      void Promise.allSettled([refreshAi(), refreshAiLearning()]);
+    }
+  };
+  const follow = async (id, current) => {
+    controller = new AbortController();
+    const signal = controller.signal;
     try {
-      const value = await request("/ai/runs/" + id);
-      if (generation !== current) return;
-      run.value = { ...value, reused };
-      if (value.status === "running")
-        timer = setTimeout(() => poll(id, current), 1200);
-      else {
-        busy.value = false;
-        await refreshAi();
-        await refreshAiLearning();
-      }
+      await monitorAiRun({
+        id,
+        signal,
+        request,
+        onRun: (value) => accept(value, current),
+        onConnection: (value) => {
+          if (generation === current && busy.value) connection.value = value;
+        },
+      });
     } catch (e) {
-      if (generation === current) {
+      if (generation === current && !signal.aborted) {
         busy.value = false;
+        connection.value = "offline";
         error.value = e.message + "，可从 AI 历史查看任务";
       }
     }
   };
   async function start(path, body) {
+    if (disposed) return;
     stop();
     const current = generation;
     busy.value = true;
@@ -96,14 +114,8 @@ export function useAiTask() {
       });
       if (generation !== current) return;
       reused = !!data.reused;
-      run.value = { ...data.run, reused };
-      if (data.run.status === "running")
-        timer = setTimeout(() => poll(data.run.id, current), 700);
-      else {
-        busy.value = false;
-        await refreshAi();
-        await refreshAiLearning();
-      }
+      accept(data.run, current);
+      if (data.run.status === "running") void follow(data.run.id, current);
       return data.run;
     } catch (e) {
       if (generation === current) {
@@ -122,13 +134,26 @@ export function useAiTask() {
     }
   }
   function resume(id) {
+    if (disposed) return;
     stop();
     reused = false;
     busy.value = true;
     error.value = "";
-    void poll(id, generation);
+    run.value = null;
+    void follow(id, generation);
   }
-  watch(() => store.user?.id, stop);
-  onBeforeUnmount(stop);
-  return { run, busy, error, start, cancel, stop, resume };
+  watch(
+    () => store.user?.id,
+    () => {
+      stop();
+      run.value = null;
+      error.value = "";
+    },
+    { flush: "sync" },
+  );
+  onBeforeUnmount(() => {
+    disposed = true;
+    stop();
+  });
+  return { run, busy, error, connection, start, cancel, stop, resume };
 }

@@ -47,7 +47,7 @@ export function quote(messages, rates, feature) {
       ? rates.inputRate
       : rates.cachedRate;
   return usageCharge(
-    { input, cached: 0, output: feature === "test" ? 512 : rates.outputLimit },
+    { input, cached: 0, output: rates.outputLimit },
     { ...rates, inputRate: rate },
   );
 }

@@ -5,6 +5,13 @@ import { isIP, BlockList } from "node:net";
 import { z } from "zod";
 import { AiError, normalizeUsage } from "./policy.mjs";
 
+const redact = (value, key, max = 1500) =>
+  String(value ?? "")
+    .split(key)
+    .join("[REDACTED]")
+    .replace(/Bearer\s+[\w.+\/-]+/gi, "Bearer [REDACTED]")
+    .slice(0, max);
+
 const blocked = new BlockList();
 for (const [ip, bits] of [
   ["0.0.0.0", 8],
@@ -139,6 +146,7 @@ export function createProvider(options = {}) {
               error.requestId = String(
                 res.headers["x-request-id"] || res.headers["request-id"] || "",
               ).slice(0, 191);
+              error.requestId = redact(error.requestId, key, 191);
               const retryAfter = String(res.headers["retry-after"] || "");
               const seconds = /^\d+(?:\.\d+)?$/.test(retryAfter)
                 ? Number(retryAfter)
@@ -162,22 +170,37 @@ export function createProvider(options = {}) {
                     .split(key)
                     .join("[REDACTED]")
                     .slice(0, 1500);
-              } catch {}
+              } catch {
+                error.providerDetail = redact(
+                  Buffer.concat(chunks).toString("utf8"),
+                  key,
+                );
+              }
               return finish(error);
             }
             try {
               finish(null, {
                 body: JSON.parse(Buffer.concat(chunks).toString("utf8")),
-                requestId: String(
+                requestId: redact(
                   res.headers["x-request-id"] ||
                     res.headers["request-id"] ||
                     "",
-                ).slice(0, 191),
+                  key,
+                  191,
+                ),
               });
             } catch {
-              finish(
-                new AiError(502, "服务商返回了无效 JSON", "AI_PROVIDER_JSON"),
+              const error = new AiError(
+                502,
+                "服务商返回了无效 JSON",
+                "AI_PROVIDER_JSON",
               );
+              error.upstreamStatus = res.statusCode;
+              error.providerDetail = redact(
+                Buffer.concat(chunks).toString("utf8"),
+                key,
+              );
+              finish(error);
             }
           });
           res.on("error", () =>
@@ -202,15 +225,17 @@ export function createProvider(options = {}) {
         },
         Math.max(1, timeoutMs - (Date.now() - started)),
       );
-      req.on("error", () =>
-        finish(
-          new AiError(
-            502,
-            "无法连接服务商，请检查服务地址和网络",
-            "AI_PROVIDER_NETWORK",
-          ),
-        ),
-      );
+      req.on("error", (cause) => {
+        const error = new AiError(
+          502,
+          "无法连接服务商，请检查服务地址和网络",
+          "AI_PROVIDER_NETWORK",
+        );
+        error.networkCode = /^[A-Z_]{2,60}$/.test(cause.code || "")
+          ? cause.code
+          : "";
+        finish(error);
+      });
       signal?.addEventListener("abort", abort, { once: true });
       if (signal?.aborted) return abort();
       try {
@@ -316,6 +341,13 @@ export function createProvider(options = {}) {
               .join("")
           : raw.choices?.[0]?.message?.refusal || "";
       return {
+        finishReason: redact(
+          config.protocol === "responses"
+            ? raw.incomplete_details?.reason || raw.status || ""
+            : raw.choices?.[0]?.finish_reason || "",
+          key,
+          100,
+        ),
         refusal:
           typeof refusal === "string"
             ? refusal.slice(0, 2000).split(key).join("[REDACTED]")
@@ -324,10 +356,10 @@ export function createProvider(options = {}) {
           typeof text === "string" ? text.split(key).join("[REDACTED]") : "",
         complete,
         usage,
-        requestId: response.requestId || raw.id || "",
+        requestId: redact(response.requestId || raw.id || "", key, 191),
         actualModel:
           typeof raw.model === "string"
-            ? raw.model.slice(0, 160)
+            ? redact(raw.model, key, 160)
             : config.model,
       };
     },

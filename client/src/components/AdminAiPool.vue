@@ -7,12 +7,17 @@ import AppField from "./AppField.vue";
 import AppSelect from "./AppSelect.vue";
 import AppChoice from "./AppChoice.vue";
 import AiRunMeta from "./AiRunMeta.vue";
+import AiTaskProgress from "./AiTaskProgress.vue";
+import AdminModelTestResult from "./AdminModelTestResult.vue";
 import ModelPriceEditor from "./ModelPriceEditor.vue";
 const props = defineProps({ section: { type: String, default: "providers" } });
 const filterProvider = ref(""),
   filterKind = ref(""),
   search = ref("");
 const priceTarget = ref(null);
+const testFeature = ref("connection"),
+  testDetail = ref(null),
+  testDetailError = ref("");
 const busy = ref(false),
   error = ref(""),
   formError = ref(""),
@@ -28,6 +33,11 @@ const draft = ref({}),
   testTarget = ref(null);
 const task = useAiTask(),
   clone = (x) => JSON.parse(JSON.stringify(x));
+const testProvider = computed(() =>
+  pool.providers.find((p) =>
+    p.models.some((m) => m.id === testTarget.value?.id),
+  ),
+);
 const features = [
   ["grade", "主观评阅"],
   ["variants", "举一反三"],
@@ -342,13 +352,25 @@ function test(m) {
   task.run.value = null;
   task.error.value = "";
   testTarget.value = m;
+  testFeature.value = "connection";
+  testDetail.value = null;
+  testDetailError.value = "";
   formError.value = "";
   dialog.value = "test";
 }
 watch(
-  () => task.run.value?.status,
-  (value) => {
-    if (value && value !== "running") void act(refreshHealth);
+  [() => task.run.value?.id, () => task.run.value?.status],
+  async ([id, value]) => {
+    testDetail.value = null;
+    testDetailError.value = "";
+    if (!id || !value || value === "running") return;
+    void act(refreshHealth);
+    try {
+      const detail = await request("/admin/ai/runs/" + id);
+      if (task.run.value?.id === id) testDetail.value = detail;
+    } catch (e) {
+      if (task.run.value?.id === id) testDetailError.value = e.message;
+    }
   },
 );
 onMounted(() => void act(load));
@@ -546,8 +568,23 @@ onMounted(() => void act(load));
         </div>
         <template v-if="m.kind !== 'image'"
           ><p class="ai-health" :data-state="state(m.id)?.state">
-            {{ stateText(m.id) }} {{ state(m.id)?.reason }}
+            模型：{{ stateText(m.id) }} {{ state(m.id)?.reason }}
           </p>
+          <p
+            v-if="state(p.id)?.state !== 'healthy'"
+            class="ai-health"
+            :data-state="state(p.id)?.state"
+          >
+            服务商：{{ stateText(p.id) }} {{ state(p.id)?.reason }}
+          </p>
+          <button
+            v-if="state(p.id) && state(p.id).state !== 'healthy'"
+            class="text-btn"
+            :disabled="busy"
+            @click="reset(p.id)"
+          >
+            恢复服务商
+          </button>
           <button
             v-if="state(m.id) && state(m.id).state !== 'healthy'"
             class="text-btn"
@@ -784,13 +821,68 @@ onMounted(() => void act(load));
             testTarget.model
           }}。测试使用已保存配置，真实上游调用会记录用量与平台成本。
         </p>
+        <AppSelect
+          v-model="testFeature"
+          label="模型测试场景"
+          :disabled="task.busy.value"
+          :options="[
+            { value: 'connection', label: '基础连接 · 返回标准确认结果' },
+            { value: 'variants', label: '举一反三 · 生成并校验 1 道题' },
+          ]" />
+        <p class="tiny muted">
+          测试使用该模型已保存的协议、输出模式与 Token
+          上限，只调用目标模型一次。出题测试使用系统内置知识点，不改变模型用途，也不保存正式题目。
+        </p>
+        <div
+          v-if="testProvider && state(testProvider.id)?.state !== 'healthy'"
+          class="info-banner"
+        >
+          服务商：{{ stateText(testProvider.id) }} ·
+          {{ state(testProvider.id)?.reason }}
+          <button
+            class="text-btn"
+            :disabled="busy || task.busy.value"
+            @click="reset(testProvider.id)"
+          >
+            确认配置已修复，恢复服务商
+          </button>
+        </div>
+        <div
+          v-if="
+            state(testTarget.id) && state(testTarget.id).state !== 'healthy'
+          "
+          class="info-banner"
+        >
+          模型：{{ stateText(testTarget.id) }} ·
+          {{ state(testTarget.id)?.reason }}
+          <button
+            class="text-btn"
+            :disabled="busy || task.busy.value"
+            @click="reset(testTarget.id)"
+          >
+            恢复模型后重试
+          </button>
+        </div>
         <button
           class="btn primary"
           :disabled="task.busy.value"
-          @click="task.start('/admin/ai/test', { targetId: testTarget.id })"
+          @click="
+            task.start('/admin/ai/test', {
+              targetId: testTarget.id,
+              testFeature,
+            })
+          "
         >
           测试此模型</button
-        ><AiRunMeta :run="task.run.value"
+        ><AiTaskProgress
+          :run="task.run.value"
+          :busy="task.busy.value"
+          :connection="task.connection.value" />
+        <AdminModelTestResult
+          :run="task.run.value"
+          :detail="testDetail"
+          :detail-error="testDetailError" />
+        <AiRunMeta :run="task.run.value"
       /></template>
     </AppDialog>
     <ModelPriceEditor

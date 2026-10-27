@@ -36,7 +36,7 @@ export const settings = {
   siteDailyRuns: 1000,
   perQuestionRuns: 10,
 };
-export async function fixture(t) {
+export async function fixture(t, aiOptions = {}) {
   let calls = 0,
     delay = 0,
     behavior = "good";
@@ -113,7 +113,7 @@ export async function fixture(t) {
   const mysql = process.env.TEST_MYSQL === "1" ? await mysqlFixture() : null;
   const built = await createApp({
     ...(mysql ? { store: mysql.store } : { dbPath: ":memory:" }),
-    aiOptions: { encryptionKey: "a".repeat(64), provider },
+    aiOptions: { encryptionKey: "a".repeat(64), provider, ...aiOptions },
   });
   const server = built.app.listen(0, "127.0.0.1");
   await new Promise((r) => server.once("listening", r));
@@ -150,7 +150,12 @@ export async function fixture(t) {
         password: "test-password-123",
       })
     ).data.user;
-    return { api, user };
+    const raw = (path, options = {}) =>
+      fetch(base + path, {
+        ...options,
+        headers: { Cookie: cookie, "X-CSRF-Token": csrf, ...options.headers },
+      });
+    return { api, user, raw };
   }
   const admin = await client("admin"),
     user = await client("learner"),
@@ -194,6 +199,7 @@ export async function fixture(t) {
   });
   return {
     ...built,
+    base,
     admin,
     user,
     other,

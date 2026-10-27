@@ -212,7 +212,7 @@ export function failurePolicy(error) {
       manual: true,
       cooldown: 0,
     };
-  if (error.code === "AI_INVALID_OUTPUT")
+  if (["AI_INVALID_OUTPUT", "AI_OUTPUT_TRUNCATED"].includes(error.code))
     return { scope: "model", reason: "模型输出未通过校验", cooldown: 30000 };
   if (error.code === "AI_KEY_UNAVAILABLE")
     return {
@@ -554,12 +554,30 @@ export class AiPool {
     const eligible = targets.filter(
       (x) => !excluded.has(x.id) && this.ready(x),
     );
-    if (!eligible.length)
+    if (!eligible.length) {
+      const reasons = [
+        ...new Set(
+          targets.flatMap((target) =>
+            [target.providerId, target.id]
+              .map((id) => this.health.get(id))
+              .filter(
+                (health) =>
+                  health && (health.manual || health.until > this.clock()),
+              )
+              .map((health) => health.reason),
+          ),
+        ),
+      ].slice(0, 2);
       throw new AiError(
         503,
-        "AI 服务暂时繁忙或正在恢复，请稍后重试",
+        reasons.length
+          ? "暂无可用模型，连接处于暂停或冷却状态：" +
+              reasons.join("；") +
+              "。请稍后重试，或联系管理员检查最近失败记录。"
+          : "AI 模型当前繁忙（并发已满或正在恢复探测），请稍后重试",
         "AI_POOL_UNAVAILABLE",
       );
+    }
     const priority = Math.min(...eligible.map((x) => x.priority));
     const tier = eligible.filter((x) => x.priority === priority);
     const load = (x) => (this.active.get(x.id) || 0) / x.weight;

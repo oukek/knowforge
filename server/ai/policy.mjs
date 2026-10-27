@@ -155,10 +155,13 @@ export function checkedGrade(value, answer) {
     new Set(grade.dimensions.map((x) => x.name)).size !== 5 ||
     grade.evidence.some((quote) => !answer.includes(quote))
   )
-    throw new AiError(
-      502,
-      "模型反馈未通过证据校验，未记录为答题成绩",
-      "AI_INVALID_OUTPUT",
+    throw Object.assign(
+      new AiError(
+        502,
+        "模型反馈未通过证据校验，未记录为答题成绩",
+        "AI_INVALID_OUTPUT",
+      ),
+      { outputIssue: "evidence" },
     );
   const weights = [40, 25, 20, 10, 5];
   const score =
@@ -197,7 +200,7 @@ export function reservation(messages, config, feature) {
     1,
     Math.ceil(
       (input * Math.max(config.inputRate, config.cachedRate) +
-        (feature === "test" ? 512 : config.outputLimit) * config.outputRate) /
+        config.outputLimit * config.outputRate) /
         1000,
     ),
   );

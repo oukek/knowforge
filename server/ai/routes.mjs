@@ -51,7 +51,8 @@ export async function installAi(app, store, auth, catalog, options) {
         });
         if (!session) return;
         req.user = session.user;
-        res.json(await handler(req, res));
+        const result = await handler(req, res);
+        if (!res.headersSent && !res.writableEnded) res.json(result);
       } catch (e) {
         if (e instanceof AiError)
           res.status(e.status).json({ error: e.message, code: e.code });
@@ -91,6 +92,21 @@ export async function installAi(app, store, auth, catalog, options) {
   route("get", "/api/ai/runs/:id", (r) =>
     ai.getRun(r.user.id, z.string().uuid().parse(r.params.id)),
   );
+  route("get", "/api/ai/runs/:id/events", (req, res) => {
+    if (req.method === "HEAD") return res.status(405).end();
+    const runId = z.string().uuid().parse(req.params.id);
+    return ai.events.stream({
+      req,
+      res,
+      id: runId,
+      userId: req.user.id,
+      load: () => ai.getRun(req.user.id, runId),
+      authenticate: () =>
+        store.session(
+          async () => (await auth.authenticate(req))?.user.id === req.user.id,
+        ),
+    });
+  });
   route("post", "/api/ai/runs/:id/cancel", (r) => {
     z.object({}).strict().parse(r.body);
     return ai.cancel(r.user.id, z.string().uuid().parse(r.params.id));
@@ -252,6 +268,7 @@ export async function installAi(app, store, auth, catalog, options) {
         .object({
           requestId: requestKey,
           targetId: z.string().uuid().optional(),
+          testFeature: z.enum(["connection", "variants"]).optional(),
         })
         .strict()
         .parse(r.body);

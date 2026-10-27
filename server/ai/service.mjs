@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { AiRepository, decodeRun } from "./repository.mjs";
 import { createProvider } from "./provider.mjs";
 import { AiPool } from "./pool.mjs";
+import { AiRunEvents } from "./run-events.mjs";
+import { invalidOutput, runFailure } from "./diagnostics.mjs";
 import {
   effectivePolicy,
   ratesOf,
@@ -38,6 +40,7 @@ export class AiService {
     this.pool = new AiPool(this.repo, this.provider, this.rootKey, options);
     this.billing = new AiBilling(this.repo, options);
     this.jobs = new Map();
+    this.events = new AiRunEvents(options.events);
     this.ipLimits = new Map();
   }
   async init() {
@@ -261,6 +264,18 @@ export class AiService {
     }
   }
   async prepare(userId, feature, input) {
+    if (feature === "test" && input.testFeature === "variants") {
+      const lesson = this.catalog.lessons.find(
+        (value) => value.sections?.length,
+      );
+      if (!lesson) throw new AiError(409, "没有可用于出题测试的知识点");
+      return this.prepare(userId, "variants", {
+        lessonId: lesson.id,
+        count: 1,
+        difficulty: "进阶",
+        direction: "改变约束",
+      });
+    }
     return this.repo.read(async (db) => {
       if (feature === "test")
         return {
@@ -328,7 +343,9 @@ export class AiService {
       }
       const schema =
         feature === "variants"
-          ? variantsSchema
+          ? variantsSchema.extend({
+              questions: variantsSchema.shape.questions.length(input.count),
+            })
           : feature === "interview"
             ? interviewSchema
             : gradeSchema;
@@ -504,6 +521,7 @@ export class AiService {
           fingerprint,
           feature,
           status: "running",
+          progress: { phase: "preparing", attempt: 0, updatedAt: stamp },
           sessionId: input.sessionId || "",
           lessonId: prepared.context.lessonId || "",
           questionId: input.questionId || "",
@@ -610,8 +628,7 @@ export class AiService {
           ...operation.config,
           ...target.policy,
           ...settings,
-          outputLimit:
-            operation.run.feature === "test" ? 512 : target.policy.outputLimit,
+          outputLimit: target.policy.outputLimit,
           timeoutMs: Math.min(target.policy.attemptTimeoutMs, remaining),
         };
         const attempt = {
@@ -655,30 +672,60 @@ export class AiService {
               sent = true;
             },
           );
-          if (response.refusal)
+          // A transient progress-write failure must not retry a successful paid request.
+          await this.updateProgress(
+            operation.run.id,
+            "validating",
+            attempt.number,
+          ).catch(() => {});
+          if (response.refusal || response.finishReason === "content_filter")
             throw new AiError(
               502,
               "模型拒绝了本次评阅，未记录答题成绩",
               "AI_REFUSAL",
             );
-          if (
-            !response.complete ||
-            !response.text ||
-            response.text.length > 100000
-          )
-            throw new AiError(
-              502,
-              "模型未返回完整结果，本次不记录答题成绩",
-              "AI_INVALID_OUTPUT",
-            );
-          const parsed = schema.parse(
-            JSON.parse(
+          if (!response.complete) {
+            if (["length", "max_output_tokens"].includes(response.finishReason))
+              throw new AiError(
+                502,
+                "模型输出达到上限，结果被截断",
+                "AI_OUTPUT_TRUNCATED",
+              );
+            throw invalidOutput("模型未返回完整结果", "empty");
+          }
+          if (!response.text || response.text.length > 100000)
+            throw invalidOutput("模型未返回有效长度的结果", "empty");
+          let json;
+          try {
+            json = JSON.parse(
               response.text.replace(
                 /^\x60{3}(?:json)?\s*([\s\S]*?)\s*\x60{3}$/,
                 "$1",
               ),
-            ),
-          );
+            );
+          } catch {
+            throw invalidOutput("模型返回的内容不是有效 JSON", "json");
+          }
+          const isVariants =
+            operation.run.feature === "variants" ||
+            (operation.run.feature === "test" &&
+              operation.run.input.testFeature === "variants");
+          const expectedCount =
+            operation.run.feature === "test" ? 1 : operation.run.input.count;
+          if (
+            isVariants &&
+            Array.isArray(json?.questions) &&
+            json.questions.length !== expectedCount
+          )
+            throw invalidOutput("模型返回的题目数量与请求不一致", "count");
+          const checked = schema.safeParse(json);
+          if (!checked.success)
+            throw invalidOutput(
+              "模型返回内容未通过字段校验",
+              "schema",
+              checked.error.issues,
+            );
+          const parsed = checked.data;
           if (operation.run.feature === "grade")
             result = checkedGrade(parsed, operation.run.input.answer);
           else if (operation.run.feature === "interview")
@@ -689,18 +736,26 @@ export class AiService {
                 operation.run.input.answer,
               ),
             };
-          else if (operation.run.feature === "variants") {
+          else if (
+            operation.run.feature === "variants" ||
+            (operation.run.feature === "test" &&
+              operation.run.input.testFeature === "variants")
+          ) {
             const normalized = (s) =>
               s.replace(/[\s\p{P}]/gu, "").toLowerCase();
             const seen = new Set([
               ...this.catalog.questions.map((q) => normalized(q.prompt)),
               ...(operation.run.context.previousPrompts || []).map(normalized),
             ]);
-            if (parsed.questions.length !== operation.run.input.count)
-              throw Error("question count");
+            if (
+              parsed.questions.length !==
+              (operation.run.feature === "test" ? 1 : operation.run.input.count)
+            )
+              throw invalidOutput("模型返回的题目数量与请求不一致", "count");
             for (const q of parsed.questions) {
               const key = normalized(q.prompt);
-              if (seen.has(key)) throw Error("duplicate question");
+              if (seen.has(key))
+                throw invalidOutput("模型生成了重复题目", "duplicate");
               seen.add(key);
             }
             result = parsed;
@@ -732,6 +787,8 @@ export class AiService {
           attempt.error = error.message;
           attempt.errorCode = error.code;
           attempt.providerError = error.providerDetail;
+          attempt.outputIssue = failure.outputIssue || "";
+          attempt.validationIssues = failure.validationIssues || [];
           attempt.upstreamStatus = e.upstreamStatus || null;
           attempt.upstreamCode = e.upstreamCode || "";
           attempt.retryAfterMs = e.retryAfterMs || 0;
@@ -747,6 +804,9 @@ export class AiService {
           attempt.requestId = response?.requestId || attempt.requestId || "";
           attempt.actualModel = response?.actualModel || target.model;
           attempt.responseText = response?.text || response?.refusal || "";
+          attempt.finishReason = response?.finishReason || "";
+          attempt.outputLimit = config.outputLimit;
+          attempt.networkCode = failure?.networkCode || "";
           attempt.usageUnknown = !attempt.usage && !attempt.noCharge;
           attempt.estimatedPoints = attempt.usage
             ? points(usageCharge(attempt.usage, config))
@@ -825,8 +885,43 @@ export class AiService {
         ),
       );
       run.costIncomplete = attempts.some((a) => a.estimatedCostCny == null);
+      const last = attempts.at(-1);
+      if (run.progress?.phase !== "cancelling")
+        run.progress = {
+          phase:
+            last.status === "running"
+              ? "requesting"
+              : last.status === "succeeded"
+                ? "saving"
+                : ["AI_CANCELLED", "AI_REFUSAL"].includes(last.errorCode) ||
+                    attempts.length >=
+                      (run.feature === "test" ? 1 : run.config.maxAttempts)
+                  ? "saving"
+                  : "retrying",
+          attempt: attempts.length,
+          updatedAt: now(),
+        };
       await this.repo.saveRun(db, run);
     });
+    this.events.notify(id);
+  }
+  async updateProgress(id, phase, attempt) {
+    await this.repo.transaction(async (db) => {
+      const run = await this.repo.runRaw(id, db);
+      if (
+        !run ||
+        run.status !== "running" ||
+        run.progress?.phase === "cancelling"
+      )
+        return;
+      run.progress = {
+        phase,
+        attempt: attempt ?? run.progress?.attempt ?? 0,
+        updatedAt: now(),
+      };
+      await this.repo.saveRun(db, run);
+    });
+    this.events.notify(id);
   }
   async finish(id, response, result, error) {
     await this.repo.transaction(async (db) => {
@@ -856,6 +951,11 @@ export class AiService {
         await this.billing.settle(db, run, response?.usage || null, !!result),
       );
       run.status = result ? "succeeded" : "released";
+      run.progress = {
+        phase: run.status,
+        attempt: run.attempts?.length || 0,
+        updatedAt: now(),
+      };
       if (run.billingStatus === "pending")
         run.billingNote = "服务商未提供有效用量，额度预占待管理员核对";
       await this.recordGrade(db, run);
@@ -929,15 +1029,26 @@ export class AiService {
       }
       await this.repo.saveRun(db, run);
     });
+    this.events.notify(id);
   }
   async publicRun(run, userId, admin = false) {
     if (!run || (!admin && run.userId !== userId))
       throw new AiError(404, "AI 记录不存在");
-    if (admin) return { ...run, data: undefined };
+    if (admin)
+      return {
+        ...run,
+        failure: runFailure(run),
+        testFeature:
+          run.feature === "test"
+            ? run.input?.testFeature || "connection"
+            : undefined,
+        data: undefined,
+      };
     const value = {
       id: run.id,
       feature: run.feature,
       status: run.status,
+      progress: run.progress || null,
       lessonId: run.lessonId,
       questionId: run.questionId,
       sessionId: run.sessionId,
@@ -953,6 +1064,11 @@ export class AiService {
       durationMs: run.durationMs,
       error: run.error,
       errorCode: run.errorCode,
+      failure: runFailure(run),
+      testFeature:
+        run.feature === "test"
+          ? run.input?.testFeature || "connection"
+          : undefined,
       attemptId: run.attemptId,
       failoverCount: run.failoverCount || 0,
       billingMode: run.billingMode,
@@ -1095,6 +1211,7 @@ export class AiService {
     if (!job)
       throw new AiError(409, "任务正在其他进程处理或恢复中，请稍后刷新");
     job.controller.abort();
+    await this.updateProgress(id, "cancelling");
     return { ok: true };
   }
   async reviewCosts(actorId, id, note, costCny) {
@@ -1381,5 +1498,6 @@ export class AiService {
   async shutdown() {
     for (const job of this.jobs.values()) job.controller.abort();
     await Promise.allSettled([...this.jobs.values()].map((j) => j.promise));
+    this.events.close();
   }
 }

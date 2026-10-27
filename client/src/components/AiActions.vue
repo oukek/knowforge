@@ -1,27 +1,52 @@
 <script setup>
 import { ref, watch } from "vue";
 import { ai, useAiTask } from "../ai.js";
+import { request, store } from "../store.js";
 import AppSelect from "./AppSelect.vue";
 import AppDisclosure from "./AppDisclosure.vue";
 import Icon from "./Icon.vue";
 import AiEvaluation from "./AiEvaluation.vue";
 import AiRunMeta from "./AiRunMeta.vue";
+import AiTaskProgress from "./AiTaskProgress.vue";
 const props = defineProps({
   question: Object,
   lesson: Object,
   answer: { type: String, default: "" },
 });
-const { run, busy, error, start, cancel, stop } = useAiTask();
+const { run, busy, error, connection, start, cancel, stop, resume } =
+  useAiTask();
 const count = ref(1),
   difficulty = ref("进阶"),
   direction = ref("改变约束");
+let targetVersion = 0;
 watch(
   () => props.question?.id || props.lesson?.id,
-  () => {
+  async () => {
+    const version = ++targetVersion;
+    const userId = store.user?.id;
     stop();
     run.value = null;
     error.value = "";
+    // Restore observation after navigating back or refreshing this question.
+    const query = new URLSearchParams({ status: "running" });
+    if (props.question?.id) query.set("questionId", props.question.id);
+    else if (props.lesson?.id) query.set("lessonId", props.lesson.id);
+    else return;
+    try {
+      const { rows } = await request("/ai/runs?" + query);
+      if (
+        version === targetVersion &&
+        userId === store.user?.id &&
+        !busy.value &&
+        !run.value &&
+        rows[0]
+      )
+        resume(rows[0].id);
+    } catch {
+      /* Recovery is optional; starting a new task still reports errors. */
+    }
   },
+  { immediate: true },
 );
 function grade() {
   return start("/ai/grade", {
@@ -131,10 +156,7 @@ function variants() {
           "
         /></div
     ></AppDisclosure>
-    <p v-if="busy" class="tiny muted" role="status">
-      任务正在后台处理，离开页面后可从 AI
-      历史查看。未成功完成的调用会释放用户预占，可能产生的上游消耗单独记录。
-    </p>
+    <AiTaskProgress :run="run" :busy="busy" :connection="connection" />
     <p v-if="error" class="ai-error" role="alert">{{ error }}</p>
     <AiRunMeta :run="run" />
     <AiEvaluation v-if="run?.feature === 'grade'" :value="run.result" />

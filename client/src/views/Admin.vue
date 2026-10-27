@@ -2,11 +2,11 @@
 import { ref, watch, onMounted, computed, defineAsyncComponent } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { request, toast, dateLabel } from "../store.js";
-import { featureLabel, aiStateLabel, refreshAi } from "../ai.js";
+import { refreshAi } from "../ai.js";
 import AppField from "../components/AppField.vue";
-import AppSelect from "../components/AppSelect.vue";
 import AppDisclosure from "../components/AppDisclosure.vue";
-import AiRunMeta from "../components/AiRunMeta.vue";
+import AdminCallHistory from "../components/AdminCallHistory.vue";
+import AdminCallDetail from "../components/AdminCallDetail.vue";
 import AdminAiPool from "../components/AdminAiPool.vue";
 import AdminCredits from "../components/AdminCredits.vue";
 import AdminProducts from "../components/AdminProducts.vue";
@@ -185,309 +185,161 @@ onMounted(
     <AdminProducts v-if="tab === 'products'" />
     <AdminPricing v-if="tab === 'pricing'" />
     <template v-if="tab === 'history'">
-      <section class="ai-detail">
-        <h2>近 24 小时调用与额度</h2>
-        <p class="tiny muted">
-          额度统计采用新的批次账本，显示净扣除及豁免；自动切换的完整上游消耗与采购成本可在调用详情核对。
-        </p>
-        <div class="ai-usage-summary">
-          <article v-for="item in summary.rows" :key="item.feature">
-            <h3>{{ featureLabel[item.feature] }}</h3>
-            <strong>{{ item.calls }} 次</strong>
-            <p>
-              输入 {{ item.inputTokens ?? 0 }} / 输出
-              {{ item.outputTokens ?? 0 }} Token
-            </p>
-            <p>
-              净扣除 {{ item.points ?? 0 }} 额度 · 豁免
-              {{ item.waivedPoints ?? 0 }} · 待核对 {{ item.pending }} 条
-            </p>
-          </article>
-        </div>
-        <p v-if="!summary.rows.length" class="ai-empty">还没有调用记录。</p>
-      </section>
-      <div class="ai-form-row">
-        <AppSelect
-          v-model="feature"
-          label="后台功能筛选"
-          :options="[
-            { value: '', label: '全部功能' },
-            ...Object.entries(featureLabel).map(([value, label]) => ({
-              value,
-              label,
-            })),
-          ]"
-        /><AppSelect
-          v-model="status"
-          label="后台调用状态"
-          :options="[
-            { value: '', label: '全部状态' },
-            ...Object.entries(aiStateLabel).map(([value, label]) => ({
-              value,
-              label,
-            })),
-          ]"
-        /><span class="tiny muted">{{ history.total }} 条</span>
-      </div>
-      <div class="ai-record-list">
-        <button
-          v-for="item in history.rows"
-          :key="item.id"
-          class="ai-record-row"
-          @click="detail(item.id)"
-        >
-          <div>
-            <span class="tiny muted"
-              >{{ featureLabel[item.feature] }} · {{ aiStateLabel[item.status]
-              }}{{
-                item.failoverCount
-                  ? " · 切换 " + item.failoverCount + " 次"
-                  : ""
-              }}{{ item.upstreamCostPending ? " · 上游成本待核对" : "" }}</span
-            ><strong>{{ item.title }}</strong
-            ><span class="tiny muted"
-              >{{ item.userId }} · {{ dateLabel(item.createdAt) }}</span
-            >
-          </div>
-          <div class="ai-record-usage">
-            <span>{{
-              item.usage ? item.usage.total + " Token" : "用量未知"
-            }}</span
-            ><strong
-              >{{
-                item.chargedPoints === null || item.chargedPoints === undefined
-                  ? "预占 " + item.reservedPoints
-                  : item.chargedPoints
-              }}
-              额度</strong
-            >
-          </div>
-        </button>
-      </div>
-      <div class="ai-pagination">
-        <button class="btn small" :disabled="page <= 1" @click="page--">
-          上一页</button
-        ><span>{{ page }}</span
-        ><button
-          class="btn small"
-          :disabled="page * 30 >= history.total"
-          @click="page++"
-        >
-          下一页
-        </button>
-      </div>
+      <AdminCallHistory
+        :history="history"
+        :summary="summary"
+        :busy="busy"
+        v-model:feature="feature"
+        v-model:status="status"
+        v-model:page="page"
+        @detail="detail"
+      />
       <AppDialog
         :open="!!selected"
         title="调用明细与费用核对"
-        :width="920"
+        description="查看执行过程，核对用户额度与平台上游账单。"
+        :width="1040"
         :busy="busy"
         @close="selected = null"
       >
         <p v-if="error" class="ai-error" role="alert">{{ error }}</p>
-        <article v-if="selected" class="ai-detail">
-          <p v-if="selected.chargeCapped" class="ai-error">
-            服务商用量超过预占估算，未向用户追加扣款；请检查模型计量口径与费率。
-          </p>
-          <div class="section-line">
-            <h2>调用明细</h2>
-            <button class="text-btn" @click="selected = null">收起详情</button>
-          </div>
-          <AiRunMeta :run="selected" />
-          <div
-            v-if="
-              selected.billingStatus === 'settled' &&
-              Number(selected.chargedPoints) > 0
-            "
-            class="ai-reconcile"
-          >
-            <h3>退还本次额度</h3>
-            <p class="tiny muted">
-              冲正返回原扣费批次，已过期的部分进入过期额度；保留原消费及返还流水。
-            </p>
-            <form class="ai-form-row" @submit.prevent="reverse">
-              <AppField
-                v-model="reverseNote"
-                minlength="5"
-                maxlength="300"
-                aria-label="冲正原因"
-                placeholder="填写冲正原因，至少 5 个字符"
-                required
-              /><button class="btn small" :disabled="busy">
-                确认冲正本次扣费
-              </button>
-            </form>
-          </div>
-          <section v-if="selected.attempts?.length" class="ai-attempts">
-            <h3>上游调用链 · {{ selected.attempts.length }} 次尝试</h3>
-            <p class="tiny muted">
-              已知上游输入 {{ selected.upstreamUsage?.input || 0 }} / 输出
-              {{ selected.upstreamUsage?.output || 0 }}
-              Token；含失败重试，可能大于用户结算用量。
-            </p>
-            <article
-              v-for="attempt in selected.attempts"
-              :key="attempt.id"
-              class="ai-audit-row"
+        <AdminCallDetail v-if="selected" :run="selected">
+          <template #actions>
+            <section
+              v-if="selected.billingStatus === 'pending'"
+              class="call-review-card"
             >
-              <strong
-                >#{{ attempt.number }} {{ attempt.providerName }} ·
-                {{ attempt.actualModel || attempt.model }}</strong
-              >
-              <p class="tiny muted">
-                {{
-                  attempt.status === "succeeded"
-                    ? "返回有效结果"
-                    : attempt.status === "running"
-                      ? "调用中或中断"
-                      : "失败"
-                }}
-                · {{ attempt.durationMs ?? "?" }} ms ·
-                {{ attempt.requestId || "未返回请求 ID" }}
+              <h4>用户额度待核对</h4>
+              <p>
+                依据服务商记录填写实际额度，不能超过原预占。填写 0
+                表示全部释放；仅可结算一次。
               </p>
-              <p v-if="attempt.usage" class="tiny">
-                输入 {{ attempt.usage.input }} / 输出
-                {{ attempt.usage.output }} / 缓存 {{ attempt.usage.cached }} /
-                推理 {{ attempt.usage.reasoning }} Token
+              <form @submit.prevent="reconcile">
+                <div class="call-action-fields">
+                  <label
+                    >实际结算额度<AppField
+                      v-model="reconcilePoints"
+                      inputmode="decimal"
+                      aria-label="核对结算额度"
+                      required
+                  /></label>
+                  <label class="call-action-wide"
+                    >核对依据<AppField
+                      v-model="reconcileNote"
+                      multiline
+                      rows="2"
+                      minlength="5"
+                      maxlength="300"
+                      aria-label="人工核对原因"
+                      placeholder="说明核对依据，至少 5 个字符"
+                      required
+                  /></label>
+                </div>
+                <div class="call-action-footer">
+                  <button class="btn primary small" :disabled="busy">
+                    提交人工结算
+                  </button>
+                </div>
+              </form>
+            </section>
+            <AppDisclosure
+              v-if="
+                selected.billingStatus === 'settled' &&
+                Number(selected.chargedPoints) > 0
+              "
+              title="退还本次用户扣费"
+              class="call-action-disclosure"
+            >
+              <p>
+                额度退回原扣费批次。原批次已过期的部分进入过期记录，原始消费和返还流水均会保留。
               </p>
-              <p v-else class="tiny">
-                {{
-                  attempt.noCharge
-                    ? "上游明确拒绝或未发送，不结算"
-                    : "用量未知，需核对服务商账单"
-                }}
-              </p>
-              <p v-if="attempt.error" class="ai-error">
-                {{ attempt.error
-                }}{{
-                  attempt.upstreamStatus
-                    ? " · HTTP " + attempt.upstreamStatus
-                    : ""
-                }}
-                · {{ attempt.providerError }}
-              </p>
-            </article>
-            <div
+              <form @submit.prevent="reverse">
+                <div class="call-action-fields">
+                  <label class="call-action-wide"
+                    >冲正原因<AppField
+                      v-model="reverseNote"
+                      multiline
+                      rows="2"
+                      minlength="5"
+                      maxlength="300"
+                      aria-label="冲正原因"
+                      placeholder="说明退还原因，至少 5 个字符"
+                      required
+                  /></label>
+                </div>
+                <div class="call-action-footer">
+                  <button class="btn small" :disabled="busy">
+                    确认冲正本次扣费
+                  </button>
+                </div>
+              </form>
+            </AppDisclosure>
+            <AppDisclosure
               v-if="
                 !selected.upstreamCostReview &&
                 selected.attempts?.length &&
                 selected.status !== 'running'
               "
-              class="ai-reconcile"
+              title="核对平台上游成本"
+              class="call-action-disclosure"
+              :default-open="
+                !!selected.upstreamCostPending || !!selected.costIncomplete
+              "
             >
-              <h3>核对平台上游成本</h3>
-              <p class="tiny muted">
-                已知预计采购成本 ¥{{ selected.estimatedCostCny || 0
+              <p>
+                已知预估成本
+                {{
+                  selected.estimatedCostCny == null
+                    ? "未知"
+                    : "¥" + selected.estimatedCostCny
                 }}{{
-                  selected.costIncomplete ? " · 部分尝试未能估价" : ""
-                }}，仅供对账参考。
+                  selected.costIncomplete ? "（部分尝试未能估价）" : ""
+                }}。填写实际账单金额与核对依据，此操作不改变用户额度。
               </p>
-              <p class="tiny muted">
-                记录上游账单核对结果，此操作不改变用户额度。任务自身若为“额度待核对”，仍需另行结算预占额度。
-              </p>
-              <form class="ai-form-row" @submit.prevent="reviewCosts">
-                <AppField
-                  v-model="costCny"
-                  inputmode="decimal"
-                  aria-label="实际采购成本"
-                  placeholder="实际账单人民币金额 · 可选"
-                />
-                <AppField
-                  v-model="costNote"
-                  maxlength="300"
-                  placeholder="填写账单核对依据，至少 5 个字符"
-                  aria-label="上游成本核对依据"
-                /><button class="btn small" :disabled="busy">
-                  记录成本核对
-                </button>
+              <form @submit.prevent="reviewCosts">
+                <div class="call-action-fields">
+                  <label
+                    >实际账单金额 · 元<AppField
+                      v-model="costCny"
+                      inputmode="decimal"
+                      aria-label="实际采购成本"
+                      placeholder="可选，未填写则保持未知"
+                  /></label>
+                  <label class="call-action-wide"
+                    >账单核对依据<AppField
+                      v-model="costNote"
+                      multiline
+                      rows="2"
+                      minlength="5"
+                      maxlength="300"
+                      aria-label="上游成本核对依据"
+                      placeholder="说明核对依据，至少 5 个字符"
+                      required
+                  /></label>
+                </div>
+                <div class="call-action-footer">
+                  <button class="btn small" :disabled="busy">
+                    记录成本核对
+                  </button>
+                </div>
               </form>
-            </div>
-            <p v-if="selected.upstreamCostReview" class="tiny muted">
-              已核对：{{ selected.upstreamCostReview.note }} · 实际成本
-              {{
-                selected.upstreamCostReview.actualCostCny === null
-                  ? "未填"
-                  : "¥" + selected.upstreamCostReview.actualCostCny
-              }}
-              ·
-              {{ dateLabel(selected.upstreamCostReview.createdAt) }}
-            </p>
-            <AppDisclosure title="查看每次上游尝试的完整记录">
-              <pre class="ai-json">{{
-                JSON.stringify(selected.attempts, null, 2)
-              }}</pre>
             </AppDisclosure>
-          </section>
-          <p class="tiny muted">
-            请求 {{ selected.id }} · 上游
-            {{ selected.upstreamRequestId || "未返回" }} ·
-            {{ selected.actualModel || selected.config?.model }}
-          </p>
-          <div v-if="selected.billingStatus === 'pending'" class="ai-reconcile">
-            <h3>核对后结算</h3>
-            <p class="tiny muted">
-              请依据服务商记录填写实际额度。0
-              表示全部释放；此操作会记入审计，且不能重复执行。
-            </p>
-            <form class="ai-form-row" @submit.prevent="reconcile">
-              <AppField
-                v-model="reconcilePoints"
-                inputmode="decimal"
-                aria-label="核对结算额度"
-              /><AppField
-                v-model="reconcileNote"
-                maxlength="300"
-                aria-label="人工核对原因"
-                placeholder="填写核对依据，至少 5 个字符"
-              /><button class="btn primary small" :disabled="busy">
-                提交人工结算
-              </button>
-            </form>
-          </div>
-          <AppDisclosure title="查看实际发送的消息与题目快照">
-            <pre class="ai-json">{{
-              JSON.stringify(
-                {
-                  messages: selected.messages,
-                  context: selected.context,
-                  templateVersion: selected.templateVersion,
-                },
-                null,
-                2,
-              )
-            }}</pre></AppDisclosure
-          ><AppDisclosure title="查看模型返回内容与用量明细">
-            <pre class="ai-json">{{
-              JSON.stringify(
-                {
-                  responseText: selected.responseText,
-                  result: selected.result,
-                  usage: selected.usage,
-                  reconciliation: selected.reconciliation,
-                  error: selected.error,
-                  providerError: selected.providerError,
-                },
-                null,
-                2,
-              )
-            }}</pre>
-          </AppDisclosure>
-        </article>
+            <div v-if="selected.upstreamCostReview" class="call-reviewed">
+              <strong>上游成本已核对</strong>
+              <p>{{ selected.upstreamCostReview.note }}</p>
+              <p>
+                实际成本
+                {{
+                  selected.upstreamCostReview.actualCostCny == null
+                    ? "未填写"
+                    : "¥" + selected.upstreamCostReview.actualCostCny
+                }}
+                · {{ dateLabel(selected.upstreamCostReview.createdAt) }}
+              </p>
+            </div>
+          </template>
+        </AdminCallDetail>
       </AppDialog>
-      <AppDisclosure title="最近 30 条管理操作审计"
-        ><div class="ai-record-list">
-          <article
-            v-for="item in summary.audit"
-            :key="item.id"
-            class="ai-audit-row"
-          >
-            <strong>{{ item.action }}</strong
-            ><span class="tiny muted"
-              >{{ dateLabel(item.createdAt) }} · {{ item.userId }}</span
-            >
-            <pre class="ai-json">{{ item.data }}</pre>
-          </article>
-        </div></AppDisclosure
-      >
     </template>
   </div>
 </template>
