@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { AiError, encrypt, decrypt, now } from "./policy.mjs";
 import { micro, points } from "./amounts.mjs";
-import { effectivePolicy } from "./model-policy.mjs";
+import { effectivePolicy, modelOnlyPolicy } from "./model-policy.mjs";
 import { derivedProcurement, normalizeCost } from "../../shared/model-cost.mjs";
 import {
   DEFAULT_USAGE_MIX,
@@ -42,7 +42,7 @@ const modelPricing = z.discriminatedUnion("unit", [
     })
     .strict(),
 ]);
-export const policySchema = z
+const policyObject = z
   .object({
     outputLimit: integer(512, 4096, 2048),
     inputRate: integer(1, 1000, 1),
@@ -55,20 +55,39 @@ export const policySchema = z
     attemptTimeoutMs: integer(10000, 60000, 25000),
     totalTimeoutMs: integer(10000, 90000, 80000),
   })
+  .strict();
+export const policySchema = policyObject.refine(
+  (x) => x.totalTimeoutMs >= x.attemptTimeoutMs,
+  "总超时不能小于单次超时",
+);
+const modelRate = price.refine(
+  (value) => micro(value) > 0n && micro(value) <= 1000n * 1000000n,
+  "每千 Token 扣费须大于 0 且不超过 1000，最多六位小数",
+);
+export const modelPolicySchema = policyObject
+  .extend({
+    inputRate: modelRate,
+    cachedRate: modelRate,
+    outputRate: modelRate,
+    // Old clients and existing records may still contain these fields. Accept
+    // and discard them; they can never override the single global policy.
+    maxAttempts: z.unknown().optional(),
+    attemptTimeoutMs: z.unknown().optional(),
+    totalTimeoutMs: z.unknown().optional(),
+  })
+  .transform(modelOnlyPolicy);
+export const schedulingSchema = z
+  .object({
+    revision: z.string().uuid(),
+    maxAttempts: z.number().int().min(1).max(3),
+    attemptTimeoutMs: z.number().int().min(10000).max(60000),
+    totalTimeoutMs: z.number().int().min(10000).max(90000),
+  })
   .strict()
   .refine(
     (x) => x.totalTimeoutMs >= x.attemptTimeoutMs,
     "总超时不能小于单次超时",
   );
-const modelRate = price.refine(
-  (value) => micro(value) > 0n && micro(value) <= 1000n * 1000000n,
-  "每千 Token 扣费须大于 0 且不超过 1000，最多六位小数",
-);
-export const modelPolicySchema = policySchema.safeExtend({
-  inputRate: modelRate,
-  cachedRate: modelRate,
-  outputRate: modelRate,
-});
 const modelSchema = z
   .object({
     id: z.string().uuid(),
@@ -390,6 +409,10 @@ export class AiPool {
       for (const p of pool.providers)
         providers.push({
           ...p,
+          models: p.models.map((model) => ({
+            ...model,
+            policy: modelOnlyPolicy(model.policy),
+          })),
           hasKey: !!(
             await db.get(
               "SELECT encryptedKey FROM ai_config WHERE id=?",
@@ -399,6 +422,7 @@ export class AiPool {
         });
       return {
         ...pool,
+        policy: policySchema.parse(pool.policy || {}),
         providers,
         health: this.healthView(pool),
         strategy: "weighted-least-active",
@@ -409,6 +433,8 @@ export class AiPool {
     const parsed = poolSchema.parse(input);
     for (const p of parsed.providers) await this.adapter.validate(p.baseUrl);
     const result = await this.repo.transaction(async (db) => {
+      if (db.driver === "mysql")
+        await db.get("SELECT id FROM ai_config WHERE id=? FOR UPDATE", "pool");
       const old = await this.raw(db);
       if (old && parsed.revision !== old.revision)
         throw new AiError(
@@ -443,7 +469,17 @@ export class AiPool {
           for (const m of p.models)
             if (
               JSON.stringify(m) !==
-              JSON.stringify(prior?.models.find((x) => x.id === m.id))
+              JSON.stringify(
+                (() => {
+                  const previous = prior?.models.find((x) => x.id === m.id);
+                  return (
+                    previous && {
+                      ...previous,
+                      policy: modelOnlyPolicy(previous.policy),
+                    }
+                  );
+                })(),
+              )
             )
               reset.push(m.id);
       }
@@ -478,6 +514,25 @@ export class AiPool {
       this.epochs.set(id, (this.epochs.get(id) || 0) + 1);
     }
     this.weights.clear();
+    return this.admin();
+  }
+  async saveScheduling(actorId, input) {
+    const { revision, ...scheduling } = schedulingSchema.parse(input);
+    await this.repo.transaction(async (db) => {
+      if (db.driver === "mysql")
+        await db.get("SELECT id FROM ai_config WHERE id=? FOR UPDATE", "pool");
+      const pool = await this.raw(db);
+      if (!pool || pool.revision !== revision)
+        throw new AiError(
+          409,
+          "配置已被修改，请重新加载后保存",
+          "AI_CONFIG_CONFLICT",
+        );
+      const policy = policySchema.parse({ ...pool.policy, ...scheduling });
+      const { updatedAt, ...stored } = pool;
+      await this.put(db, "pool", { ...stored, revision: randomUUID(), policy });
+      await this.repo.audit(db, actorId, "ai.scheduling.save", scheduling);
+    });
     return this.admin();
   }
   async snapshot(db, feature, targetId) {

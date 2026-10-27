@@ -40,6 +40,7 @@ const states = computed(() => [
 ]);
 const auditLabels = {
   "ai.pool.save": "更新服务池",
+  "ai.scheduling.save": "更新统一调用设置",
   "ai.config.save": "更新 AI 配置",
   "ai.reconcile": "人工核对结算",
   "ai.upstream.cost.review": "核对上游成本",

@@ -4,9 +4,23 @@ export const ratesOf = (policy) =>
   Object.fromEntries(
     ["inputRate", "cachedRate", "outputRate"].map((key) => [key, policy[key]]),
   );
+export const schedulingKeys = [
+  "maxAttempts",
+  "attemptTimeoutMs",
+  "totalTimeoutMs",
+];
+export const modelOnlyPolicy = (policy) => {
+  if (!policy) return policy;
+  const result = { ...policy };
+  for (const key of schedulingKeys) delete result[key];
+  return result;
+};
 export const effectivePolicy = (model, legacy) => ({
   ...legacy,
-  ...(model.policy || {}),
+  ...(modelOnlyPolicy(model.policy) || {}),
+  maxAttempts: legacy?.maxAttempts ?? 3,
+  attemptTimeoutMs: legacy?.attemptTimeoutMs ?? 25000,
+  totalTimeoutMs: legacy?.totalTimeoutMs ?? 80000,
 });
 
 // Persisted attempt slots enforce per-model limits across restarts. A failed

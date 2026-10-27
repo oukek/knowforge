@@ -629,7 +629,7 @@ export class AiService {
           ...target.policy,
           ...settings,
           outputLimit: target.policy.outputLimit,
-          timeoutMs: Math.min(target.policy.attemptTimeoutMs, remaining),
+          timeoutMs: Math.min(operation.config.attemptTimeoutMs, remaining),
         };
         const attempt = {
           id: randomUUID(),

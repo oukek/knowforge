@@ -2,6 +2,7 @@
 import { ref, reactive, computed, onMounted, watch } from "vue";
 import { request, toast } from "../store.js";
 import { refreshAi, useAiTask } from "../ai.js";
+import { modelOnlyPolicy } from "../ai-model-policy.js";
 import AppDialog from "./AppDialog.vue";
 import AppField from "./AppField.vue";
 import AppSelect from "./AppSelect.vue";
@@ -52,7 +53,9 @@ const fields = [
   ["dailyRuns", "每用户近 24 小时次数", 1, 100],
   ["siteDailyRuns", "全站近 24 小时次数", 1, 10000],
   ["perQuestionRuns", "每题近 24 小时评阅次数", 1, 10],
-  ["maxAttempts", "每任务最多上游尝试次数", 1, 3],
+];
+const schedulingFields = [
+  ["maxAttempts", "每任务最多尝试次数（含首次）", 1, 3],
   ["attemptTimeoutMs", "单次上游超时（毫秒）", 10000, 60000],
   ["totalTimeoutMs", "任务总超时（毫秒）", 10000, 90000],
 ];
@@ -62,6 +65,7 @@ const title = computed(
       provider: editingId.value ? "编辑服务商" : "添加服务商",
       model: editingId.value ? "编辑模型" : "添加模型",
       policy: "配置当前模型调用限制",
+      scheduling: "统一调用设置",
       remove: "确认移除配置",
       test: "测试已保存模型",
     })[dialog.value] || "服务配置",
@@ -204,7 +208,7 @@ function openModel(p, m) {
         format: "schema",
         tokenParameter: "max_completion_tokens",
         procurement: null,
-        policy: clone(pool.policy),
+        policy: modelOnlyPolicy(pool.policy),
       };
   formError.value = "";
   dialog.value = "model";
@@ -221,9 +225,16 @@ function changeKind(kind) {
 function openPolicy(p, m) {
   providerId.value = p.id;
   editingId.value = m.id;
-  draft.value = clone(m.policy || pool.policy);
+  draft.value = modelOnlyPolicy({ ...pool.policy, ...(m.policy || {}) });
   formError.value = "";
   dialog.value = "policy";
+}
+function openScheduling() {
+  draft.value = Object.fromEntries(
+    schedulingFields.map(([key]) => [key, pool.policy[key]]),
+  );
+  formError.value = "";
+  dialog.value = "scheduling";
 }
 function openPrices(p, m) {
   priceTarget.value = { providerId: p.id, model: clone(m) };
@@ -261,7 +272,25 @@ function askRemove(p, m) {
 async function save() {
   await act(async () => {
     const next = clone(pool.providers);
-    if (dialog.value === "provider") {
+    if (dialog.value === "scheduling") {
+      const values = Object.fromEntries(
+        schedulingFields.map(([key]) => [key, Number(draft.value[key])]),
+      );
+      for (const [key, label, min, max] of schedulingFields)
+        if (
+          !Number.isInteger(values[key]) ||
+          values[key] < min ||
+          values[key] > max
+        )
+          throw Error(`${label}必须是 ${min}–${max} 之间的整数。`);
+      if (values.totalTimeoutMs < values.attemptTimeoutMs)
+        throw Error("任务总超时不能小于单次上游超时。");
+      const data = await request("/admin/ai/scheduling", "PUT", {
+        revision: pool.revision,
+        ...values,
+      });
+      accept(data.pool);
+    } else if (dialog.value === "provider") {
       const p = draft.value;
       if (
         !p.name.trim() ||
@@ -292,7 +321,7 @@ async function save() {
         ?.models.find((m) => m.id === editingId.value);
       if (!m) throw Error("模型已变化，请重新载入");
       m.policy = {
-        ...(m.policy || pool.policy),
+        ...modelOnlyPolicy({ ...pool.policy, ...(m.policy || {}) }),
         ...Object.fromEntries(
           fields.map(([key]) => [key, Number(draft.value[key])]),
         ),
@@ -460,6 +489,12 @@ onMounted(() => void act(load));
             >
               刷新健康状态</button
             ><button
+              class="btn small"
+              :disabled="busy || !pool.revision"
+              @click="openScheduling"
+            >
+              统一调用设置</button
+            ><button
               class="btn primary small"
               :disabled="
                 busy ||
@@ -471,6 +506,16 @@ onMounted(() => void act(load));
               添加模型
             </button>
           </div>
+        </div>
+        <div v-if="pool.revision" class="ai-config-summary">
+          <span
+            >统一调用策略 · 最多 {{ pool.policy.maxAttempts }} 次尝试（含首次）
+            · 单次 {{ pool.policy.attemptTimeoutMs / 1000 }} 秒 · 总时限
+            {{ pool.policy.totalTimeoutMs / 1000 }} 秒</span
+          >
+          <button class="text-btn" :disabled="busy" @click="openScheduling">
+            调整
+          </button>
         </div>
         <div class="row wrap ai-model-filters">
           <AppSelect
@@ -782,13 +827,34 @@ onMounted(() => void act(load));
         <button class="btn primary" :disabled="busy">保存模型</button>
       </form>
       <form
+        v-if="dialog === 'scheduling'"
+        novalidate
+        class="ai-admin-form"
+        @submit.prevent="save"
+      >
+        <p class="tiny muted">
+          所有模型使用同一套超时和重试规则，仅影响新任务。最多尝试次数包含首次调用；自动切换时每次仍受单次超时限制，整项任务受总时限限制。单模型连接测试只调用目标模型一次。
+        </p>
+        <div class="ai-admin-grid">
+          <label v-for="[key, label, min, max] in schedulingFields" :key="key"
+            >{{ label
+            }}<AppField
+              v-model="draft[key]"
+              type="number"
+              :min="min"
+              :max="max"
+          /></label>
+        </div>
+        <button class="btn primary" :disabled="busy">保存统一调用设置</button>
+      </form>
+      <form
         v-if="dialog === 'policy'"
         novalidate
         class="ai-admin-form"
         @submit.prevent="save"
       >
         <p class="tiny muted">
-          仅配置当前模型。次数按实际选择该模型的尝试计数，失败尝试也计入。修改仅影响新任务，运行中的任务保留原快照。
+          仅配置当前模型的输出上限与调用次数。次数按实际选择该模型的尝试计数，失败尝试也计入；超时与尝试次数在统一调用设置中配置。修改仅影响新任务。
         </p>
         <div class="ai-admin-grid">
           <label v-for="[key, label, min, max] in fields" :key="key"

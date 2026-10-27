@@ -233,6 +233,14 @@ export async function installAi(app, store, auth, catalog, options) {
     true,
   );
   route(
+    "put",
+    "/api/admin/ai/scheduling",
+    async (r) => ({
+      pool: await ai.pool.saveScheduling(r.user.id, r.body),
+    }),
+    true,
+  );
+  route(
     "post",
     "/api/admin/ai/health/:id/reset",
     (r) => {

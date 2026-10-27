@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch, useId } from "vue";
 import { request } from "../store.js";
+import { modelOnlyPolicy } from "../ai-model-policy.js";
 import AppDialog from "./AppDialog.vue";
 import AppField from "./AppField.vue";
 import AppChoice from "./AppChoice.vue";
@@ -122,7 +123,10 @@ watch(
     const model = JSON.parse(JSON.stringify(props.model));
     draft.value = {
       ...model,
-      policy: { ...props.legacyPolicy, ...(model.policy || {}) },
+      policy: modelOnlyPolicy({
+        ...props.legacyPolicy,
+        ...(model.policy || {}),
+      }),
       usageMix: { ...defaults.usageMix, ...model.usageMix },
     };
     costEnabled.value = model.costDiscount != null && !!model.pricing;
