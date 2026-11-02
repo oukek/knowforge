@@ -1,9 +1,10 @@
-import { reactive, computed } from "vue";
+import { reactive, computed, markRaw } from "vue";
 import { apiUrl } from "./api-config.js";
 export const store = reactive({
   user: null,
   csrfToken: "",
   catalog: null,
+  details: { lessons: {}, questions: {}, labs: {} },
   generatedQuestions: [],
   database: "sqlite",
   state: null,
@@ -17,6 +18,7 @@ export const store = reactive({
 });
 let toastTimer;
 let sessionGeneration = 0;
+let detailVersions = { lessons: {}, questions: {}, labs: {} };
 export function toast(message) {
   store.toast = message;
   clearTimeout(toastTimer);
@@ -69,6 +71,8 @@ function clearSession() {
   store.user = null;
   store.csrfToken = "";
   store.catalog = null;
+  store.details = { lessons: {}, questions: {}, labs: {} };
+  detailVersions = { lessons: {}, questions: {}, labs: {} };
   store.generatedQuestions = [];
   store.state = null;
   store.searchOpen = false;
@@ -78,7 +82,7 @@ export async function signIn(mode, credentials) {
   const data = await request("/auth/" + mode, "POST", credentials);
   store.user = data.user;
   store.csrfToken = data.csrfToken;
-  await init();
+  await init(data);
   if (store.error) throw new Error(store.error);
 }
 export async function signOut() {
@@ -107,12 +111,12 @@ export const updateProfile = (displayName) =>
   updateAccount("/auth/profile", "PUT", { displayName });
 export const changePassword = (currentPassword, newPassword) =>
   updateAccount("/auth/password", "POST", { currentPassword, newPassword });
-export async function init() {
+export async function init(knownSession = null) {
   const generation = ++sessionGeneration;
   store.loading = true;
   store.error = "";
   try {
-    const auth = await request("/auth/me");
+    const auth = knownSession?.user ? knownSession : await request("/auth/me");
     if (generation !== sessionGeneration) return;
     if (!auth.user) {
       clearSession();
@@ -120,9 +124,26 @@ export async function init() {
     }
     store.user = auth.user;
     store.csrfToken = auth.csrfToken;
-    const data = await request("/bootstrap");
+    const [data, catalogResult] = await Promise.all([
+      request("/bootstrap?catalog=none"),
+      // Older servers return the whole catalog in bootstrap or /catalog.
+      request("/catalog/index").then(
+        (value) => ({ value }),
+        (error) => ({ error }),
+      ),
+    ]);
     if (generation !== sessionGeneration) return;
-    store.catalog = data.catalog;
+    let loadedCatalog = data.catalog || catalogResult.value;
+    if (!loadedCatalog && catalogResult.error?.status === 404)
+      loadedCatalog = await request("/catalog");
+    if (generation !== sessionGeneration) return;
+    if (!loadedCatalog || !Array.isArray(loadedCatalog.lessons))
+      throw catalogResult.error || new Error("学习资料加载失败，请稍后重试");
+    // Curriculum is immutable in the client; avoid wrapping thousands of
+    // nested lesson/question objects in Vue's deep reactive proxies.
+    store.catalog = markRaw(loadedCatalog);
+    store.details = { lessons: {}, questions: {}, labs: {} };
+    detailVersions = { lessons: {}, questions: {}, labs: {} };
     store.generatedQuestions = data.generatedQuestions || [];
     store.database = data.database || "sqlite";
     store.state = data.state;
@@ -159,11 +180,135 @@ export async function mutate(path, method = "POST", body) {
     return null;
   }
 }
-export const lessons = computed(() => store.catalog?.lessons || []);
+const pendingDetails = new Map();
+const limits = { lessons: 80, questions: 200, labs: 30 };
+export async function refreshCatalogIndex() {
+  const generation = sessionGeneration,
+    userId = store.user?.id;
+  const index = await request("/catalog/index");
+  if (generation !== sessionGeneration || userId !== store.user?.id)
+    return false;
+  if (
+    !index.summaryOnly ||
+    !Array.isArray(index.lessons) ||
+    !index.contentVersion
+  )
+    throw new Error("学习资料索引无效，请稍后重试");
+  store.catalog = markRaw(index);
+  return true;
+}
+function remember(type, item, protectedIds = new Set()) {
+  const records = store.details[type];
+  if (!records[item.id] && Object.keys(records).length >= limits[type]) {
+    const oldest = Object.keys(records).find((id) => !protectedIds.has(id));
+    if (oldest) {
+      delete records[oldest];
+      delete detailVersions[type][oldest];
+    }
+  }
+  detailVersions[type][item.id] = store.catalog.contentVersion;
+  records[item.id] = markRaw(item);
+}
+export async function loadDetail(type, id) {
+  if (!id || !store.catalog) return null;
+  const summary = store.catalog[type]?.find((entry) => entry.id === id);
+  const generated =
+    type === "questions" && store.generatedQuestions.find((q) => q.id === id);
+  if (generated) return generated;
+  if (
+    !summary &&
+    (!store.catalog.summaryOnly ||
+      (type === "questions" && id.startsWith("ai-")))
+  )
+    return null;
+  if (!store.catalog.summaryOnly) return summary;
+  if (
+    store.details[type][id] &&
+    detailVersions[type][id] === store.catalog.contentVersion
+  )
+    return store.details[type][id];
+  const generation = sessionGeneration,
+    userId = store.user?.id,
+    contentVersion = store.catalog.contentVersion;
+  const key = `${generation}:${contentVersion}:${type}:${id}`;
+  if (!pendingDetails.has(key)) {
+    const version = encodeURIComponent(contentVersion);
+    const pending = request(
+      `/catalog/${type}/${encodeURIComponent(id)}?v=${version}`,
+    )
+      .then((item) => {
+        if (generation !== sessionGeneration || userId !== store.user?.id)
+          return null;
+        if (store.catalog?.contentVersion !== contentVersion) {
+          const error = new Error("学习资料已更新，请重新加载后重试。");
+          error.code = "CATALOG_VERSION_CHANGED";
+          throw error;
+        }
+        if (item.id !== id) throw new Error("资料响应不匹配，请稍后重试");
+        remember(type, item);
+        return item;
+      })
+      .catch((error) => {
+        if (error.status === 404) return null;
+        throw error;
+      })
+      .finally(() => pendingDetails.delete(key));
+    pendingDetails.set(key, pending);
+  }
+  return pendingDetails.get(key);
+}
+export async function loadQuestions(ids) {
+  const protectedIds = new Set(ids);
+  const needed = [...new Set(ids)].filter(
+    (id) =>
+      store.catalog?.summaryOnly &&
+      (!store.details.questions[id] ||
+        detailVersions.questions[id] !== store.catalog.contentVersion) &&
+      !store.generatedQuestions.some((q) => q.id === id),
+  );
+  if (!needed.length) return;
+  const generation = sessionGeneration,
+    userId = store.user?.id,
+    contentVersion = store.catalog.contentVersion;
+  for (let i = 0; i < needed.length; i += 50) {
+    const group = needed.slice(i, i + 50);
+    const params = new URLSearchParams({
+      ids: group.join(","),
+      v: contentVersion,
+    });
+    const data = await request(`/catalog/questions?${params}`);
+    if (generation !== sessionGeneration || userId !== store.user?.id) return;
+    if (store.catalog?.contentVersion !== contentVersion) {
+      const error = new Error("学习资料已更新，请重新加载后重试。");
+      error.code = "CATALOG_VERSION_CHANGED";
+      throw error;
+    }
+    if (
+      !Array.isArray(data.questions) ||
+      data.questions.length !== group.length ||
+      data.questions.some((q, index) => q.id !== group[index])
+    )
+      throw new Error("试卷题目加载不完整，请重试");
+    for (const question of data.questions)
+      remember("questions", question, protectedIds);
+  }
+}
+const currentDetail = (type, x) => {
+  const item = store.details[type][x.id];
+  return detailVersions[type][x.id] === store.catalog?.contentVersion
+    ? item || x
+    : x;
+};
+export const lessons = computed(() =>
+  (store.catalog?.lessons || []).map((x) => currentDetail("lessons", x)),
+);
 export const questions = computed(() => [
-  ...(store.catalog?.questions || []),
+  ...(store.catalog?.questions || []).map((x) => currentDetail("questions", x)),
   ...store.generatedQuestions,
 ]);
+export const labs = computed(() =>
+  (store.catalog?.labs || []).map((x) => currentDetail("labs", x)),
+);
 export const modules = computed(() => store.catalog?.modules || []);
 export const doneCount = computed(
   () =>

@@ -15,6 +15,7 @@ import {
 import Icon from "../components/Icon.vue";
 import QuestionPanel from "../components/QuestionPanel.vue";
 import { matchesQuestionSource } from "../../../shared/question-filters.mjs";
+import { useCatalogDetail } from "../composables/useCatalogDetail.js";
 const route = useRoute(),
   router = useRouter();
 const questionPool = ref(
@@ -75,32 +76,52 @@ const pageRows = computed(() =>
   filtered.value.slice((page.value - 1) * size, page.value * size),
 );
 const pages = computed(() => Math.ceil(filtered.value.length / size));
-const current = computed(() =>
-  questions.value.find((x) => x.id === route.params.id),
+const {
+  item: staticQuestion,
+  loading: detailLoading,
+  error: detailError,
+  refresh: retryDetail,
+} = useCatalogDetail(
+  "questions",
+  computed(() => route.params.id),
 );
-watch(
-  () => route.params.id,
-  async (id) => {
-    const userId = store.user?.id;
+const aiLoading = ref(false),
+  aiError = ref("");
+let aiRequestGeneration = 0;
+const current = computed(
+  () =>
+    staticQuestion.value ||
+    store.generatedQuestions.find((q) => q.id === route.params.id),
+);
+async function fetchGenerated() {
+  const id = route.params.id,
+    generation = ++aiRequestGeneration;
+  aiError.value = "";
+  aiLoading.value = false;
+  const userId = store.user?.id;
+  if (
+    typeof id !== "string" ||
+    !id.startsWith("ai-") ||
+    questions.value.some((q) => q.id === id)
+  )
+    return;
+  aiLoading.value = true;
+  try {
+    const { question } = await request(
+      "/ai/questions/" + encodeURIComponent(id),
+    );
     if (
-      typeof id !== "string" ||
-      !id.startsWith("ai-") ||
-      questions.value.some((q) => q.id === id)
+      store.user?.id === userId &&
+      !store.generatedQuestions.some((q) => q.id === id)
     )
-      return;
-    try {
-      const { question } = await request(
-        "/ai/questions/" + encodeURIComponent(id),
-      );
-      if (
-        store.user?.id === userId &&
-        !store.generatedQuestions.some((q) => q.id === id)
-      )
-        store.generatedQuestions.push(question);
-    } catch {}
-  },
-  { immediate: true },
-);
+      store.generatedQuestions.push(question);
+  } catch (error) {
+    if (generation === aiRequestGeneration) aiError.value = error.message;
+  } finally {
+    if (generation === aiRequestGeneration) aiLoading.value = false;
+  }
+}
+watch(() => route.params.id, fetchGenerated, { immediate: true });
 watch(
   current,
   (q) => {
@@ -303,6 +324,24 @@ function random() {
         下一页
       </button>
     </div>
+  </div>
+  <div
+    v-else-if="detailLoading || aiLoading"
+    class="loading-state"
+    role="status"
+  >
+    <div class="spinner"></div>
+    <p>正在加载题目…</p>
+  </div>
+  <div v-else-if="detailError || aiError" class="empty-state" role="alert">
+    <h1>题目加载失败</h1>
+    <p>{{ detailError || aiError }}</p>
+    <button
+      class="btn primary"
+      @click="aiError ? fetchGenerated() : retryDetail()"
+    >
+      重试
+    </button>
   </div>
   <div v-else-if="current" class="question-page page-enter">
     <div class="section-line">

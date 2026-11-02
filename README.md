@@ -189,6 +189,8 @@ npm run preview
 
 正式前端：`https://knowforge.ookew.com`；正式 API：`https://knowforge-api.ookew.com`。域名已配置在代码中，生产构建自动使用，开发继续走本地代理。请求携带 API 域名会话 Cookie，跨域预检与 CSRF 校验由后端处理；无需新增 Actions Secrets 或 Variables。
 
+启动时先确认登录，再并行获取个人学习状态和 `/api/catalog/index` 轻量索引；课程正文、题目答案和代码实验分别在打开时按需加载，模拟试卷只批量获取该试卷的题目。全局搜索由服务端检索原始正文和答案，个人 AI 题目在当前账号数据中搜索。共享资料支持 gzip、内容版本和 ETag；浏览器可在重新验证后复用私有缓存，资料升级后会获取新版本。笔记、作答、学习进度及个人 AI 题目始终从后端读取并禁止缓存。反向代理应保留 `ETag`、`Cache-Control`、`Vary` 和 `Content-Encoding`，不要将 API 响应配置为 CDN 公共缓存。旧客户端仍可使用完整的 `/api/bootstrap` 和 `/api/catalog`；新客户端也兼容尚未升级的旧后端。
+
 ### 配置
 
 | 环境变量 | 默认值 | 用途 |

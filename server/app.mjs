@@ -12,6 +12,8 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { createConfiguredStore } from "./database.mjs";
 import catalog from "../data/catalog.json" with { type: "json" };
+import { createCatalogApi } from "./catalog-api.mjs";
+const catalogApi = createCatalogApi(catalog);
 const qMap = new Map(catalog.questions.map((q) => [q.id, q]));
 const lessonExerciseMap = new Map(
   catalog.lessons.flatMap((lesson) =>
@@ -246,16 +248,26 @@ export async function createApp({
           })
           .catch(next),
       );
-  api.get("/api/bootstrap", async (_, res) =>
+  api.get("/api/bootstrap", async (req, res) =>
     res.json({
-      catalog,
+      ...(req.query.catalog === "none" ? {} : { catalog }),
       database: store.driver,
-      user: _.user,
+      user: req.user,
       state: await snapshot(),
-      generatedQuestions: await ai.repo.generatedListRaw(_.user.id),
+      generatedQuestions: await ai.repo.generatedListRaw(req.user.id),
       serverTime: new Date().toISOString(),
     }),
   );
+  api.get("/api/catalog", (req, res) => catalogApi.full(req, res));
+  api.get("/api/catalog/index", (req, res) => catalogApi.index(req, res));
+  api.get("/api/catalog/search", (req, res) => catalogApi.search(req, res));
+  api.get("/api/catalog/questions", (req, res) =>
+    catalogApi.batchQuestions(req, res),
+  );
+  for (const type of ["lessons", "questions", "labs"])
+    api.get(`/api/catalog/${type}/:id`, (req, res) =>
+      catalogApi.detail(req, res, type),
+    );
   api.get("/api/export/python-demo", async (_, res) => {
     res
       .type("text/x-python")

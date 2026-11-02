@@ -1,6 +1,6 @@
 <script setup>
 import AppField from "../components/AppField.vue";
-import { ref, computed } from "vue";
+import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { useRouter } from "vue-router";
 import {
   store,
@@ -12,6 +12,9 @@ import {
   moduleFor,
   mutate,
   ratingLabels,
+  loadDetail,
+  refreshCatalogIndex,
+  toast,
 } from "../store";
 import Icon from "../components/Icon.vue";
 import QuestionPanel from "../components/QuestionPanel.vue";
@@ -19,6 +22,24 @@ const router = useRouter(),
   tab = ref("due"),
   active = ref(null),
   query = ref("");
+const opening = ref(false);
+let openGeneration = 0;
+function closeQuestion() {
+  openGeneration++;
+  opening.value = false;
+  active.value = null;
+}
+watch(tab, closeQuestion);
+onBeforeUnmount(() => {
+  openGeneration++;
+});
+watch(
+  () => store.catalog?.contentVersion,
+  () => {
+    if (active.value && store.catalog?.summaryOnly)
+      void open({ question: active.value });
+  },
+);
 const inlineLookup = new Map(
   store.catalog.lessons.flatMap((lesson) =>
     (lesson.exercises ?? []).map((exercise) => [
@@ -114,10 +135,33 @@ const rows = computed(() => {
     x.title?.toLowerCase().includes(query.value.toLowerCase()),
   );
 });
-function open(row) {
-  if (["due", "wrong"].includes(tab.value) && row.question?.type !== "coding")
-    active.value = row.question;
-  else router.push(row.path);
+async function open(row) {
+  if (
+    ["due", "wrong"].includes(tab.value) &&
+    row.question &&
+    row.question.type !== "coding"
+  ) {
+    const generation = ++openGeneration;
+    opening.value = true;
+    try {
+      let question;
+      try {
+        question = await loadDetail("questions", row.question.id);
+      } catch (error) {
+        if (error.code !== "CATALOG_VERSION_CHANGED") throw error;
+        if (!(await refreshCatalogIndex()) || generation !== openGeneration)
+          return;
+        question = await loadDetail("questions", row.question.id);
+      }
+      if (!question && generation === openGeneration)
+        throw new Error("该题目已不存在，请刷新复习列表。");
+      if (generation === openGeneration && question) active.value = question;
+    } catch (error) {
+      if (generation === openGeneration) toast(error.message);
+    } finally {
+      if (generation === openGeneration) opening.value = false;
+    }
+  } else if (row.path) router.push(row.path);
 }
 function next() {
   const item = rows.value.find(
@@ -126,7 +170,7 @@ function next() {
       x.question.id !== active.value?.id &&
       x.question.type !== "coding",
   );
-  if (item) active.value = item.question;
+  if (item) void open(item);
   else active.value = null;
 }
 </script>
@@ -153,9 +197,10 @@ function next() {
         {{ label }}<span>{{ n }}</span>
       </button>
     </div>
+    <p v-if="opening" role="status" class="tiny muted">正在加载题目…</p>
     <template v-if="active"
       ><div class="section-line review-back">
-        <button class="text-btn" @click="active = null">
+        <button class="text-btn" @click="closeQuestion">
           <Icon name="ArrowLeft" :size="16" />返回复习队列</button
         ><button class="btn small" @click="next">
           下一道待复习<Icon name="ArrowRight" :size="16" />

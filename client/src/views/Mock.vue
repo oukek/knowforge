@@ -13,6 +13,8 @@ import {
   typeLabel,
   ratingLabels,
   dateLabel,
+  loadQuestions,
+  refreshCatalogIndex,
 } from "../store";
 import Icon from "../components/Icon.vue";
 import Markdown from "../components/Markdown.vue";
@@ -30,8 +32,62 @@ const mode = ref("interview"),
   selfRated = ref({});
 let draftTimer,
   draftVersion = 0;
+const detailLoading = ref(false),
+  detailError = ref("");
+let detailGeneration = 0;
+let versionChanged = false;
+async function refreshExamQuestions() {
+  const generation = ++detailGeneration,
+    ids = exam.value?.questionIds || [];
+  detailError.value = "";
+  if (!ids.length) {
+    detailLoading.value = false;
+    return;
+  }
+  detailLoading.value = true;
+  try {
+    if (versionChanged) {
+      versionChanged = false;
+      try {
+        if (!(await refreshCatalogIndex()) || generation !== detailGeneration)
+          return;
+      } catch (error) {
+        versionChanged = true;
+        throw error;
+      }
+    }
+    await loadQuestions(ids);
+    if (generation !== detailGeneration) return;
+    if (
+      ids.some(
+        (id) =>
+          !questions.value.some(
+            (q) =>
+              q.id === id &&
+              (!store.catalog.summaryOnly || store.details.questions[id]),
+          ),
+      )
+    )
+      throw new Error("试卷中有题目无法加载，请联系管理员或刷新资料后重试。");
+  } catch (error) {
+    if (generation === detailGeneration) {
+      versionChanged ||= error.code === "CATALOG_VERSION_CHANGED";
+      detailError.value = error.message;
+    }
+  } finally {
+    if (generation === detailGeneration) detailLoading.value = false;
+  }
+}
+watch(
+  [
+    () => exam.value?.questionIds?.join(","),
+    () => store.catalog?.contentVersion,
+  ],
+  refreshExamQuestions,
+);
 const interval = setInterval(() => (now.value = Date.now()), 1000);
 onBeforeUnmount(() => {
+  detailGeneration++;
   clearInterval(interval);
   clearTimeout(draftTimer);
   saveDraft();
@@ -312,6 +368,18 @@ const objectiveCount = computed(
         </button>
       </section>
     </template>
+    <div v-else-if="detailLoading" class="loading-state" role="status">
+      <div class="spinner"></div>
+      <p>
+        正在加载试卷题目…{{ exam.status === "active" ? `剩余 ${clock}` : "" }}
+      </p>
+    </div>
+    <div v-else-if="detailError" class="empty-state" role="alert">
+      <h1>试卷加载失败</h1>
+      <p>{{ detailError }}</p>
+      <button class="btn primary" @click="refreshExamQuestions">重试</button
+      ><button class="btn" @click="exam = null">返回模拟列表</button>
+    </div>
     <template v-else-if="exam.status === 'active'"
       ><div class="exam-top">
         <div>

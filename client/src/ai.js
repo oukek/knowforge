@@ -49,7 +49,7 @@ watch(
 );
 export async function refreshAiLearning() {
   const userId = store.user?.id;
-  const data = await mutate("/bootstrap", "GET");
+  const data = await mutate("/bootstrap?catalog=none", "GET");
   if (data && store.user?.id === userId)
     store.generatedQuestions = data.generatedQuestions || [];
 }

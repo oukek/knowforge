@@ -80,6 +80,171 @@ test("正式前端域名可跨域登录与保存，CORS 预检无需登录且拒
   assert.equal(denied.headers.get("access-control-allow-origin"), null);
 });
 
+test("共享课程单独压缩并可重新验证；个人进度仍禁用缓存且隔离", async (t) => {
+  const { client, base } = await fixture(t);
+  const a = client(),
+    b = client();
+  await a.register("catalog_a");
+  await b.register("catalog_b");
+  const old = await a.api("/bootstrap");
+  assert(old.data.catalog.lessons.length > 0, "旧客户端仍可获取完整资料");
+  const save = await a.api("/notes/js-event-loop", "PUT", {
+    content: "A 的私有笔记",
+  });
+  assert.equal(save.status, 200);
+  const aInit = await a.api("/bootstrap?catalog=none");
+  const bInit = await b.api("/bootstrap?catalog=none");
+  assert.equal(aInit.data.catalog, undefined);
+  assert.equal(aInit.data.state.notes["js-event-loop"].content, "A 的私有笔记");
+  assert.equal(bInit.data.state.notes["js-event-loop"], undefined);
+  assert.match(aInit.headers.get("cache-control"), /no-store/);
+  const first = await fetch(base + "/api/catalog", {
+    headers: { Cookie: a.state.cookie, "Accept-Encoding": "gzip" },
+  });
+  assert.equal(first.status, 200);
+  assert.equal(first.headers.get("content-encoding"), "gzip");
+  assert.match(first.headers.get("cache-control"), /private/);
+  assert.match(first.headers.get("cache-control"), /no-cache/);
+  assert.match(first.headers.get("vary"), /Accept-Encoding/i);
+  const etag = first.headers.get("etag");
+  const catalogData = await first.json();
+  assert.deepEqual(catalogData, old.data.catalog);
+  assert.equal(
+    etag,
+    `W/"${createHash("sha256").update(JSON.stringify(catalogData)).digest("hex")}"`,
+  );
+  assert(
+    Number(first.headers.get("content-length")) <
+      Buffer.byteLength(JSON.stringify(catalogData)) * 0.4,
+  );
+  const revalidated = await fetch(base + "/api/catalog", {
+    headers: {
+      Cookie: a.state.cookie,
+      "If-None-Match": etag,
+      "Accept-Encoding": "gzip",
+    },
+  });
+  assert.equal(revalidated.status, 304);
+  assert.equal((await revalidated.text()).length, 0);
+  const unchangedPlain = await fetch(base + "/api/catalog", {
+    headers: {
+      Cookie: a.state.cookie,
+      "If-None-Match": etag,
+      "Accept-Encoding": "identity",
+    },
+  });
+  assert.equal(unchangedPlain.status, 304);
+  const changed = await fetch(base + "/api/catalog", {
+    headers: {
+      Cookie: a.state.cookie,
+      "If-None-Match": 'W/"old-version"',
+      "Accept-Encoding": "identity",
+    },
+  });
+  assert.equal(changed.status, 200);
+  assert.equal(changed.headers.get("content-encoding"), null);
+  assert.deepEqual(await changed.json(), catalogData);
+  const anonymous = await fetch(base + "/api/catalog", {
+    headers: { "If-None-Match": etag },
+  });
+  assert.equal(anonymous.status, 401, "缓存命中前仍需校验登录");
+  assert.match(anonymous.headers.get("cache-control"), /no-store/);
+  const switched = await fetch(base + "/api/catalog", {
+    headers: {
+      Cookie: b.state.cookie,
+      "X-KnowForge-User": a.state.user.id,
+      "If-None-Match": etag,
+    },
+  });
+  assert.equal(switched.status, 409, "账号切换不能以缓存跳过身份检查");
+});
+
+test("课程索引轻量加载，正文、题目与实验按需读取并保持全文搜索", async (t) => {
+  const { client, base } = await fixture(t);
+  const a = client();
+  await a.register("catalog_lazy");
+  const { catalog: full } = (await a.api("/bootstrap")).data;
+  const response = await fetch(base + "/api/catalog/index", {
+    headers: { Cookie: a.state.cookie, "Accept-Encoding": "gzip" },
+  });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-encoding"), "gzip");
+  const etag = response.headers.get("etag"),
+    index = await response.json();
+  assert.equal(index.summaryOnly, true);
+  assert.equal(index.lessons.length, full.lessons.length);
+  assert.equal(index.questions.length, full.questions.length);
+  assert.equal(index.labs.length, full.labs.length);
+  assert(
+    Buffer.byteLength(JSON.stringify(index)) <
+      Buffer.byteLength(JSON.stringify(full)) * 0.25,
+  );
+  assert(
+    index.lessons.every(
+      (item) => !item.sections && !item.playground && !item.interview,
+    ),
+  );
+  assert(
+    index.questions.every(
+      (item) =>
+        item.answer === undefined &&
+        item.correct === undefined &&
+        item.options === undefined,
+    ),
+  );
+  assert(
+    index.labs.every((item) => !item.solution && !item.tests && !item.starter),
+  );
+  const cached = await fetch(base + "/api/catalog/index", {
+    headers: { Cookie: a.state.cookie, "If-None-Match": etag },
+  });
+  assert.equal(cached.status, 304);
+  const v = encodeURIComponent(index.contentVersion);
+  for (const [type, item] of [
+    ["lessons", full.lessons[0]],
+    ["questions", full.questions[0]],
+    ["labs", full.labs[0]],
+  ]) {
+    const detail = await a.api(
+      `/catalog/${type}/${encodeURIComponent(item.id)}?v=${v}`,
+    );
+    assert.equal(detail.status, 200);
+    assert.deepEqual(detail.data, item);
+    assert.equal(
+      (await a.api(`/catalog/${type}/${encodeURIComponent(item.id)}?v=old`))
+        .status,
+      409,
+    );
+    assert.equal((await a.api(`/catalog/${type}/missing?v=${v}`)).status, 404);
+    assert.equal(
+      (await fetch(base + `/api/catalog/${type}/${item.id}`)).status,
+      401,
+    );
+  }
+  const ids = full.questions.slice(0, 3).map((q) => q.id);
+  const batch = await a.api(`/catalog/questions?ids=${ids.join(",")}&v=${v}`);
+  assert.deepEqual(batch.data.questions, full.questions.slice(0, 3));
+  assert.equal(
+    (await a.api(`/catalog/questions?ids=${ids[0]},${ids[0]}&v=${v}`)).status,
+    400,
+  );
+  assert.equal(
+    (await a.api(`/catalog/questions?ids=${ids[0]},missing&v=${v}`)).status,
+    404,
+  );
+  const search = await a.api(
+    `/catalog/search?q=${encodeURIComponent("不能撤销已经执行的函数")}`,
+  );
+  assert(search.data.results.some((item) => item.id === "js-rate-limit"));
+  assert(!JSON.stringify(search.data).includes("haystack"));
+  assert.equal((await a.api("/catalog/search?q=test&v=old")).status, 409);
+  assert.equal(
+    (await a.api(`/catalog/search?q=${"x".repeat(201)}`)).status,
+    400,
+  );
+  assert.equal((await fetch(base + "/api/catalog/search?q=test")).status, 401);
+});
+
 test("跨域运行器页面仅允许正式前端嵌入，Worker 保留独立 CSP", async (t) => {
   const { base } = await fixture(t);
   const frame = await fetch(base + "/runner-frame");
@@ -279,8 +444,7 @@ test("所有个人记录、同 ID 内容、试卷和备份按账号隔离", asyn
     })
   ).data.exam;
   const stateB = (await b.api("/bootstrap")).data.state;
-  for (const key of ["progress", "notes"])
-    assert.deepEqual(stateB[key], {});
+  for (const key of ["progress", "notes"]) assert.deepEqual(stateB[key], {});
   assert.deepEqual(stateB.settings, { planOnboarding: "pending" });
   for (const key of [
     "bookmarks",

@@ -144,7 +144,11 @@ watch(
           >
         </div>
         <div class="topbar-actions">
-          <button class="search-trigger" @click="store.searchOpen = true">
+          <button
+            class="search-trigger"
+            aria-label="搜索知识与题目"
+            @click="store.searchOpen = true"
+          >
             <Icon name="Search" :size="17" /><span>搜索知识与题目</span
             ><kbd>⌘ K</kbd></button
           ><span class="top-date">{{ today }}</span

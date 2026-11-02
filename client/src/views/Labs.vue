@@ -9,6 +9,7 @@ import {
   safeStorageGet,
   safeStorageSet,
   moduleFor,
+  labs,
 } from "../store";
 import Icon from "../components/Icon.vue";
 import Markdown from "../components/Markdown.vue";
@@ -17,14 +18,22 @@ import NoteEditor from "../components/NoteEditor.vue";
 import CodeEditor from "../components/CodeEditor.vue";
 import RunOutput from "../components/RunOutput.vue";
 import { useCodeRunner } from "../composables/useCodeRunner";
+import { useCatalogDetail } from "../composables/useCatalogDetail.js";
 import {
   generatedAcmCases,
   acmJudgeCount,
 } from "../../../shared/acm-cases.mjs";
 const route = useRoute(),
   router = useRouter();
-const labs = computed(() => store.catalog.labs),
-  lab = computed(() => labs.value.find((l) => l.id === route.params.id));
+const {
+  item: lab,
+  loading: detailLoading,
+  error: detailError,
+  refresh: retryDetail,
+} = useCatalogDetail(
+  "labs",
+  computed(() => route.params.id),
+);
 const moduleId = ref(""),
   training = ref(""),
   labMode = ref(""),
@@ -72,7 +81,7 @@ const {
 } = useCodeRunner();
 const lastSource = ref(null);
 watch(
-  () => route.params.id,
+  lab,
   () => {
     clear();
     lastSource.value = null;
@@ -261,6 +270,15 @@ const passed = computed(
     <div v-if="!filteredLabs.length" class="empty-state">
       <p>当前筛选没有实验，调整专题或训练范围再试。</p>
     </div>
+  </div>
+  <div v-else-if="detailLoading" class="loading-state" role="status">
+    <div class="spinner"></div>
+    <p>正在加载实验…</p>
+  </div>
+  <div v-else-if="detailError" class="empty-state" role="alert">
+    <h1>实验加载失败</h1>
+    <p>{{ detailError }}</p>
+    <button class="btn primary" @click="retryDetail">重试</button>
   </div>
   <div v-else-if="lab" class="lab-workspace page-enter">
     <div class="section-line">

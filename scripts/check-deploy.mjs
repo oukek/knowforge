@@ -143,6 +143,32 @@ try {
   assert.equal(bootstrap.catalog.curriculum.aiFoundationLessons, 24);
   assert.equal(bootstrap.catalog.curriculum.publicInterviewQuestions, 60);
   assert.equal(bootstrap.catalog.glossary.length, 108);
+  const indexResponse = await fetch(`${base}/api/catalog/index`, {
+    headers: { Cookie: cookie, "Accept-Encoding": "gzip" },
+  });
+  assert.equal(indexResponse.status, 200);
+  assert.equal(indexResponse.headers.get("content-encoding"), "gzip");
+  const index = await indexResponse.json();
+  assert.equal(index.summaryOnly, true);
+  assert.equal(index.lessons.length, bootstrap.catalog.lessons.length);
+  assert.equal(index.lessons[0].sections, undefined);
+  const firstLesson = bootstrap.catalog.lessons[0];
+  const detail = await fetch(
+    `${base}/api/catalog/lessons/${encodeURIComponent(firstLesson.id)}?v=${index.contentVersion}`,
+    {
+      headers: { Cookie: cookie },
+    },
+  );
+  assert.deepEqual(await detail.json(), firstLesson);
+  const search = await fetch(
+    `${base}/api/catalog/search?q=${encodeURIComponent(firstLesson.title)}`,
+    {
+      headers: { Cookie: cookie },
+    },
+  );
+  assert(
+    (await search.json()).results.some((item) => item.id === firstLesson.id),
+  );
   const aiStatus = await (
     await fetch(base + "/api/ai/status", { headers: { Cookie: cookie } })
   ).json();

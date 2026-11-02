@@ -23,6 +23,7 @@ import NoteEditor from "../components/NoteEditor.vue";
 import LessonPractice from "../components/LessonPractice.vue";
 import AiGlossary from "../components/AiGlossary.vue";
 import AiActions from "../components/AiActions.vue";
+import { useCatalogDetail } from "../composables/useCatalogDetail.js";
 const practicePanel = ref(null);
 const route = useRoute(),
   router = useRouter();
@@ -31,7 +32,15 @@ const query = ref(""),
   status = ref(""),
   depth = ref("");
 const moduleId = computed(() => route.query.module || "");
-const lesson = computed(() => lessonFor(route.params.id));
+const {
+  item: lesson,
+  loading: detailLoading,
+  error: detailError,
+  refresh: retryDetail,
+} = useCatalogDetail(
+  "lessons",
+  computed(() => route.params.id),
+);
 const filtered = computed(() =>
   lessons.value
     .filter(
@@ -80,7 +89,7 @@ async function setStatus(value) {
   if (result) toast(value === "done" ? "已标记为完成" : "已更新学习状态");
 }
 watch(
-  () => route.params.id,
+  lesson,
   () => {
     if (lesson.value && !store.state.progress[lesson.value.id])
       mutate("/progress/" + lesson.value.id, "PUT", { status: "learning" });
@@ -253,6 +262,15 @@ watch(
         清除筛选
       </button>
     </div>
+  </div>
+  <div v-else-if="detailLoading" class="loading-state" role="status">
+    <div class="spinner"></div>
+    <p>正在加载课程资料…</p>
+  </div>
+  <div v-else-if="detailError" class="empty-state" role="alert">
+    <h1>课程加载失败</h1>
+    <p>{{ detailError }}</p>
+    <button class="btn primary" @click="retryDetail">重试</button>
   </div>
   <div v-else-if="lesson" class="reading-layout page-enter">
     <aside class="reading-outline">
