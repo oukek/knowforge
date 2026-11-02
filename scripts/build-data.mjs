@@ -14,6 +14,8 @@ import "../data/content/deepening.mjs";
 import { choices } from "../data/content/choices.mjs";
 import { labs } from "../data/content/labs.mjs";
 import { attachExamples } from "../data/content/examples/index.mjs";
+import { attachLearningGuides } from "../data/content/learning-guides.mjs";
+import { attachReviewedSources } from "../data/content/learning-review-sources.mjs";
 await import("../data/content/expansion/python.mjs");
 await import("../data/content/expansion/crawler.mjs");
 await import("../data/content/expansion/restapi.mjs");
@@ -36,6 +38,8 @@ const glossary = JSON.parse(
     "utf8",
   ),
 );
+attachReviewedSources(lessons, sources);
+attachLearningGuides(lessons);
 attachExamples(lessons);
 lessons.sort(
   (a, b) =>
