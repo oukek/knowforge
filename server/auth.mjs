@@ -7,6 +7,7 @@ import {
 } from "node:crypto";
 import { promisify } from "node:util";
 import { z } from "zod";
+import { avatarIds } from "../shared/avatars.mjs";
 import { ensureProfile } from "./account-profile.mjs";
 
 const derive = promisify(scrypt);
@@ -27,6 +28,7 @@ const credentials = z
   .strict();
 const profileSchema = z
   .object({
+    avatarId: z.enum(avatarIds).optional(),
     displayName: z
       .string()
       .trim()
@@ -76,12 +78,19 @@ const publicUser = (user) => ({
   id: user.id,
   publicId: user.publicId,
   displayName: user.displayName || user.username,
+  avatarId: user.avatarId,
   username: user.username,
   role: user.role || "user",
   createdAt: user.createdAt,
+  hasPassword:
+    user.hasPassword ?? user.passwordHash?.startsWith("scrypt$") ?? false,
 });
 
-export function createAuth(app, store, { secureCookies } = {}) {
+export function createAuth(
+  app,
+  store,
+  { secureCookies, allowRegistration = false } = {},
+) {
   const limits = new Map();
   function allow(key, max, duration) {
     const now = Date.now();
@@ -124,11 +133,13 @@ export function createAuth(app, store, { secureCookies } = {}) {
     );
     if (!session || session.expiresAt <= new Date().toISOString()) return null;
     let user = await store.get(
-      "SELECT id,username,createdAt FROM auth_users WHERE id=?",
+      "SELECT id,username,passwordHash,createdAt FROM auth_users WHERE id=?",
       session.userId,
     );
     if (!user) return null;
     user = await ensureProfile(store, user);
+    user.hasPassword = !!user.passwordHash?.startsWith("scrypt$");
+    delete user.passwordHash;
     user.role =
       (await store.get("SELECT role FROM auth_roles WHERE userId=?", user.id))
         ?.role || "user";
@@ -179,6 +190,10 @@ export function createAuth(app, store, { secureCookies } = {}) {
   });
   for (const action of ["register", "login"]) {
     route("post", `/api/auth/${action}`, async (req, res) => {
+      if (action === "register" && !allowRegistration)
+        return res
+          .status(410)
+          .json({ error: "账号注册已关闭，请使用微信登录" });
       if (limited(req, res, action)) return;
       const { username, password } = credentials.parse(req.body);
       if (action === "login" && !allow(`login:user:${username}`, 15, 900000))
@@ -257,20 +272,37 @@ export function createAuth(app, store, { secureCookies } = {}) {
     });
   });
   protectedRoute("put", "/api/auth/profile", async (req, res, auth) => {
-    const { displayName } = profileSchema.parse(req.body);
+    const { displayName, avatarId } = profileSchema.parse(req.body);
     if (!allow("profile:user:" + auth.user.id, 30, 900000))
       return res
         .status(429)
         .set("Retry-After", "900")
         .json({ error: "修改过于频繁，请稍后重试" });
-    await store.run(
-      "UPDATE auth_profiles SET displayName=?,updatedAt=? WHERE userId=?",
-      displayName,
-      new Date().toISOString(),
-      auth.user.id,
-    );
+    await store.exec("BEGIN");
+    try {
+      await store.run(
+        "UPDATE auth_profiles SET displayName=?,updatedAt=? WHERE userId=?",
+        displayName,
+        new Date().toISOString(),
+        auth.user.id,
+      );
+      if (avatarId !== undefined)
+        await store.run(
+          "UPDATE auth_avatars SET avatarId=? WHERE userId=?",
+          avatarId,
+          auth.user.id,
+        );
+      await store.exec("COMMIT");
+    } catch (error) {
+      await store.exec("ROLLBACK");
+      throw error;
+    }
     res.json({
-      user: publicUser({ ...auth.user, displayName }),
+      user: publicUser({
+        ...auth.user,
+        displayName,
+        avatarId: avatarId ?? auth.user.avatarId,
+      }),
       csrfToken: auth.session.csrfToken,
     });
   });
@@ -328,5 +360,5 @@ export function createAuth(app, store, { secureCookies } = {}) {
     setCookie(req, res, null);
     res.json({ ok: true });
   });
-  return { authenticate, csrf };
+  return { authenticate, csrf, newSession, setCookie, limited };
 }

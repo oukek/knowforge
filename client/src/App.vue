@@ -1,4 +1,5 @@
 <script setup>
+import { avatarFor } from "../../shared/avatars.mjs";
 import AppTooltip from "./components/AppTooltip.vue";
 import { onUnmounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -40,7 +41,7 @@ watch(
   ],
   () => {
     store.sidebarOpen = false;
-    document.title = `${store.user ? route.meta.title || "学习" : "登录与注册"} · KnowForge`;
+    document.title = `${store.user ? route.meta.title || "学习" : "微信登录"} · KnowForge`;
     if (!store.initialized || store.loading || store.error) return;
     if (!store.user && route.name !== "login")
       void router.replace(loginLocation(route.fullPath));
@@ -157,7 +158,13 @@ watch(
             class="account-name"
             aria-label="个人中心"
             :title="store.user?.displayName || store.user?.username"
-            ><Icon name="UserRound" :size="16" /><span>{{
+            ><img
+              class="account-avatar"
+              :src="avatarFor(store.user?.avatarId).src"
+              alt=""
+              width="28"
+              height="28"
+            /><span>{{
               store.user?.displayName || store.user?.username
             }}</span></RouterLink
           >

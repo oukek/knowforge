@@ -10,6 +10,7 @@ const catalog = JSON.parse(readFileSync("data/catalog.json", "utf8"));
 async function fixture(t, options = {}) {
   const mysql = process.env.TEST_MYSQL === "1" ? await mysqlFixture() : null;
   const built = await createApp({
+    authOptions: { allowRegistration: true },
     dbPath: ":memory:",
     ...(mysql ? { store: mysql.store } : {}),
     ...options,

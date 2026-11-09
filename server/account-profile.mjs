@@ -1,4 +1,5 @@
 import { randomInt } from "node:crypto";
+import { avatarIds } from "../shared/avatars.mjs";
 
 export const randomPublicId = () => String(randomInt(10000000, 100000000));
 const duplicate = (error) =>
@@ -44,8 +45,25 @@ export async function ensureProfile(db, user, generateId = randomPublicId) {
     }
   }
   if (!profile) throw Error("暂时无法分配用户 ID，请稍后重试");
+  let avatar = await db.get(
+    "SELECT avatarId FROM auth_avatars WHERE userId=?",
+    user.id,
+  );
+  if (!avatar) {
+    await db.run(
+      (db.driver === "mysql" ? "INSERT IGNORE" : "INSERT OR IGNORE") +
+        " INTO auth_avatars(userId,avatarId) VALUES(?,?)",
+      user.id,
+      avatarIds[randomInt(avatarIds.length)],
+    );
+    avatar = await db.get(
+      "SELECT avatarId FROM auth_avatars WHERE userId=?",
+      user.id,
+    );
+  }
   return {
     ...user,
+    avatarId: avatar.avatarId,
     publicId: profile.publicId,
     displayName: profile.displayName,
   };

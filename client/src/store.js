@@ -80,6 +80,9 @@ function clearSession() {
 }
 export async function signIn(mode, credentials) {
   const data = await request("/auth/" + mode, "POST", credentials);
+  await acceptSession(data);
+}
+export async function acceptSession(data) {
   store.user = data.user;
   store.csrfToken = data.csrfToken;
   await init(data);
@@ -107,8 +110,11 @@ async function updateAccount(path, method, body) {
   return data;
 }
 export const refreshProfile = () => updateAccount("/auth/profile", "GET");
-export const updateProfile = (displayName) =>
-  updateAccount("/auth/profile", "PUT", { displayName });
+export const updateProfile = (displayName, avatarId) =>
+  updateAccount("/auth/profile", "PUT", {
+    displayName,
+    ...(avatarId === undefined ? {} : { avatarId }),
+  });
 export const changePassword = (currentPassword, newPassword) =>
   updateAccount("/auth/password", "POST", { currentPassword, newPassword });
 export async function init(knownSession = null) {

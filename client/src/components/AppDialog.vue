@@ -7,6 +7,7 @@ const props = defineProps({
   title: { type: String, required: true },
   description: String,
   busy: Boolean,
+  mobileFullscreen: Boolean,
   width: { type: Number, default: 760 },
 });
 const emit = defineEmits(["close"]);
@@ -66,7 +67,12 @@ onBeforeUnmount(() => unlockModal(owner));
 </script>
 <template>
   <Teleport to="body"
-    ><div v-if="open" class="app-dialog-layer" @keydown="keydown">
+    ><div
+      v-if="open"
+      class="app-dialog-layer"
+      :class="{ 'mobile-fullscreen': mobileFullscreen }"
+      @keydown="keydown"
+    >
       <div
         class="app-dialog-backdrop"
         @pointerdown.stop
@@ -195,6 +201,12 @@ onBeforeUnmount(() => unlockModal(owner));
     max-height: 92dvh;
     border-radius: 20px 20px 0 0;
     border-bottom: 0;
+  }
+  .mobile-fullscreen .app-dialog-panel {
+    width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
   }
   .app-dialog-heading {
     padding: 22px 18px 16px;

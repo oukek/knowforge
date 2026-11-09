@@ -1,9 +1,11 @@
+import { wechatTables, wechatSchema } from "./wechat-schema.mjs";
 import { aiTables, aiSchema } from "./ai/schema.mjs";
 // Separate tables leave old shared records inaccessible to public accounts.
 export const accountTables = [
   "auth_users",
   "auth_sessions",
   "auth_profiles",
+  "auth_avatars",
   "user_progress",
   "user_notes",
   "user_bookmarks",
@@ -14,6 +16,7 @@ export const accountTables = [
   "user_lesson_attempts",
   "user_activity",
   ...aiTables,
+  ...wechatTables,
 ];
 
 export function accountSchema(driver, prefix = "") {
@@ -29,6 +32,7 @@ export function accountSchema(driver, prefix = "") {
     auth_users: `id ${uid} PRIMARY KEY,username ${mysql ? "VARCHAR(32)" : "TEXT"} NOT NULL UNIQUE,passwordHash ${mysql ? "VARCHAR(255)" : "TEXT"} NOT NULL,createdAt ${stamp} NOT NULL`,
     auth_sessions: `id ${mysql ? "VARCHAR(64)" : "TEXT"} PRIMARY KEY,userId ${uid} NOT NULL,csrfToken ${mysql ? "VARCHAR(64)" : "TEXT"} NOT NULL,expiresAt ${stamp} NOT NULL,createdAt ${stamp} NOT NULL`,
     auth_profiles: `userId ${uid} PRIMARY KEY,publicId ${mysql ? "VARCHAR(8)" : "TEXT"} NOT NULL UNIQUE,displayName ${mysql ? "VARCHAR(40)" : "TEXT"} NOT NULL,updatedAt ${stamp} NOT NULL`,
+    auth_avatars: `userId ${uid} PRIMARY KEY,avatarId ${mysql ? "VARCHAR(24)" : "TEXT"} NOT NULL`,
     user_progress: `userId ${uid} NOT NULL,id ${text} NOT NULL,status ${text} NOT NULL,updatedAt ${stamp} NOT NULL,PRIMARY KEY(userId,id)`,
     user_notes: `userId ${uid} NOT NULL,id ${text} NOT NULL,content ${long} NOT NULL,updatedAt ${stamp} NOT NULL,PRIMARY KEY(userId,id)`,
     user_bookmarks: `userId ${uid} NOT NULL,id ${text} NOT NULL,createdAt ${stamp} NOT NULL,PRIMARY KEY(userId,id)`,
@@ -51,5 +55,6 @@ export function accountSchema(driver, prefix = "") {
       return `CREATE TABLE IF NOT EXISTS \`${prefix}${name}\` (${columns}${index})${mysql ? " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin" : ""}`;
     }),
     ...aiSchema(driver, prefix),
+    ...wechatSchema(driver, prefix),
   ];
 }

@@ -103,8 +103,14 @@ mysqlTest(
   async (t) => {
     const mysql = await mysqlFixture();
     t.after(mysql.cleanup);
-    const source = await createApp({ dbPath: ":memory:" });
-    const target = await createApp({ store: mysql.store });
+    const source = await createApp({
+      dbPath: ":memory:",
+      authOptions: { allowRegistration: true },
+    });
+    const target = await createApp({
+      store: mysql.store,
+      authOptions: { allowRegistration: true },
+    });
     t.after(() => source.store.close());
     async function serve(app) {
       const server = await new Promise((resolve) => {

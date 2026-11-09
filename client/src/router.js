@@ -29,7 +29,7 @@ const router = createRouter({
       path: "/login",
       name: "login",
       component: () => import("./components/AuthScreen.vue"),
-      meta: { title: "登录与注册" },
+      meta: { title: "微信登录" },
     },
     {
       path: "/",

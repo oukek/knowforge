@@ -13,7 +13,7 @@ import { builtinModules } from "node:module";
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const lock = JSON.parse(readFileSync("package-lock.json", "utf8"));
 const output = resolve("backend-dist");
-const runtimeNames = ["express", "mysql2", "pyodide", "zod"];
+const runtimeNames = ["express", "mysql2", "pyodide", "zod", "qrcode"];
 const dependencies = Object.fromEntries(
   runtimeNames.map((name) => [
     name,

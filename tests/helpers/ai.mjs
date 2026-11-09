@@ -36,7 +36,7 @@ export const settings = {
   siteDailyRuns: 1000,
   perQuestionRuns: 10,
 };
-export async function fixture(t, aiOptions = {}) {
+export async function fixture(t, aiOptions = {}, appOptions = {}) {
   let calls = 0,
     delay = 0,
     behavior = "good";
@@ -112,8 +112,10 @@ export async function fixture(t, aiOptions = {}) {
   };
   const mysql = process.env.TEST_MYSQL === "1" ? await mysqlFixture() : null;
   const built = await createApp({
+    authOptions: { allowRegistration: true },
     ...(mysql ? { store: mysql.store } : { dbPath: ":memory:" }),
     aiOptions: { encryptionKey: "a".repeat(64), provider, ...aiOptions },
+    ...appOptions,
   });
   const server = built.app.listen(0, "127.0.0.1");
   await new Promise((r) => server.once("listening", r));

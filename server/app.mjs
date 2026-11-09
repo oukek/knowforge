@@ -1,3 +1,4 @@
+import { installWechat } from "./wechat.mjs";
 import { PRODUCTION_FRONTEND_ORIGIN } from "../shared/deployment.mjs";
 import { runnerFrame } from "./runner-frame.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -94,6 +95,8 @@ export async function createApp({
   publicApiOrigin,
   secureCookies,
   aiOptions,
+  wechatOptions,
+  authOptions,
 } = {}) {
   const resources = {
     runner: resolve("client/public/runner.js"),
@@ -178,7 +181,14 @@ export async function createApp({
     next();
   });
   app.use(["/api/ai", "/api/admin/ai"], express.json({ limit: "24kb" }));
-  app.use(express.json({ limit: "12mb" }));
+  app.use(
+    express.json({
+      limit: "12mb",
+      verify(req, res, buffer) {
+        if (req.path === "/api/payments/wechat/notify") req.rawBody = buffer;
+      },
+    }),
+  );
   app.get("/runner-frame", (req, res) => {
     const frame = runnerFrame([
       ...trustedOrigins,
@@ -195,8 +205,9 @@ export async function createApp({
   });
   const ok = async (res, extra = {}) =>
     res.json({ state: await snapshot(), ...extra });
-  const auth = createAuth(app, store, { secureCookies });
+  const auth = createAuth(app, store, { ...authOptions, secureCookies });
   const ai = await installAi(app, store, auth, catalog, aiOptions);
+  await installWechat(app, store, auth, ai, wechatOptions);
   const resolveQuestion = (id, userId) => ai.question(userId, id, store);
   const validTarget = async (id, userId) =>
     targets.has(id) || !!(await resolveQuestion(id, userId));

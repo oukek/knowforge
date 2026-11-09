@@ -266,9 +266,10 @@ test("跨域运行器页面仅允许正式前端嵌入，Worker 保留独立 CSP
 
 async function fixture(t) {
   const mysql = process.env.TEST_MYSQL === "1" ? await mysqlFixture() : null;
-  const { app, store } = await createApp(
-    mysql ? { store: mysql.store } : { dbPath: ":memory:" },
-  );
+  const { app, store } = await createApp({
+    ...(mysql ? { store: mysql.store } : { dbPath: ":memory:" }),
+    authOptions: { allowRegistration: true },
+  });
   const server = await new Promise((resolve) => {
     const s = app.listen(0, "127.0.0.1", () => resolve(s));
   });
@@ -902,5 +903,78 @@ test("管理用户列表可通过公开 ID 和显示名称查找账号，不依�
   assert.equal(
     (await a.api("/admin/ai/users?query=" + a.state.user.publicId)).status,
     403,
+  );
+});
+
+test("内置头像随机分配且稳定；昵称和头像可同时修改，拒绝非法头像与跨账号修改", async (t) => {
+  const { avatarIds, avatars } = await import("../shared/avatars.mjs");
+  assert.equal(avatars.length, 16);
+  assert.equal(new Set(avatarIds).size, 16);
+  const { client, store } = await fixture(t),
+    a = client(),
+    b = client();
+  await a.register("avatar_alice");
+  await b.register("avatar_bob");
+  const original = a.state.user.avatarId,
+    bob = b.state.user.avatarId;
+  assert(avatarIds.includes(original));
+  assert.equal((await a.api("/auth/me")).data.user.avatarId, original);
+  const chosen = avatarIds.find((id) => id !== original);
+  const result = await a.api("/auth/profile", "PUT", {
+    displayName: "新的昵称",
+    avatarId: chosen,
+  });
+  assert.equal(result.status, 200);
+  assert.equal(result.data.user.avatarId, chosen);
+  assert.equal((await a.api("/auth/me")).data.user.avatarId, chosen);
+  assert.equal((await a.api("/auth/me")).data.user.displayName, "新的昵称");
+  assert.equal(
+    (await a.api("/bootstrap?catalog=none")).data.user.avatarId,
+    chosen,
+  );
+  assert.equal((await b.api("/auth/me")).data.user.avatarId, bob);
+  for (const avatarId of [
+    "https://example.com/avatar.png",
+    "../cat",
+    "",
+    "CAT",
+    1,
+  ]) {
+    assert.equal(
+      (
+        await a.api("/auth/profile", "PUT", {
+          displayName: "不应保存",
+          avatarId,
+        })
+      ).status,
+      400,
+    );
+  }
+  assert.equal(
+    (
+      await a.api("/auth/profile", "PUT", {
+        displayName: "越权",
+        avatarId: chosen,
+        userId: b.state.user.id,
+      })
+    ).status,
+    400,
+  );
+  assert.equal((await a.api("/auth/me")).data.user.displayName, "新的昵称");
+  assert.equal(
+    (await a.api("/auth/profile", "PUT", { displayName: "只改昵称" })).data.user
+      .avatarId,
+    chosen,
+  );
+  // Existing users acquire a persistent random avatar without changing their profile or ID.
+  await store.session(() =>
+    store.run("DELETE FROM auth_avatars WHERE userId=?", a.state.user.id),
+  );
+  const backfilled = (await a.api("/auth/me")).data.user;
+  assert(avatarIds.includes(backfilled.avatarId));
+  assert.equal(backfilled.displayName, "只改昵称");
+  assert.equal(
+    (await a.api("/auth/me")).data.user.avatarId,
+    backfilled.avatarId,
   );
 });

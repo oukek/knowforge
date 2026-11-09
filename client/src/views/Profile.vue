@@ -9,6 +9,17 @@ import {
 } from "../store.js";
 import AppField from "../components/AppField.vue";
 import Icon from "../components/Icon.vue";
+import AppDialog from "../components/AppDialog.vue";
+import { avatars, avatarFor } from "../../../shared/avatars.mjs";
+const editOpen = ref(false),
+  passwordOpen = ref(false);
+const selectedAvatar = ref(store.user?.avatarId);
+function openEditor() {
+  name.value = store.user.displayName;
+  selectedAvatar.value = store.user.avatarId;
+  nameError.value = "";
+  editOpen.value = true;
+}
 const name = ref(store.user?.displayName || store.user?.username || "");
 const loading = ref(false),
   nameBusy = ref(false),
@@ -32,11 +43,6 @@ const joined = computed(() =>
       })
     : "—",
 );
-const initial = computed(() =>
-  Array.from(
-    store.user?.displayName || store.user?.username || "K",
-  )[0].toUpperCase(),
-);
 async function load() {
   loading.value = true;
   error.value = "";
@@ -58,10 +64,11 @@ async function saveName() {
   }
   nameBusy.value = true;
   try {
-    const data = await updateProfile(name.value.trim());
+    const data = await updateProfile(name.value.trim(), selectedAvatar.value);
     if (data) {
       name.value = data.user.displayName;
-      toast("显示名称已更新");
+      editOpen.value = false;
+      toast("昵称与头像已更新");
     }
   } catch (e) {
     nameError.value = e.message;
@@ -123,13 +130,6 @@ onMounted(load);
 </script>
 <template>
   <div class="page-enter profile-page">
-    <div class="page-heading">
-      <div>
-        <div class="eyebrow">YOUR KNOWFORGE</div>
-        <h1>个人中心</h1>
-        <p>查看账号身份，管理显示名称与登录密码。</p>
-      </div>
-    </div>
     <p v-if="error" class="profile-error" role="alert">
       {{ error }} <button class="text-btn" @click="load">重新加载</button>
     </p>
@@ -138,7 +138,13 @@ onMounted(load);
         class="profile-identity"
         aria-labelledby="profile-identity-title"
       >
-        <div class="profile-avatar" aria-hidden="true">{{ initial }}</div>
+        <img
+          class="profile-avatar"
+          :src="avatarFor(store.user?.avatarId).src"
+          :alt="avatarFor(store.user?.avatarId).name + '头像'"
+          width="80"
+          height="80"
+        />
         <span class="profile-role">{{
           store.user?.role === "admin" ? "管理员" : "学习者"
         }}</span>
@@ -184,40 +190,22 @@ onMounted(load);
           <div class="profile-panel-heading">
             <Icon name="UserRound" :size="20" />
             <div>
-              <h2 id="profile-name-title">显示名称</h2>
-              <p>这个名称会显示在页面右上角，可随时修改。</p>
+              <h2 id="profile-name-title">头像与昵称</h2>
+              <p>从 16 个内置卡通头像中选择，昵称可随时修改。</p>
             </div>
           </div>
-          <form @submit.prevent="saveName" novalidate>
-            <label for="profile-name">显示名称</label
-            ><AppField
-              id="profile-name"
-              v-model="name"
-              autocomplete="nickname"
-              maxlength="40"
-              :disabled="loading || nameBusy"
-              :aria-invalid="!!nameError"
-              :aria-describedby="
-                nameError ? 'profile-name-error' : 'profile-name-help'
-              "
-            />
-            <p id="profile-name-help" class="profile-help">
-              支持中文，最多 40 个字符。登录时仍使用原账号。
-            </p>
-            <p
-              v-if="nameError"
-              id="profile-name-error"
-              class="profile-error"
-              role="alert"
-            >
-              {{ nameError }}
-            </p>
-            <button class="btn primary" :disabled="loading || nameBusy">
-              {{ nameBusy ? "保存中…" : "保存名称" }}
+          <div class="profile-summary">
+            <span>{{ store.user?.displayName }}</span
+            ><button class="btn" :disabled="loading" @click="openEditor">
+              修改资料
             </button>
-          </form>
+          </div>
         </section>
-        <section class="profile-panel" aria-labelledby="profile-password-title">
+        <section
+          v-if="store.user?.hasPassword"
+          class="profile-panel"
+          aria-labelledby="profile-password-title"
+        >
           <div class="profile-panel-heading">
             <Icon name="BadgeCheck" :size="20" />
             <div>
@@ -225,81 +213,184 @@ onMounted(load);
               <p>验证当前密码后设置新密码。</p>
             </div>
           </div>
-          <form @submit.prevent="savePassword" novalidate>
-            <input
-              class="profile-username-field"
-              type="text"
-              name="username"
-              :value="store.user?.username"
-              autocomplete="username"
-              readonly
-              tabindex="-1"
-              aria-hidden="true"
-            />
-            <label for="profile-current-password">当前密码</label
-            ><AppField
-              id="profile-current-password"
-              v-model="currentPassword"
-              :type="showPassword ? 'text' : 'password'"
-              autocomplete="current-password"
-              maxlength="128"
-              :disabled="passwordBusy"
-            />
-            <div class="profile-password-grid">
-              <div>
-                <label for="profile-new-password">新密码</label
-                ><AppField
-                  id="profile-new-password"
-                  v-model="newPassword"
-                  :type="showPassword ? 'text' : 'password'"
-                  autocomplete="new-password"
-                  minlength="8"
-                  maxlength="128"
-                  :disabled="passwordBusy"
-                  placeholder="8–128 位"
-                />
-              </div>
-              <div>
-                <label for="profile-confirm-password">确认新密码</label
-                ><AppField
-                  id="profile-confirm-password"
-                  v-model="confirmation"
-                  :type="showPassword ? 'text' : 'password'"
-                  autocomplete="new-password"
-                  minlength="8"
-                  maxlength="128"
-                  :disabled="passwordBusy"
-                  placeholder="再次输入新密码"
-                />
-              </div>
-            </div>
-            <button
-              class="text-btn profile-password-toggle"
-              type="button"
-              :aria-pressed="showPassword"
-              @click="showPassword = !showPassword"
-            >
-              <Icon :name="showPassword ? 'EyeOff' : 'Eye'" :size="17" />{{
-                showPassword ? "隐藏密码" : "显示密码"
-              }}
-            </button>
-            <p class="profile-help">
-              修改后，当前设备保持登录，其他设备的登录会失效。
-            </p>
-            <p v-if="passwordError" class="profile-error" role="alert">
-              {{ passwordError }}
-            </p>
-            <p v-if="passwordMessage" class="profile-success" role="status">
-              {{ passwordMessage }}
-            </p>
-            <button class="btn primary" :disabled="passwordBusy">
-              {{ passwordBusy ? "正在修改…" : "更新密码" }}
-            </button>
-          </form>
+          <button
+            class="btn"
+            @click="
+              passwordOpen = true;
+              passwordError = '';
+              passwordMessage = '';
+            "
+          >
+            修改密码
+          </button>
         </section>
       </div>
     </div>
   </div>
+  <AppDialog
+    :open="editOpen"
+    title="修改头像与昵称"
+    :width="500"
+    :busy="nameBusy"
+    @close="editOpen = false"
+  >
+    <form id="profile-editor" @submit.prevent="saveName" novalidate>
+      <fieldset class="avatar-fieldset">
+        <legend>选择头像</legend>
+        <div class="avatar-options" role="group" aria-label="16 个卡通头像">
+          <button
+            v-for="avatar in avatars"
+            :key="avatar.id"
+            type="button"
+            class="avatar-option"
+            :class="{ selected: selectedAvatar === avatar.id }"
+            :aria-label="avatar.name"
+            :aria-pressed="selectedAvatar === avatar.id"
+            :disabled="nameBusy"
+            @click="selectedAvatar = avatar.id"
+          >
+            <img :src="avatar.src" alt="" width="64" height="64" /><Icon
+              v-if="selectedAvatar === avatar.id"
+              class="avatar-check"
+              name="Check"
+              :size="14"
+            />
+          </button>
+        </div>
+      </fieldset>
+      <label for="profile-name">昵称</label
+      ><AppField
+        id="profile-name"
+        v-model="name"
+        autocomplete="nickname"
+        maxlength="40"
+        :disabled="nameBusy"
+        :aria-invalid="!!nameError"
+        aria-describedby="profile-name-help"
+      />
+      <p id="profile-name-help" class="profile-help">
+        支持中文，最多 40 个字符。修改后不会影响学习记录。
+      </p>
+      <p v-if="nameError" class="profile-error" role="alert">{{ nameError }}</p>
+    </form>
+    <template #footer
+      ><button class="btn" :disabled="nameBusy" @click="editOpen = false">
+        取消</button
+      ><button
+        class="btn primary"
+        form="profile-editor"
+        type="submit"
+        :disabled="nameBusy"
+      >
+        {{ nameBusy ? "保存中…" : "保存" }}
+      </button></template
+    >
+  </AppDialog>
+  <AppDialog
+    :open="passwordOpen"
+    title="修改密码"
+    :width="500"
+    :busy="passwordBusy"
+    @close="
+      passwordOpen = false;
+      currentPassword = '';
+      newPassword = '';
+      confirmation = '';
+      showPassword = false;
+    "
+  >
+    <form id="password-editor" @submit.prevent="savePassword" novalidate>
+      <input
+        class="profile-username-field"
+        type="text"
+        name="username"
+        :value="store.user?.username"
+        autocomplete="username"
+        readonly
+        tabindex="-1"
+        aria-hidden="true"
+      />
+      <label for="profile-current-password">当前密码</label
+      ><AppField
+        id="profile-current-password"
+        v-model="currentPassword"
+        :type="showPassword ? 'text' : 'password'"
+        autocomplete="current-password"
+        maxlength="128"
+        :disabled="passwordBusy"
+      />
+      <div class="profile-password-grid">
+        <div>
+          <label for="profile-new-password">新密码</label
+          ><AppField
+            id="profile-new-password"
+            v-model="newPassword"
+            :type="showPassword ? 'text' : 'password'"
+            autocomplete="new-password"
+            minlength="8"
+            maxlength="128"
+            :disabled="passwordBusy"
+            placeholder="8–128 位"
+          />
+        </div>
+        <div>
+          <label for="profile-confirm-password">确认新密码</label
+          ><AppField
+            id="profile-confirm-password"
+            v-model="confirmation"
+            :type="showPassword ? 'text' : 'password'"
+            autocomplete="new-password"
+            minlength="8"
+            maxlength="128"
+            :disabled="passwordBusy"
+            placeholder="再次输入新密码"
+          />
+        </div>
+      </div>
+      <button
+        class="text-btn profile-password-toggle"
+        type="button"
+        :aria-pressed="showPassword"
+        @click="showPassword = !showPassword"
+      >
+        <Icon :name="showPassword ? 'EyeOff' : 'Eye'" :size="17" />{{
+          showPassword ? "隐藏密码" : "显示密码"
+        }}
+      </button>
+      <p class="profile-help">
+        修改后，当前设备保持登录，其他设备的登录会失效。
+      </p>
+      <p v-if="passwordError" class="profile-error" role="alert">
+        {{ passwordError }}
+      </p>
+      <p v-if="passwordMessage" class="profile-success" role="status">
+        {{ passwordMessage }}
+      </p>
+    </form>
+    <template #footer>
+      <button
+        class="btn"
+        :disabled="passwordBusy"
+        @click="
+          passwordOpen = false;
+          currentPassword = '';
+          newPassword = '';
+          confirmation = '';
+          showPassword = false;
+        "
+      >
+        取消
+      </button>
+      <button
+        class="btn primary"
+        form="password-editor"
+        type="submit"
+        :disabled="passwordBusy"
+      >
+        {{ passwordBusy ? "正在修改…" : "更新密码" }}
+      </button>
+    </template>
+  </AppDialog>
 </template>
 <style>
 .profile-page {
@@ -323,11 +414,63 @@ onMounted(load);
   padding: 30px;
   background: #f3f8f5;
 }
+.profile-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  overflow-wrap: anywhere;
+}
+.avatar-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0 0 24px;
+}
+.avatar-fieldset legend {
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.avatar-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.avatar-option {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 5px;
+  border: 2px solid transparent;
+  border-radius: 18px;
+}
+.avatar-option img {
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+}
+.avatar-option.selected {
+  border-color: var(--green);
+  background: #eaf3ed;
+}
+.avatar-option:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 3px;
+}
+.avatar-check {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  background: var(--green);
+  color: white;
+  border-radius: 50%;
+  padding: 3px;
+  box-sizing: content-box;
+}
 .profile-avatar {
   display: grid;
   place-items: center;
-  width: 58px;
-  height: 58px;
+  width: 80px;
+  height: 80px;
   border-radius: 16px;
   background: #deece4;
   color: var(--green-dark);
@@ -432,12 +575,14 @@ onMounted(load);
   line-height: 1.8;
   margin: 0;
 }
-.profile-panel label {
+#profile-editor label,
+#password-editor label {
   display: block;
   font-size: 13px;
   margin-bottom: 9px;
 }
-.profile-panel .app-field {
+#profile-editor .app-field,
+#password-editor .app-field {
   width: 100%;
   padding: 12px 13px;
   font-size: 14px;
@@ -518,7 +663,8 @@ onMounted(load);
   .profile-identity h2 {
     font-size: 22px;
   }
-  .profile-panel .app-field {
+  #profile-editor .app-field,
+  #password-editor .app-field {
     font-size: 16px;
   }
   .profile-panel .btn {

@@ -9,6 +9,7 @@ import AdminCallHistory from "../components/AdminCallHistory.vue";
 import AdminCallDetail from "../components/AdminCallDetail.vue";
 import AdminAiPool from "../components/AdminAiPool.vue";
 import AdminCredits from "../components/AdminCredits.vue";
+import AdminWechat from "../components/AdminWechat.vue";
 import AdminProducts from "../components/AdminProducts.vue";
 import AppDialog from "../components/AppDialog.vue";
 const AdminPricing = defineAsyncComponent(
@@ -21,6 +22,7 @@ const tab = computed({
     route.query.tab === "limits"
       ? "models"
       : [
+            "wechat",
             "providers",
             "models",
             "users",
@@ -137,11 +139,9 @@ onMounted(
 </script>
 <template>
   <div class="page-enter ai-admin">
-    <div class="page-heading">
+    <div class="section-line" style="margin-bottom: 16px">
       <div>
-        <div class="eyebrow">KNOWFORGE ADMIN</div>
-        <h1>让每次调用都有据可查。</h1>
-        <p>统一配置服务，按用户分配额度，核对内容与模型消耗。</p>
+        <p class="tiny muted">管理服务配置、用户额度与交易接入。</p>
       </div>
       <button
         class="btn small"
@@ -165,6 +165,7 @@ onMounted(
           ['products', '资源包与预算'],
           ['pricing', '定价测算'],
           ['history', '调用与核对'],
+          ['wechat', '微信接入'],
         ]"
         :key="value"
         :class="{ active: tab === value }"
@@ -181,6 +182,7 @@ onMounted(
       :key="tab"
       :section="tab"
     />
+    <AdminWechat v-if="tab === 'wechat'" />
     <AdminCredits v-if="tab === 'users'" />
     <AdminProducts v-if="tab === 'products'" />
     <AdminPricing v-if="tab === 'pricing'" />

@@ -14,6 +14,7 @@ const close = (server) => new Promise((done) => server.close(done));
 
 async function fixture(t, options = {}) {
   const { app, store } = await createApp({
+    authOptions: { allowRegistration: true },
     dbPath: ":memory:",
     serveClient: false,
   });

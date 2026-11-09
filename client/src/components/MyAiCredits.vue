@@ -2,7 +2,11 @@
 import { ref, onMounted } from "vue";
 import { request, dateLabel } from "../store.js";
 import { ai, refreshAi } from "../ai.js";
+import WechatCheckout from "./WechatCheckout.vue";
 import AppDisclosure from "./AppDisclosure.vue";
+const checkout = ref(null),
+  paymentEnabled = ref(false),
+  orders = ref([]);
 const data = ref(null),
   products = ref([]),
   page = ref(1),
@@ -10,6 +14,7 @@ const data = ref(null),
   error = ref(""),
   busy = ref(false);
 const kinds = {
+  purchase: "微信购买",
   grant: "额度发放",
   migration: "历史额度迁移",
   reserve: "调用预占",
@@ -30,6 +35,7 @@ async function load() {
     );
     data.value = response;
     await refreshAi();
+    orders.value = (await request("/payments/orders")).rows;
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -45,6 +51,7 @@ onMounted(async () => {
   await load();
   try {
     products.value = (await request("/ai/products")).rows;
+    paymentEnabled.value = (await request("/payments/capabilities")).enabled;
   } catch (e) {
     error.value = e.message;
   }
@@ -98,7 +105,7 @@ onMounted(async () => {
           优先使用即将过期的额度，同到期时间按发放顺序使用。永久额度排在最后。
         </p>
         <p v-if="!data.lots.length" class="ai-empty">
-          还没有额度，联系管理员发放或开通免费资格。
+          还没有额度，可以购买资源包或联系管理员。
         </p>
         <div class="ai-record-list">
           <article v-for="lot in data.lots" :key="lot.id" class="ai-audit-row">
@@ -201,9 +208,13 @@ onMounted(async () => {
       </div>
     </section>
     <section v-if="products.length" class="ai-detail">
-      <h2>可配置的资源包</h2>
+      <h2>购买资源包</h2>
       <p class="tiny muted">
-        当前由管理员发放，尚未开放在线购买。价格为商品配置，实际赠送不会产生付款。
+        {{
+          paymentEnabled
+            ? "使用微信支付购买，付款确认后额度自动到账。"
+            : "微信支付尚未开通，可联系管理员获取额度。"
+        }}
       </p>
       <div class="ai-usage-summary">
         <article v-for="p in products" :key="p.id">
@@ -213,7 +224,7 @@ onMounted(async () => {
             另赠 {{ p.published.bonus }} 额度
           </p>
           <p>
-            配置售价 ¥{{ p.published.price }} ·
+            售价 ¥{{ p.published.price }} ·
             {{
               p.published.validDays === null
                 ? "永久"
@@ -221,9 +232,54 @@ onMounted(async () => {
             }}
           </p>
           <p class="tiny muted">{{ p.published.description }}</p>
+          <button
+            class="btn primary"
+            :disabled="!paymentEnabled || Number(p.published.price) <= 0"
+            @click="checkout = { product: p }"
+          >
+            微信购买
+          </button>
         </article>
       </div>
     </section>
+    <section v-if="orders.length" class="ai-detail">
+      <div class="section-line">
+        <h2>我的支付订单</h2>
+        <button class="text-btn" :disabled="busy" @click="load">刷新</button>
+      </div>
+      <div class="ai-record-list">
+        <article v-for="order in orders" :key="order.id" class="ai-audit-row">
+          <div class="section-line">
+            <strong>{{ order.product }} · ¥{{ order.amount }}</strong
+            ><button class="text-btn" @click="checkout = { orderId: order.id }">
+              {{ order.status === "paid" ? "查看详情" : "核对订单" }}
+            </button>
+          </div>
+          <p class="tiny muted">
+            {{
+              order.status === "paid"
+                ? "已支付，额度已入账"
+                : order.status === "closed"
+                  ? "已关闭"
+                  : "待支付／待核对"
+            }}
+            · {{ dateLabel(order.createdAt) }}
+          </p>
+        </article>
+      </div>
+      <p class="tiny muted">
+        展示最近 50 笔订单；支付状态以服务端核对结果为准。
+      </p>
+    </section>
+    <WechatCheckout
+      v-if="checkout"
+      v-bind="checkout"
+      @close="
+        checkout = null;
+        load();
+      "
+      @paid="load"
+    />
   </section>
 </template>
 <style scoped>

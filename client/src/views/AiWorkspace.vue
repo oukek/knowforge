@@ -208,7 +208,7 @@ onMounted(async () => {
         <span>预占中</span><strong>{{ ai.account.reserved }}</strong>
       </div>
       <p>
-        额度由管理员发放；成功调用按用量结算，免费用户免扣。失败调用释放预占。
+        额度可购买资源包或由管理员发放；成功调用按用量结算，免费用户免扣。失败调用释放预占。
       </p>
     </div>
     <p v-if="!ai.configured" class="info-banner">
