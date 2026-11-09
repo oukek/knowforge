@@ -1,5 +1,4 @@
 import { randomBytes, randomUUID, createHash } from "node:crypto";
-import QRCode from "qrcode";
 import { z } from "zod";
 import { WechatConfiguration } from "./wechat-config.mjs";
 import { WechatPay } from "./wechat-pay.mjs";
@@ -136,7 +135,6 @@ export async function installWechat(app, store, auth, ai, options = {}) {
       secret,
       expiresAt,
       url: url.href,
-      qr: await QRCode.toDataURL(url.href, { width: 280, margin: 2 }),
     };
   });
   route("get", "/api/auth/wechat/callback", async (req, res, c, gateway) => {
@@ -448,16 +446,7 @@ export async function installWechat(app, store, auth, ai, options = {}) {
     }
     return {
       order: publicOrder(order),
-      intent:
-        intent.type === "qr"
-          ? {
-              ...intent,
-              qr: await QRCode.toDataURL(intent.codeUrl, {
-                width: 280,
-                margin: 2,
-              }),
-            }
-          : intent,
+      intent,
     };
   }
   route(
@@ -584,15 +573,7 @@ export async function installWechat(app, store, auth, ai, options = {}) {
           order.status === "pending" &&
           order.expiresAt > new Date().toISOString() &&
           intent.type
-            ? intent.type === "qr"
-              ? {
-                  ...intent,
-                  qr: await QRCode.toDataURL(intent.codeUrl, {
-                    width: 280,
-                    margin: 2,
-                  }),
-                }
-              : intent
+            ? intent
             : undefined,
       };
     },

@@ -1,4 +1,5 @@
 <script setup>
+import QrCode from "./QrCode.vue";
 import AppField from "./AppField.vue";
 import AppDialog from "./AppDialog.vue";
 import { ref, onMounted, onBeforeUnmount } from "vue";
@@ -144,12 +145,7 @@ onBeforeUnmount(() => {
         </p>
         <template v-if="flow">
           <div class="wechat-qr">
-            <img
-              :src="flow.qr"
-              alt="请使用微信扫描登录二维码"
-              width="240"
-              height="240"
-            />
+            <QrCode :value="flow.url" alt="请使用微信扫描登录二维码" />
           </div>
           <p class="auth-footnote" aria-live="polite">
             请使用微信扫码，并在手机上确认登录。<br />二维码五分钟内有效。

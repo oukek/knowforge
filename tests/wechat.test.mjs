@@ -214,7 +214,8 @@ test("默认关闭注册；微信扫码需手机确认和原设备密钥，凭�
   );
   const flow = (await f.api("/auth/wechat/start", "POST", {})).data;
   const token = { id: flow.id, secret: flow.secret };
-  assert.match(flow.qr, /^data:image\/png/);
+  assert.equal("qr" in flow, false);
+  assert.match(flow.url, /^https:\/\/open\.weixin\.qq\.com\//);
   assert.equal(new URL(flow.url).searchParams.get("state"), flow.id);
   assert.equal(
     (
@@ -270,12 +271,30 @@ test("支付订单固定售价，复用有效待付订单，金额与身份校�
   assert.equal(first.status, 200, JSON.stringify(first.data));
   assert.equal(first.data.order.amount, "9.90");
   assert.equal(first.data.intent.type, "qr");
-  assert.match(first.data.intent.qr, /^data:image\/png/);
+  assert.deepEqual(first.data.intent, {
+    type: "qr",
+    codeUrl: "weixin://wxpay/fixture",
+  });
   const retry = await f.api("/payments/orders", "POST", input, a);
   const secondClick = await f.api("/payments/orders", "POST", purchase(p), a);
   assert.equal(first.data.order.id, retry.data.order.id);
   assert.equal(secondClick.data.order.id, first.data.order.id);
   assert.equal(f.calls, 1);
+  for (const [path, method, body] of [
+    [`/payments/orders/${first.data.order.id}`, "GET"],
+    [
+      `/payments/orders/${first.data.order.id}/checkout`,
+      "POST",
+      { mode: "native" },
+    ],
+  ]) {
+    const restored = await f.api(path, method, body, a);
+    assert.equal(restored.status, 200);
+    assert.deepEqual(restored.data.intent, {
+      type: "qr",
+      codeUrl: "weixin://wxpay/fixture",
+    });
+  }
   assert.equal(
     (
       await f.api(

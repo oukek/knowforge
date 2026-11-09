@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, computed } from "vue";
 import { request, store } from "../store.js";
+import QrCode from "./QrCode.vue";
 import AppDialog from "./AppDialog.vue";
 const props = defineProps({ product: Object, orderId: String });
 const emit = defineEmits(["close", "paid"]);
@@ -136,11 +137,13 @@ onBeforeUnmount(() => {
           此订单已关闭，可以重新选择资源包购买。
         </p>
         <template v-else>
-          <img
-            v-if="intent?.qr && Date.parse(order.expiresAt) > Date.now()"
-            :src="intent.qr"
-            width="240"
-            height="240"
+          <QrCode
+            v-if="
+              intent?.type === 'qr' &&
+              intent.codeUrl &&
+              Date.parse(order.expiresAt) > Date.now()
+            "
+            :value="intent.codeUrl"
             alt="微信支付二维码，请使用微信扫一扫"
           />
           <p class="tiny muted">

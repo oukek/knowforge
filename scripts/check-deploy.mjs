@@ -13,7 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { once } from "node:events";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID, scryptSync } from "node:crypto";
 import { tableColumns } from "../server/study-store.mjs";
 import { accountTables } from "../server/account-schema.mjs";
 
@@ -71,6 +71,7 @@ try {
     "prettier",
     "esbuild",
     "nodemon",
+    "qrcode",
   ])
     assert(
       !lock.packages[`node_modules/${name}`],
@@ -128,9 +129,45 @@ try {
       password: "production-smoke-check",
     }),
   });
-  assert.equal(registration.status, 201);
-  const cookie = registration.headers.get("set-cookie").split(";")[0];
-  const { csrfToken, user: registeredUser } = await registration.json();
+  assert.equal(
+    registration.status,
+    410,
+    "Public registration must remain closed",
+  );
+  // Model an existing password account upgraded from an older release. Seed only
+  // this check's isolated database; the production server never enables registration.
+  const salt = randomBytes(16).toString("hex");
+  const passwordHash = `scrypt$${salt}$${scryptSync("production-smoke-check", salt, 64, { N: 32768, r: 8, p: 3, maxmem: 64 * 1024 * 1024 }).toString("hex")}`;
+  const account = [
+    randomUUID(),
+    "smokecheck",
+    passwordHash,
+    new Date().toISOString(),
+  ];
+  const insertAccount =
+    "INSERT INTO auth_users(id,username,passwordHash,createdAt) VALUES(?,?,?,?)";
+  if (mysqlCheck)
+    await mysqlStore.session(() => mysqlStore.run(insertAccount, ...account));
+  else {
+    const { DatabaseSync } = await import("node:sqlite");
+    const database = new DatabaseSync(join(stage, "smoke.sqlite"));
+    try {
+      database.prepare(insertAccount).run(...account);
+    } finally {
+      database.close();
+    }
+  }
+  const login = await fetch(`${base}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: base },
+    body: JSON.stringify({
+      username: "smokecheck",
+      password: "production-smoke-check",
+    }),
+  });
+  assert.equal(login.status, 200);
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  const { csrfToken, user: registeredUser } = await login.json();
   assert.match(registeredUser.publicId, /^[1-9]\d{7}$/);
   const bootstrap = await (
     await fetch(`${base}/api/bootstrap`, { headers: { Cookie: cookie } })
@@ -467,7 +504,7 @@ try {
     200,
   );
   console.log(
-    "Standalone backend smoke check passed: compiled entry, locked runtime dependencies, login, persistence, Workers and downloads; no frontend pages or source directories.",
+    "Standalone backend smoke check passed: compiled entry, locked runtime dependencies, closed registration, existing-account login, persistence, Workers and downloads; no frontend pages or source directories.",
   );
 } finally {
   if (child && child.exitCode === null) {
