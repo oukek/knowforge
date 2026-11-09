@@ -95,7 +95,8 @@ test("AI 深入路线包含十八个新机制专题及独立场景、选择与�
     const lesson = data.lessons.find((l) => l.id === id);
     assert(lesson, id);
     assert.equal(lesson.depth, "deep", id);
-    assert.equal(lesson.sections.length, 6, id);
+    assert.equal(lesson.teachingFormat, 'chapter', id);
+    assert(lesson.sections.length >= 9, `${id} 深入机制应保留并展开，不能退回三个摘要`);
     assert(lesson.relatedLessonIds.length >= 2, id);
     const questions = data.questions.filter(
       (q) =>

@@ -19,7 +19,11 @@ const tab = ref("code"),
   saveStatus = ref("");
 const language = computed(() => props.lesson.language ?? "javascript");
 const languageName = computed(() =>
-  language.value === "python" ? "Python" : "JavaScript",
+  language.value === "python"
+    ? "Python"
+    : language.value === "go"
+      ? "Go"
+      : "JavaScript",
 );
 const example = computed(() => props.lesson.playground),
   output = computed(() =>
@@ -87,6 +91,7 @@ watch(tab, () => {
   saveStatus.value = "";
 });
 async function execute({ reloadRuntime = false } = {}) {
+  if (example.value.runtime === "local") return;
   const isFill = tab.value === "fill",
     source = isFill ? fillCode.value : code.value;
   const current = fill.value;
@@ -252,7 +257,11 @@ defineExpose({ openExercises, openExample });
         <div class="row wrap">
           <h3>{{ example.title }}</h3>
           <span class="badge subtle">{{
-            example.runtime === "model" ? "教学模拟" : "可运行示例"
+            example.runtime === "local"
+              ? "本地运行"
+              : example.runtime === "model"
+                ? "教学模拟"
+                : "可运行示例"
           }}</span>
         </div>
         <p>{{ example.description }}</p>
@@ -261,7 +270,19 @@ defineExpose({ openExercises, openExample });
           API，也不执行业务写入；实际用法与边界见正文和示例说明。
         </p>
       </div>
-      <div class="lesson-editor-shell">
+      <div v-if="example.runtime === 'local'">
+        <p class="example-scope">
+          这是完整 Go 程序。复制保存为 main.go，在已安装 Go 的本地终端执行 go
+          run main.go；本页不会把 Go 代码当成 JavaScript
+          运行。下方“预测输出”仍可提交答案自动核对。
+        </p>
+        <CodeBlock
+          :language="language"
+          :label="languageName"
+          :code="example.code"
+        />
+      </div>
+      <div v-else class="lesson-editor-shell">
         <div class="workbench-toolbar">
           <span>{{ language === "python" ? "example.py" : "example.js" }}</span>
           <div class="row wrap">
@@ -303,7 +324,7 @@ defineExpose({ openExercises, openExample });
           :stale="stale"
         />
       </div>
-      <p class="workbench-save-hint">
+      <p v-if="example.runtime !== 'local'" class="workbench-save-hint">
         代码草稿自动保存在当前浏览器 · 支持顶层 await · 执行上限 4 秒
         <span v-if="language === 'python'">
           · Python

@@ -15,7 +15,9 @@ export function attachExamples(lessons) {
         type: "output",
         title: "预测输出",
         prompt:
-          lesson.language === "python"
+          lesson.language === "go"
+            ? "阅读 Go 代码，填写每次 fmt.Println 的输出，每次调用占一行。可在本地运行后对照，网页不会执行 Go 程序。"
+            : lesson.language === "python"
             ? "先阅读原始 Python 代码，按顺序填写每次输出，一次调用占一行。字符串可用单引号或双引号；接受 JSON 写法及 Python 的 True/False/None。"
             : "不运行原始代码，按顺序填写每次 console 输出。每次调用占一行，多个参数以空格分隔；对象/数组接受 JSON 或单引号字面量，对象键可不加引号。",
         code: example.code,

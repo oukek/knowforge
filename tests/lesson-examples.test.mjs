@@ -33,7 +33,7 @@ export async function execute(payload) {
   await self.onmessage({ data: payload });
   return { result, messages };
 }
-for (const lesson of data.lessons.filter((l) => l.language !== "python")) {
+for (const lesson of data.lessons.filter((l) => l.language === "javascript")) {
   test("知识点运行示例：" + lesson.id, async () => {
     assert(lesson.playground, "缺少示例");
     const { result } = await execute({

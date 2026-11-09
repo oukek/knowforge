@@ -1,4 +1,4 @@
-const secondary = [{ key: 'a', id: 81 }, { key: 'a', id: 2 }, { key: 'a', id: 41 }];
+const secondary = [{ key: 'a', id: 81 }, { key: 'b', id: 2 }, { key: 'c', id: 41 }];
 const pageOf = id => Math.floor(id / 10);
 const cache = new Set([0, 8]);
 const pages = secondary.map(row => pageOf(row.id));

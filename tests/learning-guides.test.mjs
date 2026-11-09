@@ -7,9 +7,10 @@ import { extraLearningGuides } from "../data/content/learning-guides-extra.mjs";
 import { platformLearningGuides } from "../data/content/learning-guides-platform.mjs";
 import { reviewedGuides } from "../data/content/learning-guides-review.mjs";
 import { advancedGuides } from "../data/content/learning-guides-advanced.mjs";
+import { chapters } from "../data/content/chapters/index.mjs";
 
 const catalog = JSON.parse(readFileSync(new URL("../data/catalog.json", import.meta.url), "utf8"));
-test("入门解释与生成课程、面试答案保持同步，不覆盖示例和原有材料", () => {
+test("旧入门材料由独立章节替换，面试答案独立组织，示例与练习不丢失", () => {
   const ids = Object.keys(learningGuides);
   assert(ids.length >= 220);
   assert(Object.keys(extraLearningGuides).every((id) => learningGuides[id].startsWith(extraLearningGuides[id])), "同一课程不可覆盖另一份入门说明");
@@ -20,8 +21,8 @@ test("入门解释与生成课程、面试答案保持同步，不覆盖示例�
     const lesson = catalog.lessons.find((item) => item.id === id);
     assert(lesson, `缺少课程 ${id}`);
     assert(learningGuides[id].length >= 200, `${id} 的说明过短`);
-    assert(lesson.sections[0].content.startsWith(learningGuides[id]), `${id} 内容未同步`);
-    assert(lesson.interview.answer.startsWith(learningGuides[id]), `${id} 回答未同步`);
+    assert.deepEqual(lesson.sections, chapters.get(id).sections, `${id} 未使用逐课正文`);
+    assert(!lesson.interview.answer.startsWith(learningGuides[id]), `${id} 不应把完整教材复制为面试答案`);
     assert(lesson.playground?.code && lesson.exercises?.length, `${id} 缺少可运行示例或练习`);
     const oral = catalog.questions.find((q) => q.id === `oral-${id}`);
     assert.equal(oral.answer, lesson.interview.answer, `${id} 题库答案未同步`);
@@ -58,7 +59,8 @@ test("新增参考来源正确关联课程并保留原有来源", () => {
 });
 
 test("防抖与节流课解释时间线、末尾调用与取消的区别", () => {
-  const text = catalog.lessons.find((lesson) => lesson.id === "js-rate-limit").sections[0].content;
-  for (const part of ["300ms", "500ms", "防抖", "节流", "leading", "trailing", "不能撤销已经执行", "| 对比 |"])
+  const text = catalog.lessons.find((lesson) => lesson.id === "js-rate-limit").sections.map(section => section.content).join("\n");
+  for (const part of ["300ms", "500ms", "防抖", "节流", "leading", "trailing", "不能撤销已经执行"])
     assert(text.includes(part), `缺少 ${part}`);
+  assert(/\|[^\n]*防抖[^\n]*节流[^\n]*\|/.test(text), "缺少两种时间行为的对比表");
 });

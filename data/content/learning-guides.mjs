@@ -267,7 +267,7 @@ export function attachLearningGuides(lessons) {
     if (seen.has(lesson.id)) throw new Error(`课程 ID 重复：${lesson.id}`);
     seen.add(lesson.id);
     lesson.sections[0].content = `${guide}\n\n${lesson.sections[0].content}`;
-    lesson.interview.answer = `${guide}\n\n${lesson.interview.answer}`;
+    // 完整教学保留在课程中；面试答案独立组织，避免把整段入门重复复制。
     const length = lesson.sections.reduce((sum, section) => sum + section.content.length, 0);
     lesson.estimatedMinutes = Math.max(lesson.estimatedMinutes, Math.ceil(length / 200));
   }

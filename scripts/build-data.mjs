@@ -16,6 +16,15 @@ import { labs } from "../data/content/labs.mjs";
 import { attachExamples } from "../data/content/examples/index.mjs";
 import { attachLearningGuides } from "../data/content/learning-guides.mjs";
 import { attachReviewedSources } from "../data/content/learning-review-sources.mjs";
+import {
+  attachTutorials,
+  tutorialRevision,
+} from "../data/content/tutorials/index.mjs";
+import { attachTutorialSources } from "../data/content/tutorials/sources.mjs";
+import {
+  registerChapters,
+  attachChapters,
+} from "../data/content/chapters/index.mjs";
 await import("../data/content/expansion/python.mjs");
 await import("../data/content/expansion/crawler.mjs");
 await import("../data/content/expansion/restapi.mjs");
@@ -38,9 +47,13 @@ const glossary = JSON.parse(
     "utf8",
   ),
 );
+registerChapters();
 attachReviewedSources(lessons, sources);
+attachTutorialSources(lessons, sources);
 attachLearningGuides(lessons);
 attachExamples(lessons);
+attachTutorials(lessons);
+attachChapters();
 lessons.sort(
   (a, b) =>
     modules.find((x) => x.id === a.moduleId).order -
@@ -67,10 +80,7 @@ const questions = lessons.flatMap((l) => [
     type: "scenario",
     prompt: l.interview.scenario,
     answer: l.interview.scenarioAnswer,
-    rubric: [
-      l.interview.scenarioAnswer,
-      ...l.sections[2].content.split("\n").map((x) => x.replace(/^- /, "")),
-    ],
+    rubric: l.interview.scenarioRubric,
     priority: l.priority,
     keywords: l.keywords,
     difficulty: "进阶",
@@ -109,7 +119,12 @@ for (const lab of labs) {
   });
 }
 questions.push(...transferQuestions);
-for (const question of questions) question.pool ??= "foundation";
+for (const question of questions) {
+  question.pool ??= "foundation";
+  question.moduleId = lessons.find(
+    (lesson) => lesson.id === question.lessonId,
+  ).moduleId;
+}
 const normalizePrompt = (text) =>
   text.replace(/\s|[，。？！、：；,.?!:;]/g, "");
 const prompts = new Set();
@@ -134,6 +149,30 @@ for (const m of modules) {
 }
 const tracks = [
   {
+    id: "vue",
+    title: "Vue 从基础到原理",
+    description: "模板、组件、响应式、路由、状态与交付。",
+    moduleIds: ["js", "vue", "network", "performance"],
+  },
+  {
+    id: "react",
+    title: "React 从基础到原理",
+    description: "组件、状态、Effect、调度、服务端与测试。",
+    moduleIds: ["js", "react", "network", "performance"],
+  },
+  {
+    id: "go",
+    title: "Go 后端工程",
+    description: "语法与类型、并发、HTTP、数据访问、测试与交付。",
+    moduleIds: ["go", "restapi", "design"],
+  },
+  {
+    id: "python",
+    title: "Python 系统学习",
+    description: "语言基础、对象模型、异步、工程与服务开发。",
+    moduleIds: ["python", "restapi"],
+  },
+  {
     id: "frontend",
     title: "前端工程",
     description: "语言、页面、浏览器、框架、性能与算法，小程序可另外选。",
@@ -141,7 +180,8 @@ const tracks = [
       "js",
       "css",
       "network",
-      "framework",
+      "vue",
+      "react",
       "performance",
       "engineering",
       "algorithm",
@@ -193,7 +233,7 @@ const tracks = [
     id: "wxg",
     title: "微信场景与工程实践",
     description: "把宿主限制转成可验证的方案。",
-    moduleIds: ["mini", "framework", "performance", "algorithm"],
+    moduleIds: ["mini", "vue", "react", "performance", "algorithm"],
   },
   {
     id: "delivery",
@@ -210,7 +250,7 @@ const tracks = [
 ];
 const data = {
   schemaVersion: 1,
-  edition: "2026.10 · 深度与迁移训练",
+  edition: "2026.11 · 专题教程与代码图解",
   curriculum: {
     friendInterviewQuestions: questions.filter(
       (q) => q.provenance === "user-reported",
@@ -232,7 +272,7 @@ const data = {
     foundationQuestions: questions.filter((q) => q.pool === "foundation")
       .length,
   },
-  updatedAt: "2026-10-24",
+  updatedAt: tutorialRevision,
   title: "KnowForge · 全栈与 AI 工程知识库",
   disclaimer:
     "覆盖前端、Python、数据采集、RESTful API 与 AI 应用的原创学习及练习资料。原微信面试材料保留并校正，不代表任何官方题库；平台行为以目标版本官方文档为准。",
@@ -256,13 +296,13 @@ for (const mod of modules) {
     md += `### ${l.title}\n\n${l.summary}\n\n`;
     for (const s of l.sections) md += `#### ${s.title}\n\n${s.content}\n\n`;
     if (l.code) md += `\x60\x60\x60javascript\n${l.code}\n\x60\x60\x60\n\n`;
-    md += `#### 可编辑运行的 ${l.language === "python" ? "Python" : "JavaScript"} 示例
+    md += `#### ${l.language === "go" ? "本地运行的 Go" : `可编辑运行的 ${l.language === "python" ? "Python" : "JavaScript"}`} 示例
 
 ${l.playground.title}
 
 ${l.playground.description}
 
-运行范围：${l.playground.runtime === "model" ? "教学模拟，不等于真实宿主/协议实现" : l.language === "python" ? "浏览器 CPython / Pyodide，内置标准库" : "标准 JavaScript / Worker"}
+运行范围：${l.playground.runtime === "local" ? "本地 Go 工具链：保存为 main.go，执行 go run main.go；浏览器内可预测输出并自动校验" : l.playground.runtime === "model" ? "教学模拟，不等于真实宿主/协议实现" : l.language === "python" ? "浏览器 CPython / Pyodide，内置标准库" : "标准 JavaScript / Worker"}
 
 \x60\x60\x60${l.language}
 ${l.playground.code}

@@ -1,6 +1,7 @@
 <script setup>
 import AppField from "../components/AppField.vue";
 import AppSelect from "../components/AppSelect.vue";
+import AppDisclosure from "../components/AppDisclosure.vue";
 import { apiUrl } from "../api-config.js";
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -42,25 +43,22 @@ const {
   computed(() => route.params.id),
 );
 const filtered = computed(() =>
-  lessons.value
-    .filter(
-      (l) =>
-        (!route.query.collection || l.collection === route.query.collection) &&
-        (!depth.value || l.depth === depth.value) &&
-        (!moduleId.value || l.moduleId === moduleId.value) &&
-        (!priority.value || l.priority === priority.value) &&
-        (!status.value ||
-          (store.state.progress[l.id]?.status || "new") === status.value) &&
-        [l.title, l.summary, ...l.keywords]
-          .join(" ")
-          .toLowerCase()
-          .includes(query.value.toLowerCase()),
-    )
-    .sort(
-      (a, b) =>
-        (({ deep: 0, expanded: 1, foundation: 2 })[a.depth] ?? 2) -
-        ({ deep: 0, expanded: 1, foundation: 2 }[b.depth] ?? 2),
-    ),
+  lessons.value.filter(
+    (l) =>
+      (!route.query.collection || l.collection === route.query.collection) &&
+      (!depth.value || l.depth === depth.value) &&
+      (!moduleId.value ||
+        l.moduleId === moduleId.value ||
+        (moduleId.value === "framework" &&
+          ["vue", "react"].includes(l.moduleId))) &&
+      (!priority.value || l.priority === priority.value) &&
+      (!status.value ||
+        (store.state.progress[l.id]?.status || "new") === status.value) &&
+      [l.title, l.summary, ...l.keywords]
+        .join(" ")
+        .toLowerCase()
+        .includes(query.value.toLowerCase()),
+  ),
 );
 const siblings = computed(() =>
   lessons.value.filter((l) => l.moduleId === lesson.value?.moduleId),
@@ -105,8 +103,8 @@ watch(
         <h1>先理解，再构建。</h1>
         <p>
           {{ lessons.length }}
-          篇系统讲解，每篇都有可运行示例与自动验证练习。新增深入专题覆盖全栈、Agent
-          框架与 FDE；AI 基础与概念专题可从零开始，配有中英文概念速查。
+          篇资料，按专题从基础到进阶学习。Vue、React、Go 与 Python 独立组织，
+          教程包含代码与图解；Go 示例在本地运行，预测输出可在课内自动核对。
         </p>
       </div>
       <a :href="apiUrl('/export/handbook')" class="btn"
@@ -337,7 +335,11 @@ watch(
       </div>
       <div class="article-practice-links">
         <button class="text-link" @click="scrollToPractice">
-          <Icon name="Play" :size="15" />运行本课示例</button
+          <Icon name="Play" :size="15" />{{
+            lesson.playground?.runtime === "local"
+              ? "查看本地运行示例"
+              : "运行本课示例"
+          }}</button
         ><button class="text-link" @click="practicePanel?.openExercises()">
           <Icon name="ListChecks" :size="15" />做
           {{ lesson.exercises.length }} 道随堂练习
@@ -357,10 +359,35 @@ watch(
           </div>
         </div>
       </div>
+      <div
+        v-if="lesson.prerequisiteLessonIds?.length"
+        class="article-practice-links"
+      >
+        <span class="muted tiny">建议先学</span>
+        <RouterLink
+          v-for="id in lesson.prerequisiteLessonIds"
+          :key="id"
+          :to="'/learn/' + id"
+          class="text-link"
+          >{{ lessonFor(id)?.title }}</RouterLink
+        >
+      </div>
+      <AppDisclosure class="chapter-contents">
+        <template #title>本课章节 · {{ lesson.sections.length }} 节</template>
+        <nav aria-label="本课章节">
+          <a
+            v-for="(section, i) in lesson.sections"
+            :key="section.title"
+            :href="'#chapter-' + i"
+            >{{ String(i + 1).padStart(2, "0") }} · {{ section.title }}</a
+          >
+        </nav>
+      </AppDisclosure>
       <section
         v-for="(section, i) in lesson.sections"
         :key="section.title"
         class="article-section"
+        :id="'chapter-' + i"
       >
         <div class="article-section-title">
           <span>{{ String(i + 1).padStart(2, "0") }}</span>
@@ -471,3 +498,21 @@ watch(
     <RouterLink to="/learn" class="btn">返回资料库</RouterLink>
   </div>
 </template>
+<style scoped>
+.chapter-contents {
+  margin: 18px 0 26px;
+}
+.chapter-contents nav {
+  display: grid;
+  gap: 10px;
+  padding: 8px 0;
+}
+.chapter-contents a {
+  color: #426d57;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.article-section {
+  scroll-margin-top: 85px;
+}
+</style>

@@ -101,11 +101,12 @@ u("crawler", {
     "先暂停或降低该域的发放速率，解析 Retry-After，按任务剩余预算延后调度。为每次重试加退避与抖动，设置全局重试预算并避免重试嵌套放大。记录 429 比例和恢复时间，不能用更高并发掩盖限流。",
   refs: ["httpx", "http-semantics", "scrapy-throttle"],
   code: String.raw`def delay(attempt, retry_after=None, cap=30):
-    if retry_after is not None: return min(cap,max(0,retry_after))
-    return min(cap,2**attempt)
+    backoff = min(cap, 2**attempt)
+    return max(backoff, max(0, retry_after)) if retry_after is not None else backoff
 show([delay(n) for n in range(7)])
-show(delay(1,12))`,
-  logs: [[1, 2, 4, 8, 16, 30, 30], 12],
+show(delay(1,12))
+show(delay(1,120))`,
+  logs: [[1, 2, 4, 8, 16, 30, 30], 12, 120],
   explain:
     "代码只验证确定性的退避上限，故意没有加入随机抖动以便预测输出。生产实现应加入可注入随机源、HTTP 日期解析和总 deadline；达到上限后也要限制重试次数，不能无限每 30 秒重试。",
   choice: [

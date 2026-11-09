@@ -302,13 +302,17 @@ u("llmapp", {
   model: true,
   code: String.raw`import math
 def cosine(a,b):
+    if len(a) != len(b):
+        raise ValueError('dimension')
+    if any(not math.isfinite(x) for x in [*a, *b]):
+        raise ValueError('non-finite value')
     norm=math.sqrt(sum(x*x for x in a)*sum(y*y for y in b))
     return sum(x*y for x,y in zip(a,b))/norm if norm else 0.0
 show(round(cosine([1,0],[1,1]),3))
 show(cosine([0,0],[1,0]))`,
   logs: [0.707, 0],
   explain:
-    "向量由人工固定样本提供，余弦计算是真实算法，但没有调用 embedding 模型。函数还假设维度一致，完整实现应先校验长度与有限数值；零向量返回零是本课契约，不是所有向量数据库的统一行为。",
+    "向量由人工固定样本提供，余弦计算是真实算法，但没有调用 embedding 模型。函数先校验维度与有限数值，避免 zip 静默截断或无效值传播；零向量返回零是本课契约，不是所有向量数据库的统一行为。此实现面向普通大小的数值，极端浮点数还需数值稳定化处理。",
   choice: [
     "同维度的不同 embedding 模型向量能否直接混比？",
     [
@@ -333,6 +337,7 @@ show(cosine([0,0],[1,0]))`,
         "assert cosine_similarity([1,0],[0,1])==0 and cosine_similarity([0,0],[1,1])==0",
       ],
       ["反向", "assert abs(cosine_similarity([1,0],[-1,0])+1)<1e-9"],
+      ["维度不同", "try:\n    cosine_similarity([1,2], [1])\nexcept ValueError:\n    pass\nelse:\n    raise AssertionError('dimension mismatch must fail')"],
     ],
     hint: "点积除以两边 L2 范数乘积，先检查维度。",
   },

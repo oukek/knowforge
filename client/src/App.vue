@@ -182,7 +182,10 @@ watch(
       </main>
       <footer class="app-footer">
         <span>学会解释，也学会验证。</span
-        ><span>资料整理于 2026.10 · 自建练习资料，非官方题库</span>
+        ><span
+          >资料版本 {{ store.catalog?.updatedAt || "2026-11-09" }} ·
+          自建练习资料，非官方题库</span
+        >
       </footer>
     </div>
     <SearchDialog v-if="store.catalog" />

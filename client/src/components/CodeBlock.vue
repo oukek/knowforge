@@ -2,11 +2,13 @@
 import { computed, ref } from "vue";
 import hljs from "highlight.js/lib/core";
 import python from "highlight.js/lib/languages/python";
+import go from "highlight.js/lib/languages/go";
 import javascript from "highlight.js/lib/languages/javascript";
 import Icon from "./Icon.vue";
 import { toast } from "../store";
 hljs.registerLanguage("javascript", javascript);
 hljs.registerLanguage("python", python);
+hljs.registerLanguage("go", go);
 const props = defineProps({
   code: String,
   language: { type: String, default: "javascript" },
@@ -29,7 +31,9 @@ async function copy() {
 <template>
   <div class="code-block">
     <div class="code-top">
-      <span>{{ language === "python" ? "Python" : label }}</span
+      <span>{{
+        language === "python" ? "Python" : language === "go" ? "Go" : label
+      }}</span
       ><button class="text-btn" @click="copy">
         <Icon :name="copied ? 'Check' : 'Copy'" :size="14" />{{
           copied ? "已复制" : "复制"

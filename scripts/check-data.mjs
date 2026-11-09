@@ -21,8 +21,8 @@ const modules = new Set(d.modules.map((x) => x.id)),
   lessons = new Set(d.lessons.map((x) => x.id)),
   sources = new Set(d.sources.map((x) => x.id)),
   labs = new Set(d.labs.map((x) => x.id));
-assert.equal(d.modules.length, 21);
-for (const id of ["python", "crawler", "restapi", "llmapp"])
+assert.equal(d.modules.length, 23);
+for (const id of ["python", "crawler", "restapi", "llmapp", "vue", "react", "go"])
   assert(modules.has(id));
 for (const track of d.tracks)
   assert(track.moduleIds.every((id) => modules.has(id)));
@@ -32,11 +32,13 @@ for (const l of d.lessons) {
   assert(modules.has(l.moduleId));
   assert(l.summary.length > 30);
   assert(l.sections.length >= 3);
-  assert(l.sections.every((s) => s.content.length > 50));
+  assert(l.sections.every((s) => s.content.length > 50), `${l.id} 存在不完整小节`);
+  assert(l.teachingRevision && l.understandingCheck?.question && l.understandingCheck?.answer, `${l.id} 缺逐课教学材料`);
   assert(l.interview.scenarioAnswer.length > 50);
   assert(l.sourceIds.every((id) => sources.has(id)));
   assert(l.playground?.code.length > 20, `${l.id} 缺少可运行示例`);
-  assert(["javascript", "python", "model"].includes(l.playground.runtime));
+  assert(["javascript", "python", "model", "local"].includes(l.playground.runtime));
+  if (l.playground.runtime === "local") assert.equal(l.language, "go");
   assert(l.playground.expectedLogs.length > 0);
   assert(l.playground.description && l.playground.explanation);
   assert.equal(l.exercises.filter((e) => e.type === "output").length, 1);
