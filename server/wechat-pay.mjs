@@ -1,10 +1,28 @@
-import { randomBytes, sign, verify, createDecipheriv } from "node:crypto";
+import {
+  randomBytes,
+  randomUUID,
+  sign,
+  verify,
+  createDecipheriv,
+} from "node:crypto";
 import { AiError } from "./ai/policy.mjs";
 const fail = () => new AiError(502, "微信支付校验失败，请稍后核对订单");
+class WechatResponseError extends AiError {
+  constructor(status, code) {
+    super(502, "微信支付暂不可用，请稍后核对或重试原订单");
+    this.upstreamStatus = status;
+    this.upstreamCode = code;
+  }
+}
+const diagnosticToken = (value) =>
+  typeof value === "string" && /^[a-zA-Z0-9_.:-]{1,160}$/.test(value)
+    ? value
+    : undefined;
 export class WechatPay {
-  constructor(config, fetcher = fetch) {
+  constructor(config, fetcher = fetch, logger = console) {
     this.config = config;
     this.fetcher = fetcher;
+    this.logger = logger;
   }
   verify(raw, headers) {
     const get = (name) => (headers.get ? headers.get(name) : headers[name]);
@@ -30,19 +48,23 @@ export class WechatPay {
     )
       throw fail();
   }
-  async request(method, path, body) {
-    const c = this.config,
-      stamp = String(Math.floor(Date.now() / 1000)),
-      nonce = randomBytes(16).toString("hex"),
-      raw = body ? JSON.stringify(body) : "";
-    const signature = sign(
-      "RSA-SHA256",
-      Buffer.from(`${method}\n${path}\n${stamp}\n${nonce}\n${raw}\n`),
-      c.privateKey,
-    ).toString("base64");
-    const response = await this.fetcher(
-      `https://api.mch.weixin.qq.com${path}`,
-      {
+  async request(method, path, body, { allowMissingOrder = false } = {}) {
+    const c = this.config;
+    let stage = "sign",
+      response,
+      payload,
+      verified = false;
+    try {
+      const stamp = String(Math.floor(Date.now() / 1000)),
+        nonce = randomBytes(16).toString("hex"),
+        raw = body ? JSON.stringify(body) : "";
+      const signature = sign(
+        "RSA-SHA256",
+        Buffer.from(`${method}\n${path}\n${stamp}\n${nonce}\n${raw}\n`),
+        c.privateKey,
+      ).toString("base64");
+      stage = "network";
+      response = await this.fetcher(`https://api.mch.weixin.qq.com${path}`, {
         method,
         headers: {
           Accept: "application/json",
@@ -52,13 +74,69 @@ export class WechatPay {
         },
         body: raw || undefined,
         signal: AbortSignal.timeout(15000),
-      },
-    );
-    const buffer = Buffer.from(await response.arrayBuffer());
-    this.verify(buffer, response.headers);
-    if (!response.ok)
-      throw new AiError(502, "微信支付暂不可用，请稍后核对或重试原订单");
-    return buffer.length ? JSON.parse(buffer.toString()) : {};
+        redirect: "error",
+      });
+      stage = "read";
+      const buffer = Buffer.from(await response.arrayBuffer());
+      // Error codes from an unverified response must never change order state.
+      try {
+        payload = buffer.length ? JSON.parse(buffer.toString()) : {};
+      } catch {}
+      stage = "verify";
+      this.verify(buffer, response.headers);
+      verified = true;
+      stage = "response";
+      if (!response.ok) {
+        const error = new WechatResponseError(
+          response.status,
+          diagnosticToken(payload?.code),
+        );
+        throw error;
+      }
+      stage = "parse";
+      if (!payload || typeof payload !== "object" || Array.isArray(payload))
+        throw new AiError(502, "微信支付响应格式异常，请稍后核对订单");
+      return payload;
+    } catch (cause) {
+      if (
+        allowMissingOrder &&
+        cause instanceof WechatResponseError &&
+        cause.upstreamStatus === 404 &&
+        cause.upstreamCode === "ORDER_NOT_EXIST"
+      )
+        throw cause;
+      const error =
+        cause instanceof AiError
+          ? cause
+          : new AiError(502, "微信支付请求失败，请稍后核对或重试原订单");
+      error.errorId = randomUUID();
+      const get = (name) => response?.headers?.get(name);
+      this.logger.error(
+        "[wechat.pay.error]",
+        JSON.stringify({
+          errorId: error.errorId,
+          method,
+          path: path.split("?")[0],
+          stage,
+          status: response?.status,
+          wechatCode: diagnosticToken(payload?.code),
+          field: diagnosticToken(payload?.detail?.field),
+          requestId: diagnosticToken(get("request-id")),
+          responseVerified: verified,
+          networkCode:
+            stage === "network"
+              ? diagnosticToken(cause.cause?.code || cause.code || cause.name)
+              : undefined,
+          expectedSerial:
+            stage === "verify" ? diagnosticToken(c.platformSerial) : undefined,
+          receivedSerial:
+            stage === "verify"
+              ? diagnosticToken(get("wechatpay-serial"))
+              : undefined,
+        }),
+      );
+      throw error;
+    }
   }
   async create(order, mode, openid) {
     const c = this.config;
@@ -98,11 +176,30 @@ export class WechatPay {
     ).toString("base64");
     return { type: "jsapi", parameters };
   }
-  query(id) {
-    return this.request(
-      "GET",
-      `/v3/pay/transactions/out-trade-no/${id}?mchid=${this.config.merchantId}`,
-    );
+  async query(id) {
+    try {
+      return await this.request(
+        "GET",
+        `/v3/pay/transactions/out-trade-no/${id}?mchid=${this.config.merchantId}`,
+        undefined,
+        { allowMissingOrder: true },
+      );
+    } catch (error) {
+      if (
+        !(error instanceof WechatResponseError) ||
+        error.upstreamStatus !== 404 ||
+        error.upstreamCode !== "ORDER_NOT_EXIST"
+      )
+        throw error;
+      // A local JSAPI order exists before the phone scans and creates a WeChat prepay order.
+      return {
+        out_trade_no: id,
+        appid: this.config.appId,
+        mchid: this.config.merchantId,
+        trade_state: "NOTPAY",
+        orderExists: false,
+      };
+    }
   }
   notification(raw, headers) {
     this.verify(raw, headers);

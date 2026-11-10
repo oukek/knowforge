@@ -62,13 +62,32 @@ export async function installWechat(app, store, auth, ai, options = {}) {
               : await configuration.runtime());
         }
         const gateway =
-          options.gateway || (!admin ? new WechatPay(c, fetcher) : null);
+          options.gateway ||
+          (!admin ? new WechatPay(c, fetcher, options.logger) : null);
         const result = await handler(req, res, c, gateway);
         if (!res.headersSent) res.json(result);
       } catch (error) {
-        if (error instanceof AiError)
-          res.status(error.status).json({ error: error.message });
-        else next(error);
+        if (error instanceof AiError) {
+          if (error.status >= 500 && !error.errorId) {
+            error.errorId = randomUUID();
+            (options.logger || console).error(
+              "[wechat.route.error]",
+              JSON.stringify({
+                errorId: error.errorId,
+                method: req.method,
+                route: path,
+                status: error.status,
+                message: error.message,
+              }),
+            );
+          }
+          res.status(error.status).json({
+            error: error.errorId
+              ? `${error.message}（错误编号：${error.errorId}）`
+              : error.message,
+            ...(error.errorId ? { errorId: error.errorId } : {}),
+          });
+        } else next(error);
       }
     });
   route(
@@ -98,6 +117,10 @@ export async function installWechat(app, store, auth, ai, options = {}) {
   }));
   route("post", "/api/auth/wechat/start", async (req, res, c, gateway) => {
     needLogin(c);
+    const { mode } = z
+      .object({ mode: z.enum(["qr", "browser"]).default("qr") })
+      .strict()
+      .parse(req.body);
     if (auth.limited(req, res, "wechat")) return;
     const id = randomBytes(16).toString("hex"),
       secret = randomBytes(32).toString("hex"),
@@ -122,6 +145,14 @@ export async function installWechat(app, store, auth, ai, options = {}) {
       );
       await configuration.bind(db, "flow:" + id, c.revision);
     });
+    if (mode === "browser")
+      res.cookie("knowforge_wechat_direct", id + "." + secret, {
+        httpOnly: true,
+        secure: req.secure,
+        sameSite: "lax",
+        path: "/api/auth/wechat",
+        maxAge: 300000,
+      });
     const url = new URL("https://open.weixin.qq.com/connect/oauth2/authorize");
     url.search = new URLSearchParams({
       appid: c.appId,
@@ -152,6 +183,7 @@ export async function installWechat(app, store, auth, ai, options = {}) {
       })
       .parse(req.query);
     // Claim before exchanging the one-use OAuth code; concurrent callbacks cannot create duplicate accounts.
+    let direct = false;
     await repo.transaction(async (db) => {
       const changed = await db.run(
         "UPDATE wechat_flows SET status=? WHERE id=? AND status=? AND expiresAt>?",
@@ -161,6 +193,21 @@ export async function installWechat(app, store, auth, ai, options = {}) {
         new Date().toISOString(),
       );
       if (Number(changed.changes ?? changed.affectedRows) !== 1) throw expire();
+      const proof = (req.headers.cookie || "")
+        .split(";")
+        .map((value) => value.trim())
+        .find((value) => value.startsWith("knowforge_wechat_direct="))
+        ?.slice("knowforge_wechat_direct=".length);
+      if (
+        proof?.startsWith(state + ".") &&
+        /^[a-f0-9]{64}$/.test(proof.slice(33))
+      ) {
+        const flow = await db.get(
+          "SELECT secretHash FROM wechat_flows WHERE id=?",
+          state,
+        );
+        direct = hash(proof.slice(33)) === flow.secretHash;
+      }
     });
     const oauth = async (path, params) => {
       const response = await fetcher(
@@ -235,10 +282,19 @@ export async function installWechat(app, store, auth, ai, options = {}) {
       await db.run(
         "UPDATE wechat_flows SET userId=?,status=? WHERE id=?",
         linked.userId,
-        "confirm:" + hash(ticket),
+        direct ? "ready" : "confirm:" + hash(ticket),
         state,
       );
     });
+    if (direct) {
+      res.clearCookie("knowforge_wechat_direct", {
+        httpOnly: true,
+        secure: req.secure,
+        sameSite: "lax",
+        path: "/api/auth/wechat",
+      });
+      return res.redirect(303, c.frontendUrl + "/login?wechatReturn=1");
+    }
     res
       .type("html")
       .send(
@@ -523,7 +579,7 @@ export async function installWechat(app, store, auth, ai, options = {}) {
         order,
         input.mode,
         bound,
-        options.gateway || new WechatPay(bound, fetcher),
+        options.gateway || new WechatPay(bound, fetcher, options.logger),
       );
     },
     true,
@@ -617,11 +673,12 @@ export async function installWechat(app, store, auth, ai, options = {}) {
         payment.trade_state === "NOTPAY" &&
         order.expiresAt <= new Date().toISOString()
       ) {
-        await gateway.request(
-          "POST",
-          `/v3/pay/transactions/out-trade-no/${id}/close`,
-          { mchid: order.merchantId },
-        );
+        if (payment.orderExists !== false)
+          await gateway.request(
+            "POST",
+            `/v3/pay/transactions/out-trade-no/${id}/close`,
+            { mchid: order.merchantId },
+          );
         await repo.read((db) =>
           db.run(
             "UPDATE payment_orders SET status=? WHERE id=? AND status=?",

@@ -273,7 +273,7 @@ export function installWechatHandoff({
       );
     if (!intent.type) {
       const c = await bound(value.order.id),
-        gateway = options.gateway || new WechatPay(c, fetcher);
+        gateway = options.gateway || new WechatPay(c, fetcher, options.logger);
       intent = await gateway.create(value.order, "jsapi", value.scan.openid);
       await repo.read((db) =>
         db.run(
@@ -302,7 +302,7 @@ export function installWechatHandoff({
       value.order.id,
       value.order.userId,
       c,
-      options.gateway || new WechatPay(c, fetcher),
+      options.gateway || new WechatPay(c, fetcher, options.logger),
     );
   });
   return { createLink };

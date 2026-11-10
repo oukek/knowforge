@@ -189,6 +189,9 @@ export async function createApp({
       },
     }),
   );
+  app.get("/MP_verify_dSx96Ib8b8Igu655.txt", (_req, res) => {
+    res.type("text/plain").send("dSx96Ib8b8Igu655");
+  });
   app.get("/runner-frame", (req, res) => {
     const frame = runnerFrame([
       ...trustedOrigins,

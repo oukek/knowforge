@@ -8,6 +8,13 @@ const section = ref("login"),
   draft = ref(null),
   busy = ref(false),
   error = ref("");
+function hostname(value) {
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return "未配置";
+  }
+}
 async function load() {
   error.value = "";
   try {
@@ -117,6 +124,10 @@ onMounted(load);
             <dd>{{ config.frontendUrl }}</dd>
           </div>
           <div>
+            <dt>公众号网页授权域名</dt>
+            <dd>{{ hostname(config.apiUrl) }}</dd>
+          </div>
+          <div>
             <dt>授权回调地址</dt>
             <dd>{{ config.oauthCallback }}</dd>
           </div>
@@ -150,7 +161,7 @@ onMounted(load);
         <p class="tiny muted">
           {{
             section === "login"
-              ? "公众号后台的网页授权域名填 API 域名；需为具有网页授权权限的公众号。"
+              ? "请到对应 AppID 的微信公众平台 → 公众号设置 → 功能设置 → 网页授权域名，填写上方 API 域名，不带 https://、端口或路径。"
               : "统一使用 JSAPI：微信内自动调起，微信外扫码进入本站支付页后自动调起。关闭新购买后存量订单仍可核对。请配置前端域名为公众号 JS 接口安全域名，并在商户平台配置支付授权目录。"
           }}
         </p>
@@ -204,6 +215,12 @@ onMounted(load);
               required
               placeholder="https://knowforge-api.ookew.com"
           /></label>
+          <p class="tiny muted">
+            公众号网页授权域名应填：{{
+              hostname(draft.apiUrl)
+            }}。登录和支付授权都回调此 API 域名；前端域名配置在 JS
+            接口安全域名。
+          </p>
           <label class="wechat-switch"
             ><input
               v-model="draft.loginEnabled"

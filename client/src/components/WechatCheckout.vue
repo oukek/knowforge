@@ -52,13 +52,14 @@ async function sync(manual = false) {
     );
     if (disposed) return;
     order.value = result.order;
+    error.value = "";
     notifyPaid();
-    if (order.value.status === "pending")
-      timer = setTimeout(() => sync(), 5000);
   } catch (e) {
     if (!disposed) error.value = e.message;
   } finally {
     checking.value = false;
+    if (!disposed && order.value?.status === "pending")
+      timer = setTimeout(() => sync(), 5000);
   }
 }
 async function start() {
@@ -131,7 +132,17 @@ onBeforeUnmount(() => {
             :value="intent.url || intent.codeUrl"
             alt="微信支付二维码，请使用微信扫一扫"
           />
-          <p class="tiny muted">
+          <p
+            v-if="Date.parse(order.expiresAt) <= Date.now()"
+            class="ai-error"
+            role="alert"
+          >
+            此支付链接已过期，请关闭弹窗后重新购买。
+          </p>
+          <p v-else-if="!intent" class="ai-error" role="alert">
+            尚未取得支付链接，请重新获取支付二维码。
+          </p>
+          <p v-else class="tiny muted">
             {{
               intent?.type === "handoff" && wechat
                 ? "请在微信内完成支付，额度到账后将自动更新。"
@@ -162,7 +173,15 @@ onBeforeUnmount(() => {
         重试原订单
       </button>
       <button
-        v-else-if="order.status === 'pending'"
+        v-if="order?.status === 'pending' && !intent"
+        class="btn"
+        :disabled="busy"
+        @click="start"
+      >
+        重新获取支付二维码
+      </button>
+      <button
+        v-if="order?.status === 'pending'"
         class="btn primary"
         :disabled="checking"
         @click="sync(true)"

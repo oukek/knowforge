@@ -48,7 +48,13 @@ watch(
       return;
     }
     document.title = `${store.user ? route.meta.title || "学习" : "微信登录"} · KnowForge`;
-    if (!store.initialized || store.loading || store.error) return;
+    if (
+      !route.matched.length ||
+      !store.initialized ||
+      store.loading ||
+      store.error
+    )
+      return;
     if (!store.user && route.name !== "login")
       void router.replace(loginLocation(route.fullPath));
     else if (store.user && route.name === "login")

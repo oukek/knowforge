@@ -3,8 +3,14 @@ import QrCode from "./QrCode.vue";
 import AppField from "./AppField.vue";
 import AppDialog from "./AppDialog.vue";
 import { ref, onMounted, onBeforeUnmount } from "vue";
-import { signIn, request, acceptSession } from "../store";
+import { signIn, request, acceptSession, store } from "../store";
 import Icon from "./Icon.vue";
+import { useRoute, useRouter } from "vue-router";
+import { afterLoginPath } from "../auth-routing.js";
+import { inWechat } from "../wechat-sdk.js";
+const route = useRoute(),
+  router = useRouter(),
+  wechat = inWechat();
 const username = ref(""),
   password = ref(""),
   busy = ref(false),
@@ -26,7 +32,9 @@ async function poll() {
   if (!flow.value || disposed) return;
   if (Date.parse(flow.value.expiresAt) <= Date.now()) {
     clearFlow();
-    error.value = "二维码已过期，请重新登录";
+    error.value = wechat
+      ? "微信登录已过期，请重试"
+      : "二维码已过期，请重新登录";
     return;
   }
   try {
@@ -50,18 +58,19 @@ async function poll() {
   if (!disposed) timer = setTimeout(poll, 2000);
 }
 async function startWechat() {
-  if (busy.value) return;
+  if (busy.value || disposed || store.user) return;
   busy.value = true;
   error.value = "";
   clearFlow();
   try {
-    const result = await request("/auth/wechat/start", "POST", {});
+    const result = await request("/auth/wechat/start", "POST", {
+      mode: wechat ? "browser" : "qr",
+    });
     if (disposed) return;
-    flow.value = result;
-    sessionStorage.setItem(storageKey, JSON.stringify(result));
+    flow.value = { ...result, returnTo: afterLoginPath(route.query.redirect) };
+    sessionStorage.setItem(storageKey, JSON.stringify(flow.value));
     waiting.value = true;
-    if (/MicroMessenger/i.test(navigator.userAgent))
-      location.assign(result.url);
+    if (wechat) location.assign(result.url);
     else poll();
   } catch (e) {
     error.value = e.message;
@@ -87,8 +96,10 @@ async function submit() {
   }
 }
 onMounted(async () => {
+  if (store.user) return;
   const url = new URL(location.href);
-  if (url.searchParams.has("wechatReturn")) {
+  const returning = url.searchParams.has("wechatReturn");
+  if (returning) {
     url.searchParams.delete("wechatReturn");
     history.replaceState(null, "", url);
   }
@@ -97,13 +108,29 @@ onMounted(async () => {
     if (saved?.id && Date.parse(saved.expiresAt) > Date.now()) {
       flow.value = saved;
       waiting.value = true;
-      poll();
+      if (returning && !route.query.redirect && saved.returnTo)
+        await router.replace({
+          name: "login",
+          query: { redirect: afterLoginPath(saved.returnTo) },
+        });
+      void poll();
     } else clearFlow();
   } catch {
     clearFlow();
   }
   try {
     enabled.value = (await request("/auth/wechat/configuration")).enabled;
+    if (disposed) return;
+    if (
+      wechat &&
+      enabled.value &&
+      !flow.value &&
+      !legacy.value &&
+      !store.user
+    ) {
+      if (returning) error.value = "登录状态已失效，请重新发起微信登录";
+      else await startWechat();
+    }
   } catch (e) {
     error.value = e.message;
   }
@@ -143,7 +170,16 @@ onBeforeUnmount(() => {
         <p v-if="enabled === false" class="auth-error" role="status">
           微信登录尚未开通，请联系管理员。
         </p>
-        <template v-if="flow">
+        <p
+          v-if="wechat && enabled !== false && !error"
+          class="auth-footnote"
+          role="status"
+        >
+          {{
+            waiting ? "正在确认微信登录…" : "正在连接微信，完成后将自动登录…"
+          }}
+        </p>
+        <template v-if="flow && !wechat">
           <div class="wechat-qr">
             <QrCode :value="flow.url" alt="请使用微信扫描登录二维码" />
           </div>
@@ -152,11 +188,19 @@ onBeforeUnmount(() => {
           </p>
         </template>
         <button
+          v-if="!wechat || error || (waiting && !busy)"
           class="btn primary auth-submit"
           :disabled="busy || enabled !== true"
           @click="startWechat"
         >
-          {{ busy ? "正在连接微信…" : waiting ? "刷新登录二维码" : "微信登录"
+          {{
+            busy
+              ? "正在连接微信…"
+              : wechat
+                ? "重新发起微信登录"
+                : waiting
+                  ? "刷新登录二维码"
+                  : "微信登录"
           }}<Icon name="ArrowRight" :size="18" />
         </button>
         <p v-if="error && !legacy" class="auth-error" role="alert">

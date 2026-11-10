@@ -201,6 +201,7 @@ async function fixture(t, patch = {}) {
     confirm,
     session,
     publish,
+    gateway,
     setIdentity(v) {
       openid = v;
     },
@@ -704,3 +705,272 @@ test("微信 JSSDK 按支付页 URL 签名并合并 ticket 请求，不给外站
     );
   assert.equal(calls, 2);
 });
+
+function responseFixture() {
+  const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const c = {
+    ...config,
+    privateKey: pair.privateKey,
+    platformPublicKey: pair.publicKey,
+    platformSerial: "PUB_KEY_ID_DIAGNOSTIC",
+    apiV3Key: "s".repeat(32),
+  };
+  const logs = [];
+  let status = 404,
+    code = "ORDER_NOT_EXIST",
+    tamper = false;
+  const fetcher = async () => {
+    const raw = JSON.stringify({
+      code,
+      message: "sensitive response must not be logged",
+      detail: { field: "appid" },
+    });
+    const stamp = String(Math.floor(Date.now() / 1000)),
+      nonce = "fixture-nonce";
+    return new Response(raw, {
+      status,
+      headers: {
+        "request-id": "wx-request-fixture",
+        "wechatpay-timestamp": stamp,
+        "wechatpay-nonce": nonce,
+        "wechatpay-serial": c.platformSerial,
+        "wechatpay-signature": sign(
+          "RSA-SHA256",
+          Buffer.from(`${stamp}\n${nonce}\n${tamper ? "tampered" : raw}\n`),
+          pair.privateKey,
+        ).toString("base64"),
+      },
+    });
+  };
+  return {
+    c,
+    logs,
+    gateway: new WechatPay(c, fetcher, {
+      error(tag, data) {
+        logs.push({ tag, ...JSON.parse(data) });
+      },
+    }),
+    set(statusValue, codeValue, tamperValue = false) {
+      status = statusValue;
+      code = codeValue;
+      tamper = tamperValue;
+    },
+  };
+}
+
+test("仅验签通过的查单 404 ORDER_NOT_EXIST 视为尚未支付，创建失败和其他 404 不被吞掉", async () => {
+  const f = responseFixture();
+  assert.deepEqual(await f.gateway.query("order-fixture"), {
+    out_trade_no: "order-fixture",
+    appid: config.appId,
+    mchid: config.merchantId,
+    trade_state: "NOTPAY",
+    orderExists: false,
+  });
+  assert.equal(f.logs.length, 0);
+  await assert.rejects(
+    f.gateway.request("POST", "/v3/pay/transactions/jsapi", {}),
+    (error) => {
+      assert.equal(error.upstreamCode, "ORDER_NOT_EXIST");
+      assert.equal(error.errorId, f.logs.at(-1).errorId);
+      return true;
+    },
+  );
+  f.set(404, "MCH_NOT_EXISTS");
+  await assert.rejects(f.gateway.query("order-fixture"));
+  assert.equal(f.logs.at(-1).wechatCode, "MCH_NOT_EXISTS");
+  f.set(404, "ORDER_NOT_EXIST", true);
+  await assert.rejects(f.gateway.query("order-fixture"), /校验失败/);
+  assert.equal(f.logs.at(-1).stage, "verify");
+  assert.equal(f.logs.at(-1).responseVerified, false);
+});
+
+test("微信失败日志保留 HTTP 状态、微信错误码、字段和 Request-ID，不输出响应正文及凭据", async () => {
+  const f = responseFixture();
+  f.set(400, "PARAM_ERROR");
+  await assert.rejects(
+    f.gateway.request("POST", "/v3/pay/transactions/jsapi", {
+      payer: { openid: "private-openid" },
+    }),
+  );
+  assert.equal(f.logs[0].status, 400);
+  assert.equal(f.logs[0].wechatCode, "PARAM_ERROR");
+  assert.equal(f.logs[0].field, "appid");
+  assert.equal(f.logs[0].requestId, "wx-request-fixture");
+  assert.equal(f.logs[0].responseVerified, true);
+  assert(
+    !JSON.stringify(f.logs).match(
+      /sensitive response|private-openid|Authorization|PRIVATE KEY/,
+    ),
+  );
+  const gateway = new WechatPay(
+    f.c,
+    async () => {
+      throw Object.assign(Error("secret network details"), {
+        cause: { code: "ECONNRESET" },
+      });
+    },
+    {
+      error(tag, data) {
+        f.logs.push(JSON.parse(data));
+      },
+    },
+  );
+  await assert.rejects(gateway.query("order-fixture"));
+  assert.equal(f.logs.at(-1).stage, "network");
+  assert.equal(f.logs.at(-1).networkCode, "ECONNRESET");
+  assert(!JSON.stringify(f.logs).includes("secret network details"));
+});
+
+for (const expired of [false, true])
+  test(`本地订单在微信尚未下单时查单${expired ? "可到期关闭且不请求微信关单" : "仍为待支付，网页支付链接不受影响"}`, async (t) => {
+    const f = await fixture(t),
+      upstream = responseFixture();
+    const product = await f.publish(),
+      session = await f.session();
+    const created = await f.api(
+      "/payments/orders",
+      "POST",
+      {
+        productVersionId: product.published.versionId,
+        requestId: randomUUID(),
+        mode: "jsapi",
+      },
+      session,
+    );
+    assert.equal(created.status, 200);
+    assert.match(created.data.intent.url, /\/pay\/wechat#ticket=[a-f0-9]{64}$/);
+    f.gateway.query = (id) => upstream.gateway.query(id);
+    f.gateway.request = () => {
+      throw Error("不存在的微信订单不应发起关单");
+    };
+    if (expired)
+      await f.store.session(() =>
+        f.store.run(
+          "UPDATE payment_orders SET expiresAt=? WHERE id=?",
+          new Date(Date.now() - 1000).toISOString(),
+          created.data.order.id,
+        ),
+      );
+    const synced = await f.api(
+      `/payments/orders/${created.data.order.id}/sync`,
+      "POST",
+      {},
+      session,
+    );
+    assert.equal(synced.status, 200, JSON.stringify(synced.data));
+    assert.equal(synced.data.order.status, expired ? "closed" : "pending");
+    assert.equal(upstream.logs.length, 0);
+  });
+
+test("支付接口将故障编号返回给页面，与网关日志关联，不泄露微信响应正文", async (t) => {
+  const f = await fixture(t),
+    upstream = responseFixture();
+  const product = await f.publish(),
+    session = await f.session();
+  const created = await f.api(
+    "/payments/orders",
+    "POST",
+    {
+      productVersionId: product.published.versionId,
+      requestId: randomUUID(),
+      mode: "jsapi",
+    },
+    session,
+  );
+  upstream.set(403, "NO_AUTH");
+  f.gateway.query = (id) => upstream.gateway.query(id);
+  const result = await f.api(
+    `/payments/orders/${created.data.order.id}/sync`,
+    "POST",
+    {},
+    session,
+  );
+  assert.equal(result.status, 502);
+  assert.equal(result.data.errorId, upstream.logs[0].errorId);
+  assert(result.data.error.includes(result.data.errorId));
+  assert(!JSON.stringify(result.data).includes("sensitive response"));
+});
+
+test("微信内本人浏览器带原流程证明自动完成登录，返回后仍须原设备密钥领取会话", async (t) => {
+  const f = await fixture(t);
+  const start = await fetch(f.base + "/api/auth/wechat/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode: "browser" }),
+  });
+  const flow = await start.json(),
+    cookie = start.headers.get("set-cookie");
+  assert.match(cookie, /HttpOnly/);
+  assert.match(cookie, /SameSite=Lax/);
+  assert.match(cookie, /Path=\/api\/auth\/wechat/);
+  const callback =
+    f.base +
+    "/api/auth/wechat/callback?" +
+    new URLSearchParams({ state: flow.id, code: "fixture" });
+  const result = await fetch(callback, {
+    headers: { Cookie: cookie.split(";")[0] },
+    redirect: "manual",
+  });
+  assert.equal(result.status, 303);
+  assert.equal(
+    result.headers.get("location"),
+    config.frontendUrl + "/login?wechatReturn=1",
+  );
+  assert(!result.headers.get("location").includes(flow.secret));
+  assert.match(result.headers.get("set-cookie"), /Expires=Thu, 01 Jan 1970/);
+  assert.equal(
+    (
+      await f.api("/auth/wechat/poll", "POST", {
+        id: flow.id,
+        secret: "0".repeat(64),
+      })
+    ).status,
+    400,
+  );
+  const session = await f.api("/auth/wechat/poll", "POST", {
+    id: flow.id,
+    secret: flow.secret,
+  });
+  assert.equal(session.data.status, "complete");
+  assert.equal(
+    (
+      await f.api("/auth/wechat/poll", "POST", {
+        id: flow.id,
+        secret: flow.secret,
+      })
+    ).status,
+    400,
+  );
+  assert.equal((await fetch(callback)).status, 400);
+});
+
+for (const proof of ["missing", "wrong", "other-flow"])
+  test(`微信内登录缺少本次浏览器证明不跳过手机确认：${proof}`, async (t) => {
+    const f = await fixture(t),
+      start = await f.api("/auth/wechat/start", "POST", { mode: "browser" }),
+      flow = start.data;
+    let cookie = "";
+    if (proof === "wrong")
+      cookie = "knowforge_wechat_direct=" + flow.id + "." + "0".repeat(64);
+    if (proof === "other-flow")
+      cookie = (await f.api("/auth/wechat/start", "POST", { mode: "browser" }))
+        .cookie;
+    const result = await fetch(
+      f.base +
+        "/api/auth/wechat/callback?" +
+        new URLSearchParams({ state: flow.id, code: "fixture" }),
+      { headers: { Cookie: cookie }, redirect: "manual" },
+    );
+    assert.equal(result.status, 200);
+    assert((await result.text()).includes("确认登录"));
+    assert.equal(
+      (
+        await f.api("/auth/wechat/poll", "POST", {
+          id: flow.id,
+          secret: flow.secret,
+        })
+      ).data.status,
+      "waiting",
+    );
+  });
