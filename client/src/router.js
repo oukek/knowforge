@@ -10,6 +10,16 @@ const router = createRouter({
   },
   routes: [
     {
+      path: "/credits",
+      component: () => import("./views/Credits.vue"),
+      meta: { title: "资源包与额度" },
+    },
+    {
+      path: "/pay/wechat",
+      component: () => import("./views/WechatPayment.vue"),
+      meta: { title: "微信支付", publicPayment: true },
+    },
+    {
       path: "/profile",
       component: () => import("./views/Profile.vue"),
       meta: { title: "个人中心" },
@@ -79,6 +89,7 @@ const router = createRouter({
   ],
 });
 router.beforeEach(async (to) => {
+  if (to.meta.publicPayment) return true;
   await ensureInitialized();
   if (store.error) return true;
   if (!store.user && to.name !== "login") return loginLocation(to.fullPath);

@@ -14,6 +14,7 @@ export const store = reactive({
   toast: "",
   searchOpen: false,
   sidebarOpen: false,
+  creditShopOpen: false,
   now: Date.now(),
 });
 let toastTimer;
@@ -77,6 +78,7 @@ function clearSession() {
   store.state = null;
   store.searchOpen = false;
   store.sidebarOpen = false;
+  store.creditShopOpen = false;
 }
 export async function signIn(mode, credentials) {
   const data = await request("/auth/" + mode, "POST", credentials);

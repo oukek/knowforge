@@ -1,14 +1,13 @@
 <script setup>
-import { ref, onMounted } from "vue";
-import { request, dateLabel } from "../store.js";
+import { ref, onMounted, watch } from "vue";
+import { request, dateLabel, store } from "../store.js";
 import { ai, refreshAi } from "../ai.js";
 import WechatCheckout from "./WechatCheckout.vue";
-import AppDisclosure from "./AppDisclosure.vue";
+import AppDialog from "./AppDialog.vue";
+const allocationDetail = ref(null);
 const checkout = ref(null),
-  paymentEnabled = ref(false),
   orders = ref([]);
 const data = ref(null),
-  products = ref([]),
   page = ref(1),
   legacy = ref(false),
   error = ref(""),
@@ -47,18 +46,22 @@ async function changeLegacy() {
   page.value = 1;
   await load();
 }
-onMounted(async () => {
-  await load();
-  try {
-    products.value = (await request("/ai/products")).rows;
-    paymentEnabled.value = (await request("/payments/capabilities")).enabled;
-  } catch (e) {
-    error.value = e.message;
-  }
-});
+onMounted(load);
+watch(
+  () => store.creditShopOpen,
+  (open, previous) => {
+    if (previous && !open) void load();
+  },
+);
 </script>
 <template>
   <section class="ai-my-credits">
+    <div class="section-line" style="margin-bottom: 18px">
+      <p class="tiny muted">查看额度明细与购买记录。</p>
+      <button class="btn primary small" @click="store.creditShopOpen = true">
+        购买资源包
+      </button>
+    </div>
     <p v-if="error" class="ai-error" role="alert">{{ error }}</p>
     <template v-if="data?.account">
       <section class="ai-detail">
@@ -135,7 +138,7 @@ onMounted(async () => {
         </div>
       </div>
       <p class="tiny muted">
-        每次逻辑调用只结算一次；展开可查看跨批次分摊。失败调用释放预占，免费调用记录豁免额度。
+        每次逻辑调用只结算一次；点击详情可查看跨批次分摊。失败调用释放预占，免费调用记录豁免额度。
       </p>
       <div class="ai-record-list">
         <article
@@ -164,23 +167,14 @@ onMounted(async () => {
             :to="'/ai?run=' + row.runId"
             class="text-link"
             >查看关联 AI 记录</RouterLink
-          ><AppDisclosure v-if="row.allocations?.length" title="查看批次分摊"
-            ><div
-              v-for="a in row.allocations"
-              :key="a.lotId"
-              class="ai-audit-row"
-            >
-              <p class="tiny muted">批次 {{ a.lotId }}</p>
-              <p class="tiny">
-                {{
-                  a.charged !== undefined
-                    ? "实际扣除 " + a.charged + " · 释放 " + a.released
-                    : "变动 " + a.amount
-                }}
-                额度{{ a.returnedTo === "expired" ? " · 返还时已到期" : "" }}
-              </p>
-            </div></AppDisclosure
           >
+          <button
+            v-if="row.allocations?.length"
+            class="text-btn"
+            @click="allocationDetail = row"
+          >
+            查看批次分摊
+          </button>
         </article>
       </div>
       <p v-if="!data?.rows?.length" class="ai-empty">还没有额度变动记录。</p>
@@ -205,41 +199,6 @@ onMounted(async () => {
         >
           下一页
         </button>
-      </div>
-    </section>
-    <section v-if="products.length" class="ai-detail">
-      <h2>购买资源包</h2>
-      <p class="tiny muted">
-        {{
-          paymentEnabled
-            ? "使用微信支付购买，付款确认后额度自动到账。"
-            : "微信支付尚未开通，可联系管理员获取额度。"
-        }}
-      </p>
-      <div class="ai-usage-summary">
-        <article v-for="p in products" :key="p.id">
-          <h3>{{ p.published.name }}</h3>
-          <strong>{{ p.published.credits }} 额度</strong>
-          <p v-if="Number(p.published.bonus) > 0">
-            另赠 {{ p.published.bonus }} 额度
-          </p>
-          <p>
-            售价 ¥{{ p.published.price }} ·
-            {{
-              p.published.validDays === null
-                ? "永久"
-                : p.published.validDays + " 天"
-            }}
-          </p>
-          <p class="tiny muted">{{ p.published.description }}</p>
-          <button
-            class="btn primary"
-            :disabled="!paymentEnabled || Number(p.published.price) <= 0"
-            @click="checkout = { product: p }"
-          >
-            微信购买
-          </button>
-        </article>
       </div>
     </section>
     <section v-if="orders.length" class="ai-detail">
@@ -271,6 +230,40 @@ onMounted(async () => {
         展示最近 50 笔订单；支付状态以服务端核对结果为准。
       </p>
     </section>
+    <AppDialog
+      :open="!!allocationDetail"
+      title="额度批次分摊"
+      :width="680"
+      mobile-fullscreen
+      @close="allocationDetail = null"
+    >
+      <template v-if="allocationDetail">
+        <p class="tiny muted">
+          {{ kinds[allocationDetail.kind] || allocationDetail.kind }} ·
+          {{ dateLabel(allocationDetail.createdAt) }}
+        </p>
+        <div
+          v-for="a in allocationDetail.allocations"
+          :key="a.lotId"
+          class="ai-audit-row"
+        >
+          <p class="tiny muted">批次 {{ a.lotId }}</p>
+          <p class="tiny">
+            {{
+              a.charged !== undefined
+                ? "实际扣除 " + a.charged + " · 释放 " + a.released
+                : "变动 " + a.amount
+            }}
+            额度{{ a.returnedTo === "expired" ? " · 返还时已到期" : "" }}
+          </p>
+        </div>
+      </template>
+      <template #footer
+        ><button class="btn" @click="allocationDetail = null">
+          关闭
+        </button></template
+      >
+    </AppDialog>
     <WechatCheckout
       v-if="checkout"
       v-bind="checkout"

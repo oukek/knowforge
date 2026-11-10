@@ -1,3 +1,4 @@
+import { installWechatHandoff } from "./wechat-handoff.mjs";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
 import { WechatConfiguration } from "./wechat-config.mjs";
@@ -425,30 +426,16 @@ export async function installWechat(app, store, auth, ai, options = {}) {
       order.expiresAt <= new Date().toISOString()
     )
       return { order: publicOrder(order) };
-    let intent = JSON.parse(order.intent);
-    if (!intent.type) {
-      const identity = await repo.read((db) =>
-        db.get(
-          "SELECT openid FROM auth_wechat WHERE userId=? AND appId=?",
-          order.userId,
-          c.appId,
-        ),
-      );
-      const paymentMode = mode === "jsapi" && identity ? "jsapi" : "native";
-      intent = await gateway.create(order, paymentMode, identity?.openid);
-      await repo.read((db) =>
-        db.run(
-          "UPDATE payment_orders SET intent=? WHERE id=?",
-          JSON.stringify(intent),
-          order.id,
-        ),
-      );
-    }
+    const prior = JSON.parse(order.intent);
+    if (prior.type === "qr")
+      return { order: publicOrder(order), intent: prior }; // Historical Native orders retain their original payment method.
+    if (mode !== "jsapi") throw new AiError(400, "请使用 JSAPI 支付");
     return {
       order: publicOrder(order),
-      intent,
+      intent: await handoff.createLink(order, c),
     };
   }
+
   route(
     "post",
     "/api/payments/orders",
@@ -459,10 +446,12 @@ export async function installWechat(app, store, auth, ai, options = {}) {
         .object({
           productVersionId: z.string().uuid(),
           requestId: z.string().uuid(),
-          mode: z.enum(["native", "jsapi"]).default("native"),
+          mode: z.enum(["native", "jsapi"]).default("jsapi"),
         })
         .strict()
         .parse(req.body);
+      if (input.mode !== "jsapi")
+        throw new AiError(400, "新订单请使用 JSAPI 支付");
       const order = await repo.transaction(async (db) => {
         await ai.repo.account(db, req.user.id, true);
         const prior = await db.get(
@@ -548,7 +537,7 @@ export async function installWechat(app, store, auth, ai, options = {}) {
         .regex(/^[a-f0-9]{32}$/)
         .parse(req.params.id);
       const { mode } = z
-        .object({ mode: z.enum(["native", "jsapi"]).default("native") })
+        .object({ mode: z.enum(["native", "jsapi"]).default("jsapi") })
         .strict()
         .parse(req.body);
       return checkout(await owned(id, req.user.id), mode, c, gateway);
@@ -595,63 +584,76 @@ export async function installWechat(app, store, auth, ai, options = {}) {
     true,
   );
   const syncTimes = new Map();
+  async function syncOrder(id, userId, c, gateway) {
+    const order = await owned(id, userId);
+    if (
+      order.status !== "paid" &&
+      order.status !== "closed" &&
+      (syncTimes.get(id) || 0) < Date.now() - 3000
+    ) {
+      for (const [key, time] of syncTimes)
+        if (time < Date.now() - 60000) syncTimes.delete(key);
+      if (syncTimes.size >= 10000)
+        throw new AiError(429, "查单繁忙，请稍后重试");
+      syncTimes.set(id, Date.now());
+      const payment = await gateway.query(id);
+      if (
+        payment.out_trade_no !== id ||
+        payment.appid !== order.appId ||
+        payment.mchid !== order.merchantId
+      )
+        throw new AiError(502, "微信查单结果不匹配");
+      await settle(payment);
+      if (["CLOSED", "REVOKED", "PAYERROR"].includes(payment.trade_state))
+        await repo.read((db) =>
+          db.run(
+            "UPDATE payment_orders SET status=? WHERE id=? AND status=?",
+            "closed",
+            id,
+            "pending",
+          ),
+        );
+      if (
+        payment.trade_state === "NOTPAY" &&
+        order.expiresAt <= new Date().toISOString()
+      ) {
+        await gateway.request(
+          "POST",
+          `/v3/pay/transactions/out-trade-no/${id}/close`,
+          { mchid: order.merchantId },
+        );
+        await repo.read((db) =>
+          db.run(
+            "UPDATE payment_orders SET status=? WHERE id=? AND status=?",
+            "closed",
+            id,
+            "pending",
+          ),
+        );
+      }
+    }
+    return { order: publicOrder(await owned(id, userId)) };
+  }
+  const handoff = installWechatHandoff({
+    route,
+    repo,
+    auth,
+    configuration,
+    options,
+    fetcher,
+    publicOrder,
+    syncOrder,
+  });
   route(
     "post",
     "/api/payments/orders/:id/sync",
     async (req, res, c, gateway) => {
       needPay(c);
       const id = z
-          .string()
-          .regex(/^[a-f0-9]{32}$/)
-          .parse(req.params.id),
-        order = await owned(id, req.user.id);
-      if (
-        order.status !== "paid" &&
-        order.status !== "closed" &&
-        (syncTimes.get(id) || 0) < Date.now() - 3000
-      ) {
-        for (const [key, time] of syncTimes)
-          if (time < Date.now() - 60000) syncTimes.delete(key);
-        if (syncTimes.size >= 10000)
-          throw new AiError(429, "查单繁忙，请稍后重试");
-        syncTimes.set(id, Date.now());
-        const payment = await gateway.query(id);
-        if (
-          payment.out_trade_no !== id ||
-          payment.appid !== order.appId ||
-          payment.mchid !== order.merchantId
-        )
-          throw new AiError(502, "微信查单结果不匹配");
-        await settle(payment);
-        if (["CLOSED", "REVOKED", "PAYERROR"].includes(payment.trade_state))
-          await repo.read((db) =>
-            db.run(
-              "UPDATE payment_orders SET status=? WHERE id=? AND status=?",
-              "closed",
-              id,
-              "pending",
-            ),
-          );
-        if (
-          payment.trade_state === "NOTPAY" &&
-          order.expiresAt <= new Date().toISOString()
-        ) {
-          await gateway.request(
-            "POST",
-            `/v3/pay/transactions/out-trade-no/${id}/close`,
-            { mchid: order.merchantId },
-          );
-          await repo.read((db) =>
-            db.run(
-              "UPDATE payment_orders SET status=? WHERE id=? AND status=?",
-              "closed",
-              id,
-              "pending",
-            ),
-          );
-        }
-      }
-      return { order: publicOrder(await owned(id, req.user.id)) };
+        .string()
+        .regex(/^[a-f0-9]{32}$/)
+        .parse(req.params.id);
+      return syncOrder(id, req.user.id, c, gateway);
     },
     true,
   );

@@ -247,6 +247,12 @@ test("实际下单绑定加密配置版本，关闭新购买仍可查单补到�
     requestId: crypto.randomUUID(),
   });
   assert.equal(created.status, 200, JSON.stringify(created.data));
+  order = await f.store.session(() =>
+    f.store.get(
+      "SELECT * FROM payment_orders WHERE id=?",
+      created.data.order.id,
+    ),
+  );
   const binding = await f.store.session(() =>
     f.store.get(
       "SELECT configId FROM wechat_config_bindings WHERE id=?",

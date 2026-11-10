@@ -30,7 +30,7 @@ async function fixture(t, patch = {}) {
       calls++;
       if (failCreate) throw Error("fixture network failure");
       return mode === "jsapi"
-        ? { type: "jsapi", parameters: { fixture: payer } }
+        ? { type: "jsapi", parameters: { fixture: payer, appId: config.appId } }
         : { type: "qr", codeUrl: "weixin://wxpay/fixture" };
     },
     async query(id) {
@@ -59,13 +59,17 @@ async function fixture(t, patch = {}) {
       fetcher: async (url) => ({
         ok: true,
         json: async () =>
-          url.includes("access_token?")
-            ? {
-                openid,
-                access_token: "server-only-oauth-token",
-                scope: "snsapi_userinfo",
-              }
-            : { openid, nickname: "学习者" },
+          url.includes("stable_token")
+            ? { access_token: "sdk-token" }
+            : url.includes("getticket")
+              ? { ticket: "server-only-jsapi-ticket", expires_in: 7200 }
+              : url.includes("access_token?")
+                ? {
+                    openid,
+                    access_token: "server-only-oauth-token",
+                    scope: "snsapi_userinfo",
+                  }
+                : { openid, nickname: "学习者" },
       }),
     },
     ...patch,
@@ -164,9 +168,35 @@ async function fixture(t, patch = {}) {
     const products = (await api("/ai/products", "GET", undefined, s)).data.rows;
     return products.find((row) => row.id === p.id);
   }
+  async function scan(intent, identity = "openid_alice") {
+    openid = identity;
+    const ticket = new URLSearchParams(new URL(intent.url).hash.slice(1)).get(
+        "ticket",
+      ),
+      secret = randomBytes(32).toString("hex");
+    const credentials = { ticket, secret };
+    const start = await api("/payments/handoff/start", "POST", credentials);
+    assert.equal(start.status, 200, JSON.stringify(start.data));
+    const state = new URL(start.data.url).searchParams.get("state");
+    const response = await fetch(
+      base +
+        "/api/payments/wechat/oauth/callback?" +
+        new URLSearchParams({ state, code: "fixture" }),
+      { redirect: "manual" },
+    );
+    assert.equal(response.status, 303, await response.text());
+    assert.equal(response.headers.get("set-cookie"), null);
+    assert.equal(
+      response.headers.get("location"),
+      config.frontendUrl + "/pay/wechat#resume",
+    );
+    return { ...credentials, state };
+  }
   return {
     ...built,
     api,
+    base,
+    scan,
     authorize,
     confirm,
     session,
@@ -270,31 +300,33 @@ test("支付订单固定售价，复用有效待付订单，金额与身份校�
   const first = await f.api("/payments/orders", "POST", input, a);
   assert.equal(first.status, 200, JSON.stringify(first.data));
   assert.equal(first.data.order.amount, "9.90");
-  assert.equal(first.data.intent.type, "qr");
-  assert.deepEqual(first.data.intent, {
-    type: "qr",
-    codeUrl: "weixin://wxpay/fixture",
-  });
+  assert.equal(first.data.intent.type, "handoff");
+  assert.match(
+    first.data.intent.url,
+    /^https:\/\/learn\.example\.com\/pay\/wechat#ticket=[a-f0-9]{64}$/,
+  );
+  assert.equal("qr" in first.data.intent, false);
   const retry = await f.api("/payments/orders", "POST", input, a);
   const secondClick = await f.api("/payments/orders", "POST", purchase(p), a);
   assert.equal(first.data.order.id, retry.data.order.id);
   assert.equal(secondClick.data.order.id, first.data.order.id);
-  assert.equal(f.calls, 1);
-  for (const [path, method, body] of [
-    [`/payments/orders/${first.data.order.id}`, "GET"],
-    [
-      `/payments/orders/${first.data.order.id}/checkout`,
-      "POST",
-      { mode: "native" },
-    ],
-  ]) {
-    const restored = await f.api(path, method, body, a);
-    assert.equal(restored.status, 200);
-    assert.deepEqual(restored.data.intent, {
-      type: "qr",
-      codeUrl: "weixin://wxpay/fixture",
-    });
-  }
+  assert.equal(f.calls, 0);
+  const details = await f.api(
+    `/payments/orders/${first.data.order.id}`,
+    "GET",
+    undefined,
+    a,
+  );
+  assert.equal(details.status, 200);
+  assert.equal(details.data.intent, undefined);
+  const restored = await f.api(
+    `/payments/orders/${first.data.order.id}/checkout`,
+    "POST",
+    { mode: "jsapi" },
+    a,
+  );
+  assert.equal(restored.status, 200);
+  assert.equal(restored.data.intent.type, "handoff");
   assert.equal(
     (
       await f.api(
@@ -380,8 +412,15 @@ test("JSAPI 使用服务端微信身份；通知缺失时查单可补入账，�
     purchase(p, { mode: "jsapi" }),
     s,
   );
-  assert.equal(created.data.intent.type, "jsapi");
-  assert.equal(created.data.intent.parameters.fixture, "openid_alice");
+  assert.equal(created.data.intent.type, "handoff");
+  const scanner = await f.scan(created.data.intent);
+  const intent = await f.api("/payments/handoff/intent", "POST", {
+    ticket: scanner.ticket,
+    secret: scanner.secret,
+  });
+  assert.equal(intent.status, 200, JSON.stringify(intent.data));
+  assert.equal(intent.data.intent.type, "jsapi");
+  assert.equal(intent.data.intent.parameters.fixture, "openid_alice");
   f.setPayment(paid(created.data.order));
   assert.equal(
     (
@@ -416,19 +455,21 @@ test("下单超时保留本地订单，可从历史订单恢复支付；未支�
     p = await f.publish(),
     s = await f.session(),
     input = purchase(p);
+  const created = await f.api("/payments/orders", "POST", input, s);
+  assert.equal(created.status, 200);
+  const scanner = await f.scan(created.data.intent);
+  const credentials = { ticket: scanner.ticket, secret: scanner.secret };
   f.setFailCreate(true);
-  assert.equal((await f.api("/payments/orders", "POST", input, s)).status, 500);
+  assert.equal(
+    (await f.api("/payments/handoff/intent", "POST", credentials)).status,
+    500,
+  );
   const list = (await f.api("/payments/orders", "GET", undefined, s)).data.rows;
   assert.equal(list.length, 1);
   f.setFailCreate(false);
-  const restored = await f.api(
-    `/payments/orders/${list[0].id}/checkout`,
-    "POST",
-    { mode: "native" },
-    s,
-  );
+  const restored = await f.api("/payments/handoff/intent", "POST", credentials);
   assert.equal(restored.status, 200);
-  assert.equal(restored.data.intent.type, "qr");
+  assert.equal(restored.data.intent.type, "jsapi");
   await f.store.session(() =>
     f.store.run(
       "UPDATE payment_orders SET expiresAt=? WHERE id=?",
@@ -510,4 +551,156 @@ test("微信支付网关验证真实 RSA 签名、拒绝篡改与过期报文，
       headers,
     ),
   );
+});
+
+test("扫码只授权当前订单：同账号自动继续，跨账号必须明确确认，不能伪造 OpenID 或复用 OAuth state", async (t) => {
+  const f = await fixture(t),
+    p = await f.publish(),
+    owner = await f.session();
+  const other = await f.session("openid_bob");
+  const created = await f.api(
+    "/payments/orders",
+    "POST",
+    purchase(p, { mode: "jsapi" }),
+    owner,
+  );
+  assert.equal(created.data.intent.type, "handoff");
+  assert.equal(f.calls, 0); // A desktop request cannot select a payer before WeChat OAuth.
+  const ticket = new URLSearchParams(
+    new URL(created.data.intent.url).hash.slice(1),
+  ).get("ticket");
+  assert.equal(
+    (
+      await f.api("/payments/handoff/preview", "POST", {
+        ticket,
+        secret: "0".repeat(64),
+      })
+    ).status,
+    401,
+  );
+  const scanner = await f.scan(created.data.intent, "openid_bob"),
+    input = { ticket: scanner.ticket, secret: scanner.secret };
+  const preview = await f.api("/payments/handoff/preview", "POST", input);
+  assert.equal(preview.data.sameAccount, false);
+  assert.equal(preview.data.recipient.publicId, owner.user.publicId);
+  assert.equal(
+    (await f.api("/payments/handoff/intent", "POST", input)).status,
+    409,
+  );
+  assert.equal(
+    (
+      await f.api("/payments/handoff/intent", "POST", {
+        ...input,
+        confirmedRecipientId: other.user.publicId,
+      })
+    ).status,
+    409,
+  );
+  assert.equal(
+    (
+      await f.api("/payments/handoff/intent", "POST", {
+        ...input,
+        openid: "openid_alice",
+      })
+    ).status,
+    400,
+  );
+  const confirmed = await f.api("/payments/handoff/intent", "POST", {
+    ...input,
+    confirmedRecipientId: owner.user.publicId,
+  });
+  assert.equal(confirmed.status, 200, JSON.stringify(confirmed.data));
+  assert.equal(confirmed.data.intent.parameters.fixture, "openid_bob");
+  assert.equal(f.calls, 1);
+  const sdk = await f.api("/payments/handoff/js-sdk", "POST", {
+    ...input,
+    url: config.frontendUrl + "/pay/wechat",
+  });
+  assert.equal(sdk.status, 200, JSON.stringify(sdk.data));
+  assert.equal(sdk.data.appId, config.appId);
+  assert(!JSON.stringify(sdk.data).includes("server-only-jsapi-ticket"));
+  assert.equal(
+    (
+      await f.api("/payments/handoff/js-sdk", "POST", {
+        ...input,
+        url: "https://evil.example.com/pay/wechat",
+      })
+    ).status,
+    400,
+  );
+  const replay = await fetch(
+    f.base +
+      "/api/payments/wechat/oauth/callback?state=" +
+      scanner.state +
+      "&code=fixture",
+    { redirect: "manual" },
+  );
+  assert.equal(replay.status, 400);
+  const anotherScan = await f.scan(created.data.intent, "openid_alice");
+  assert.equal(
+    (
+      await f.api("/payments/handoff/intent", "POST", {
+        ticket: anotherScan.ticket,
+        secret: anotherScan.secret,
+      })
+    ).status,
+    409,
+  );
+  assert.equal((await f.api("/auth/me")).data.user, null); // No owner session was granted to the scanning browser.
+  assert.equal(
+    (
+      await f.api(
+        "/payments/orders",
+        "POST",
+        purchase(p, { mode: "native" }),
+        owner,
+      )
+    ).status,
+    400,
+  );
+});
+
+test("微信 JSSDK 按支付页 URL 签名并合并 ticket 请求，不给外站和带凭据的 URL 签名", async () => {
+  const { WechatJsSdk } = await import("../server/wechat-js-sdk.mjs");
+  let calls = 0;
+  const sdk = new WechatJsSdk(async (url) => {
+    calls++;
+    return {
+      ok: true,
+      json: async () =>
+        url.includes("stable_token")
+          ? { access_token: "sdk-only-token" }
+          : { ticket: "private-jsapi-ticket", expires_in: 7200 },
+    };
+  });
+  const page = config.frontendUrl + "/pay/wechat";
+  const results = await Promise.all([
+    sdk.configuration(config, page),
+    sdk.configuration(config, page),
+  ]);
+  assert.equal(calls, 2);
+  const { createHash } = await import("node:crypto");
+  for (const result of results) {
+    assert.equal(
+      result.signature,
+      createHash("sha1")
+        .update(
+          `jsapi_ticket=private-jsapi-ticket&noncestr=${result.nonceStr}&timestamp=${result.timestamp}&url=${page}`,
+        )
+        .digest("hex"),
+    );
+    assert(!JSON.stringify(result).includes("private-jsapi-ticket"));
+  }
+  for (const value of [
+    "https://evil.example.com/pay/wechat",
+    page + "#ticket=secret",
+    page + "?ticket=secret",
+    config.frontendUrl + "/ai",
+    "http://learn.example.com/pay/wechat",
+  ])
+    await assert.rejects(
+      () => sdk.configuration(config, value),
+      /本站微信支付页面/,
+    );
+  assert.equal(calls, 2);
 });

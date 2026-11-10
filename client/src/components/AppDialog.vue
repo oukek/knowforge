@@ -8,6 +8,7 @@ const props = defineProps({
   description: String,
   busy: Boolean,
   mobileFullscreen: Boolean,
+  returnFocus: Object,
   width: { type: Number, default: 760 },
 });
 const emit = defineEmits(["close"]);
@@ -51,7 +52,7 @@ watch(
   () => props.open,
   async (value) => {
     if (value) {
-      previous = document.activeElement;
+      previous = props.returnFocus || document.activeElement;
       lockModal(owner);
       await nextTick();
       panel.value?.focus({ preventScroll: true });

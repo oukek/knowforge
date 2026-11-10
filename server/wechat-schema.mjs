@@ -2,6 +2,10 @@ export const wechatTables = [
   "auth_wechat",
   "wechat_flows",
   "payment_orders",
+  "wechat_checkout_links",
+  "wechat_checkout_scans",
+  "wechat_checkout_oauth",
+  "wechat_order_payers",
   "wechat_configurations",
   "wechat_configuration_head",
   "wechat_config_bindings",
@@ -11,6 +15,10 @@ export function wechatSchema(driver, prefix = "") {
     text = mysql ? "VARCHAR(191)" : "TEXT",
     long = mysql ? "LONGTEXT" : "TEXT";
   const definitions = {
+    wechat_checkout_links: `id ${text} PRIMARY KEY,userId ${text} NOT NULL,orderId ${text} NOT NULL,expiresAt ${text} NOT NULL,payerOpenid ${text} NOT NULL`,
+    wechat_checkout_scans: `id ${text} PRIMARY KEY,userId ${text} NOT NULL,linkId ${text} NOT NULL,openid ${text} NOT NULL,payerUserId ${text} NOT NULL,expiresAt ${text} NOT NULL`,
+    wechat_checkout_oauth: `id ${text} PRIMARY KEY,userId ${text} NOT NULL,linkId ${text} NOT NULL,scanHash ${text} NOT NULL,expiresAt ${text} NOT NULL,used INT NOT NULL`,
+    wechat_order_payers: `id ${text} PRIMARY KEY,userId ${text} NOT NULL,openid ${text} NOT NULL`,
     wechat_configurations: `id ${text} PRIMARY KEY,encryptedConfig ${long} NOT NULL,createdAt ${text} NOT NULL,actorId ${text} NOT NULL`,
     wechat_configuration_head: `id ${text} PRIMARY KEY,configId ${text} NOT NULL`,
     wechat_config_bindings: `id ${text} PRIMARY KEY,configId ${text} NOT NULL`,

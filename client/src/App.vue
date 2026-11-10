@@ -1,4 +1,5 @@
 <script setup>
+import CreditShopDialog from "./components/CreditShopDialog.vue";
 import { avatarFor } from "../../shared/avatars.mjs";
 import AppTooltip from "./components/AppTooltip.vue";
 import { onUnmounted, watch } from "vue";
@@ -18,6 +19,7 @@ const nav = [
   ["/labs", "SquareTerminal", "手写实验室"],
   ["/mock", "Timer", "模拟面试"],
   ["/ai", "Sparkles", "AI 学习与历史"],
+  ["/credits", "Package", "资源包与额度"],
   ["/review", "RotateCcw", "复习与收藏"],
   ["/plan", "CalendarDays", "学习计划"],
 ];
@@ -41,6 +43,10 @@ watch(
   ],
   () => {
     store.sidebarOpen = false;
+    if (route.meta.publicPayment) {
+      document.title = "微信支付 · KnowForge";
+      return;
+    }
     document.title = `${store.user ? route.meta.title || "学习" : "微信登录"} · KnowForge`;
     if (!store.initialized || store.loading || store.error) return;
     if (!store.user && route.name !== "login")
@@ -53,9 +59,10 @@ watch(
 </script>
 <template>
   <AppTooltip />
-  <PlanOnboarding />
+  <PlanOnboarding v-if="!route.meta.publicPayment" />
+  <RouterView v-if="route.meta.publicPayment" :key="route.fullPath" />
   <main
-    v-if="!store.user && (store.loading || store.error)"
+    v-else-if="!store.user && (store.loading || store.error)"
     class="session-screen"
   >
     <div v-if="store.loading" class="loading-state" role="status">
@@ -146,6 +153,12 @@ watch(
         </div>
         <div class="topbar-actions">
           <button
+            class="btn primary small topbar-purchase"
+            @click="store.creditShopOpen = true"
+          >
+            <Icon name="Package" :size="16" /><span>购买资源包</span>
+          </button>
+          <button
             class="search-trigger"
             aria-label="搜索知识与题目"
             @click="store.searchOpen = true"
@@ -195,6 +208,7 @@ watch(
         >
       </footer>
     </div>
+    <CreditShopDialog v-if="store.user" />
     <SearchDialog v-if="store.catalog" />
     <div v-if="store.toast" class="toast" role="status">
       <Icon name="Info" :size="18" />{{ store.toast }}

@@ -2,6 +2,7 @@
 import { ref, onMounted, onBeforeUnmount, computed } from "vue";
 import { request, store } from "../store.js";
 import QrCode from "./QrCode.vue";
+import { inWechat } from "../wechat-sdk.js";
 import AppDialog from "./AppDialog.vue";
 const props = defineProps({ product: Object, orderId: String });
 const emit = defineEmits(["close", "paid"]);
@@ -35,23 +36,7 @@ function notifyPaid() {
   }
 }
 function invoke() {
-  if (!intent.value || intent.value.type !== "jsapi") return;
-  if (!window.WeixinJSBridge?.invoke) {
-    error.value = "微信支付尚未就绪，请稍后点击继续支付。";
-    return;
-  }
-  window.WeixinJSBridge.invoke(
-    "getBrandWCPayRequest",
-    intent.value.parameters,
-    (result) => {
-      if (disposed) return;
-      if (result.err_msg?.endsWith(":cancel"))
-        error.value = "已取消支付，可继续支付原订单。";
-      else if (!result.err_msg?.endsWith(":ok"))
-        error.value = "微信支付未完成，请核对订单后重试。";
-      sync();
-    },
-  );
+  if (intent.value?.type === "handoff") location.assign(intent.value.url);
 }
 async function sync(manual = false) {
   if (!order.value || checking.value || disposed) return;
@@ -86,9 +71,7 @@ async function start() {
         `/payments/orders/${props.orderId}/checkout`,
         "POST",
         {
-          mode: /MicroMessenger/i.test(navigator.userAgent)
-            ? "jsapi"
-            : "native",
+          mode: "jsapi",
         },
       );
     else {
@@ -100,7 +83,7 @@ async function start() {
       result = await request("/payments/orders", "POST", {
         productVersionId: props.product.published.versionId,
         requestId,
-        mode: /MicroMessenger/i.test(navigator.userAgent) ? "jsapi" : "native",
+        mode: "jsapi",
       });
     }
     if (disposed) return;
@@ -108,7 +91,7 @@ async function start() {
     intent.value = result.intent;
     notifyPaid();
     if (order.value.status === "pending") {
-      if (intent.value?.type === "jsapi") invoke();
+      if (intent.value?.type === "handoff" && inWechat()) invoke();
       sync();
     }
   } catch (e) {
@@ -139,18 +122,18 @@ onBeforeUnmount(() => {
         <template v-else>
           <QrCode
             v-if="
-              intent?.type === 'qr' &&
-              intent.codeUrl &&
+              ['qr', 'handoff'].includes(intent?.type) &&
+              (intent.codeUrl || intent.url) &&
               Date.parse(order.expiresAt) > Date.now()
             "
-            :value="intent.codeUrl"
+            :value="intent.url || intent.codeUrl"
             alt="微信支付二维码，请使用微信扫一扫"
           />
           <p class="tiny muted">
             {{
-              intent?.type === "jsapi"
+              intent?.type === "handoff" && inWechat()
                 ? "请在微信内完成支付，额度到账后将自动更新。"
-                : "请使用微信扫一扫支付；手机端可保存二维码后在微信扫一扫中识别。"
+                : "请用手机微信扫一扫，进入支付页后会自动调起微信支付。"
             }}
           </p>
           <p class="tiny muted">
@@ -160,11 +143,11 @@ onBeforeUnmount(() => {
             }}，关掉弹窗后仍可从订单列表核对。
           </p>
           <button
-            v-if="intent?.type === 'jsapi'"
+            v-if="intent?.type === 'handoff'"
             class="btn primary"
             @click="invoke"
           >
-            继续微信支付
+            在微信中继续支付
           </button>
         </template>
         <p class="tiny muted">订单号 {{ order.id }}</p>

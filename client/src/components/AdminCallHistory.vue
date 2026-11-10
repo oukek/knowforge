@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { featureLabel, aiStateLabel } from "../ai.js";
 import { dateLabel } from "../store.js";
 import {
@@ -12,7 +12,8 @@ import {
 } from "./admin-call-display.js";
 import Icon from "./Icon.vue";
 import AppSelect from "./AppSelect.vue";
-import AppDisclosure from "./AppDisclosure.vue";
+import AppDialog from "./AppDialog.vue";
+const auditDetail = ref(null);
 const props = defineProps({ history: Object, summary: Object, busy: Boolean });
 const feature = defineModel("feature"),
   status = defineModel("status"),
@@ -325,35 +326,53 @@ function reset() {
     </section>
 
     <section class="call-admin-audit">
-      <AppDisclosure title="管理操作审计"
-        ><p class="call-audit-note">
-          最近 30 条配置与额度操作，便于追溯调整依据。
-        </p>
-        <div v-if="!summary.audit.length" class="call-audit-note">
-          暂无管理操作记录。
-        </div>
-        <article
-          v-for="item in summary.audit"
-          :key="item.id"
-          class="call-audit-entry"
-        >
-          <AppDisclosure
-            :title="
-              (auditLabels[item.action] || item.action) +
-              ' · ' +
-              dateLabel(item.createdAt)
-            "
-            ><p class="call-audit-note">
-              操作账号 <code>{{ item.userId }}</code>
-            </p>
-            <pre>{{ pretty(item.data) }}</pre>
-          </AppDisclosure>
-        </article></AppDisclosure
+      <h3>管理操作审计</h3>
+      <p class="call-audit-note">
+        最近 30 条配置与额度操作，便于追溯调整依据。
+      </p>
+      <p v-if="!summary.audit.length" class="call-audit-note">
+        暂无管理操作记录。
+      </p>
+      <article
+        v-for="item in summary.audit"
+        :key="item.id"
+        class="call-audit-entry section-line"
       >
+        <span
+          >{{ auditLabels[item.action] || item.action }} ·
+          {{ dateLabel(item.createdAt) }}</span
+        >
+        <button class="text-btn" @click="auditDetail = item">查看详情</button>
+      </article>
     </section>
+    <AppDialog
+      :open="!!auditDetail"
+      title="管理操作详情"
+      :width="760"
+      mobile-fullscreen
+      @close="auditDetail = null"
+    >
+      <template v-if="auditDetail">
+        <p>
+          {{ auditLabels[auditDetail.action] || auditDetail.action }} ·
+          {{ dateLabel(auditDetail.createdAt) }}
+        </p>
+        <p class="call-audit-note">
+          操作账号 <code>{{ auditDetail.userId }}</code>
+        </p>
+        <pre class="call-audit-data">{{ pretty(auditDetail.data) }}</pre>
+      </template>
+      <template #footer
+        ><button class="btn" @click="auditDetail = null">关闭</button></template
+      >
+    </AppDialog>
   </div>
 </template>
 <style scoped>
+.call-audit-data {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .call-history {
   --call-line: #e1e9e4;
   --call-muted: #74867c;

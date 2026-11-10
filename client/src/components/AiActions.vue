@@ -92,6 +92,19 @@ function variants() {
           : "可用 " + ai.account.available + " 额度"
       }}。成功调用按用量结算；同一回答复用已有结果。
     </p>
+    <p
+      v-if="
+        ai.loaded && !ai.account.exempt && Number(ai.account.available) <= 0
+      "
+      class="ai-credit-prompt"
+    >
+      当前暂无可用额度，<button
+        class="text-btn"
+        @click="store.creditShopOpen = true"
+      >
+        购买资源包</button
+      >后可继续 AI 练习。
+    </p>
     <p v-if="ai.reason" class="ai-error">{{ ai.reason }}</p>
     <div class="row wrap">
       <button

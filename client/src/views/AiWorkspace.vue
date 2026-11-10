@@ -1,8 +1,9 @@
 <script setup>
-import { ref, watch, onMounted } from "vue";
+import { ref, watch, onMounted, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { request, modules, store, dateLabel } from "../store.js";
 import { ai, refreshAi, featureLabel, aiStateLabel, useAiTask } from "../ai.js";
+import AppDialog from "../components/AppDialog.vue";
 import AppField from "../components/AppField.vue";
 import AppSelect from "../components/AppSelect.vue";
 import AppDisclosure from "../components/AppDisclosure.vue";
@@ -13,7 +14,17 @@ import MyAiCredits from "../components/MyAiCredits.vue";
 import Icon from "../components/Icon.vue";
 const route = useRoute(),
   router = useRouter();
-const tab = ref(route.query.tab === "interview" ? "interview" : "history");
+const tab = computed({
+  get: () =>
+    ["history", "interview", "ledger"].includes(route.query.tab)
+      ? route.query.tab
+      : "history",
+  set: (value) =>
+    router.replace({
+      path: "/ai",
+      query: { ...route.query, tab: value === "history" ? undefined : value },
+    }),
+});
 const history = ref({ rows: [], total: 0, page: 1 }),
   ledger = ref({ rows: [], total: 0, page: 1 }),
   sessions = ref([]);
@@ -30,6 +41,54 @@ const mode = ref("practice"),
   moduleId = ref(""),
   session = ref(null),
   answer = ref("");
+const detailError = ref(""),
+  interviewOpen = ref(false),
+  sessionLoading = ref(false),
+  sessionError = ref("");
+const detailOpen = computed(() => typeof route.query.run === "string");
+let sessionVersion = 0;
+function closeDetail() {
+  return router.replace({
+    path: "/ai",
+    query: { ...route.query, run: undefined },
+  });
+}
+function closeInterview() {
+  interviewOpen.value = false;
+  sessionVersion++;
+  sessionLoading.value = false;
+}
+function newInterview() {
+  sessionVersion++;
+  session.value = null;
+  answer.value = "";
+  sessionError.value = "";
+  interviewOpen.value = true;
+}
+async function openSession(id) {
+  const version = ++sessionVersion;
+  sessionError.value = "";
+  sessionLoading.value = true;
+  interviewOpen.value = true;
+  try {
+    const value = await request("/ai/interviews/" + encodeURIComponent(id));
+    if (version !== sessionVersion) return;
+    if (session.value?.id !== id) answer.value = "";
+    session.value = value;
+    if (value.activeRunId) task.resume(value.activeRunId);
+  } catch (e) {
+    if (version === sessionVersion) sessionError.value = e.message;
+  } finally {
+    if (version === sessionVersion) sessionLoading.value = false;
+  }
+}
+async function openRelatedSession(id) {
+  await router.replace({
+    path: "/ai",
+    query: { ...route.query, run: undefined, tab: "interview" },
+  });
+  await openSession(id);
+}
 const task = useAiTask(),
   run = task.run,
   busy = task.busy,
@@ -74,8 +133,10 @@ async function loadSessions() {
 }
 async function loadSession(id) {
   try {
-    session.value = await request("/ai/interviews/" + id);
-    if (session.value.activeRunId) task.resume(session.value.activeRunId);
+    const value = await request("/ai/interviews/" + id);
+    if (session.value?.id !== id) return;
+    session.value = value;
+    if (value.activeRunId) task.resume(value.activeRunId);
   } catch (e) {
     message.value = e.message;
   }
@@ -123,16 +184,22 @@ async function endInterview() {
 async function refreshAll() {
   await Promise.all([refreshAi(), loadHistory(), loadLedger(), loadSessions()]);
   if (selected.value) {
-    selected.value = await request("/ai/runs/" + selected.value.id);
-    if (selected.value.status === "running") task.resume(selected.value.id);
+    const id = selected.value.id,
+      version = detailVersion;
+    const value = await request("/ai/runs/" + id);
+    if (version !== detailVersion || route.query.run !== id) return;
+    selected.value = value;
+    if (value.status === "running") task.resume(id);
   }
 }
 async function cancelSelected() {
+  const id = selected.value?.id;
+  if (!id) return;
   try {
-    await request("/ai/runs/" + selected.value.id + "/cancel", "POST", {});
-    task.resume(selected.value.id);
+    await request("/ai/runs/" + id + "/cancel", "POST", {});
+    task.resume(id);
   } catch (e) {
-    message.value = e.message;
+    if (route.query.run === id) detailError.value = e.message;
   }
 }
 watch([feature, status], () => {
@@ -150,6 +217,7 @@ watch(
   async (id) => {
     const version = ++detailVersion;
     selected.value = null;
+    detailError.value = "";
     if (typeof id !== "string") return;
     try {
       const value = await request("/ai/runs/" + encodeURIComponent(id));
@@ -158,7 +226,7 @@ watch(
       tab.value = "history";
       if (value.status === "running") task.resume(id);
     } catch (e) {
-      message.value = e.message;
+      if (version === detailVersion) detailError.value = e.message;
     }
   },
   { immediate: true },
@@ -173,7 +241,11 @@ watch(run, async (value) => {
     if (value.sessionId && session.value?.id === value.sessionId) {
       const prior = session.value.turns.length;
       await loadSession(value.sessionId);
-      if (session.value.turns.length > prior) answer.value = "";
+      if (
+        session.value?.id === value.sessionId &&
+        session.value.turns.length > prior
+      )
+        answer.value = "";
     }
     await Promise.all([loadHistory(), loadLedger(), loadSessions()]);
   }
@@ -207,9 +279,10 @@ onMounted(async () => {
       <div>
         <span>预占中</span><strong>{{ ai.account.reserved }}</strong>
       </div>
-      <p>
-        额度可购买资源包或由管理员发放；成功调用按用量结算，免费用户免扣。失败调用释放预占。
-      </p>
+      <p>成功调用按用量结算；失败调用释放预占。</p>
+      <button class="btn primary small" @click="store.creditShopOpen = true">
+        <Icon name="Package" :size="16" />购买资源包
+      </button>
     </div>
     <p v-if="!ai.configured" class="info-banner">
       AI 服务尚未配置，请联系管理员。<RouterLink
@@ -238,7 +311,7 @@ onMounted(async () => {
     </p>
     <template v-if="tab === 'history'">
       <AiTaskProgress
-        v-if="run && !selected"
+        v-if="run && !detailOpen"
         :run="run"
         :connection="connection"
       />
@@ -327,21 +400,55 @@ onMounted(async () => {
           下一页
         </button>
       </div>
-      <article v-if="selected" class="ai-detail">
+    </template>
+    <template v-if="tab === 'interview'">
+      <section class="ai-detail">
         <div class="section-line">
-          <h2>{{ featureLabel[selected.feature] }}记录</h2>
+          <h2>最近面试</h2>
+          <div class="row wrap">
+            <button
+              v-if="session?.status === 'active'"
+              class="btn small"
+              @click="openSession(session.id)"
+            >
+              继续当前面试
+            </button>
+            <button class="btn primary small" @click="newInterview">
+              <Icon name="MessagesSquare" :size="17" />新建面试
+            </button>
+          </div>
+        </div>
+        <div class="ai-record-list">
           <button
-            class="text-btn"
-            @click="
-              router.replace({
-                path: '/ai',
-                query: { ...route.query, run: undefined },
-              })
-            "
+            v-for="item in sessions"
+            :key="item.id"
+            class="ai-record-row"
+            @click="openSession(item.id)"
           >
-            收起详情
+            <span
+              >{{ dateLabel(item.createdAt) }} ·
+              {{ item.status === "active" ? "继续面试" : "查看复盘" }}</span
+            ><span>{{ item.turns }} 轮 / {{ item.planned }} 个主题</span>
           </button>
         </div>
+        <p v-if="!sessions.length" class="ai-empty">还没有面试记录。</p>
+      </section>
+    </template>
+    <MyAiCredits v-if="tab === 'ledger'" />
+    <AppDialog
+      :open="detailOpen"
+      :title="
+        selected
+          ? (featureLabel[selected.feature] || 'AI 调用') + '记录'
+          : '调用详情'
+      "
+      :width="900"
+      mobile-fullscreen
+      @close="closeDetail"
+    >
+      <p v-if="detailError" class="ai-error" role="alert">{{ detailError }}</p>
+      <p v-else-if="!selected" class="muted" role="status">正在加载调用详情…</p>
+      <article v-if="selected" class="ai-run-dialog">
         <AiTaskProgress :run="selected" :connection="connection" />
         <AiRunMeta :run="selected" /><button
           v-if="selected.status === 'running'"
@@ -364,10 +471,7 @@ onMounted(async () => {
           ><button
             v-if="selected.sessionId"
             class="text-btn"
-            @click="
-              tab = 'interview';
-              loadSession(selected.sessionId);
-            "
+            @click="openRelatedSession(selected.sessionId)"
           >
             打开关联面试
           </button>
@@ -401,153 +505,175 @@ onMounted(async () => {
           面试模式的评阅在结束后展示。
         </p>
       </article>
-    </template>
-    <template v-if="tab === 'interview'">
-      <section v-if="!session" class="ai-detail">
-        <h2>选择这次面试的范围</h2>
-        <p class="muted">
-          每道主题最多追问一次。练习模式即时点评，面试模式结束后统一复盘。
-        </p>
-        <div class="ai-form-row">
-          <AppSelect
-            v-model="mode"
-            label="AI 面试模式"
-            :options="[
-              { value: 'practice', label: '练习模式 · 即时点评' },
-              { value: 'interview', label: '面试模式 · 结束后复盘' },
-            ]"
-          />
-          <AppSelect
-            v-model="moduleId"
-            label="AI 面试专题"
-            :options="[
-              { value: '', label: '全部专题' },
-              ...modules.map((m) => ({ value: m.id, label: m.title })),
-            ]"
-          />
-          <AppSelect
-            v-model="difficulty"
-            label="AI 面试难度"
-            :options="
-              ['入门', '进阶', '挑战'].map((value) => ({ value, label: value }))
-            "
-          />
-          <AppSelect
-            v-model="count"
-            label="AI 面试主题数"
-            :options="
-              [2, 5, 10].map((value) => ({ value, label: value + ' 个主题' }))
-            "
-          />
-        </div>
-        <button
-          class="btn primary"
-          :disabled="
-            loading ||
-            !ai.available ||
-            (!ai.account.exempt && ai.account.available <= 0)
-          "
-          @click="startInterview"
-        >
-          <Icon name="MessagesSquare" :size="17" />开始面试
-        </button>
-      </section>
-      <section v-else class="ai-detail">
-        <div class="section-line">
-          <h2>{{ session.status === "active" ? "面试进行中" : "面试复盘" }}</h2>
-          <button class="text-btn" :disabled="busy" @click="session = null">
-            返回面试列表
-          </button>
-        </div>
-        <p class="tiny muted">
-          {{ session.mode === "practice" ? "即时点评" : "结束后点评" }} · 已回答
-          {{ session.turns.length }} 轮 ·
-          {{ session.questionIds.length }} 个主题
-        </p>
-        <article
-          v-for="(turn, i) in session.turns"
-          :key="turn.runId"
-          class="ai-interview-turn"
-        >
-          <h3>第 {{ i + 1 }} 轮 · 面试官</h3>
-          <p>{{ turn.prompt }}</p>
-          <h4>我的回答</h4>
-          <p class="ai-answer-text">{{ turn.answer }}</p>
-          <AppDisclosure
-            v-if="turn.evaluation"
-            :title="'查看本轮评阅 · ' + turn.evaluation.score + ' 分'"
-            ><AiEvaluation :value="turn.evaluation"
-          /></AppDisclosure>
-        </article>
-        <template v-if="session.status === 'active'"
-          ><h3>当前问题</h3>
-          <p class="ai-current-question">{{ session.currentPrompt }}</p>
-          <label class="field-label" for="ai-interview-answer"
-            >你的回答 · 10–3000 个字符</label
-          ><AppField
-            id="ai-interview-answer"
-            v-model="answer"
-            multiline
-            rows="7"
-            maxlength="3000"
-            :disabled="busy"
-            placeholder="先给结论，再解释机制、证据和边界。" />
-          <p class="tiny muted">{{ answer.length }} / 3000</p>
-          <div class="row wrap">
-            <button
-              class="btn primary"
-              :disabled="busy || loading || answer.trim().length < 10"
-              @click="submitTurn"
-            >
-              {{ busy ? "面试官正在评阅…" : "提交回答，继续面试" }}</button
-            ><button
-              class="btn"
-              :disabled="busy || loading"
-              @click="endInterview"
-            >
-              结束并生成复盘</button
-            ><button v-if="busy && run" class="text-btn" @click="task.cancel()">
-              取消当前调用
-            </button>
-          </div>
-          <AiTaskProgress
-            v-if="(busy && !run) || run?.sessionId === session.id"
-            :run="run"
-            :busy="busy"
-            :connection="connection" />
-          <AiRunMeta v-if="run?.sessionId === session.id" :run="run"
-        /></template>
-        <section v-if="session.report" class="ai-report">
-          <h3>综合评分 {{ session.report.score ?? "暂无" }}</h3>
-          <p>
-            已覆盖 {{ session.report.covered }} /
-            {{ session.report.planned }} 个主题，按各主题最近一次回答计算。
+      <template #footer
+        ><button class="btn" @click="closeDetail">关闭</button></template
+      >
+    </AppDialog>
+    <AppDialog
+      :open="interviewOpen"
+      :title="
+        sessionLoading
+          ? '面试详情'
+          : !session
+            ? '新建面试'
+            : session.status === 'active'
+              ? '面试进行中'
+              : '面试复盘'
+      "
+      :width="900"
+      :busy="loading"
+      mobile-fullscreen
+      @close="closeInterview"
+    >
+      <p
+        v-if="sessionError || message || taskError"
+        class="ai-error"
+        role="alert"
+      >
+        {{ sessionError || message || taskError }}
+      </p>
+      <p v-if="sessionLoading" class="muted" role="status">正在加载面试记录…</p>
+      <template v-else-if="!sessionError">
+        <section v-if="!session">
+          <p class="muted">
+            每道主题最多追问一次。练习模式即时点评，面试模式结束后统一复盘。
           </p>
-          <ul>
-            <li v-for="(item, i) in session.report.missing" :key="i">
-              {{ item }}
-            </li>
-          </ul>
-        </section>
-      </section>
-      <section v-if="!session" class="ai-detail">
-        <h2>最近面试</h2>
-        <div class="ai-record-list">
+          <div class="ai-form-row">
+            <AppSelect
+              v-model="mode"
+              label="AI 面试模式"
+              :options="[
+                { value: 'practice', label: '练习模式 · 即时点评' },
+                { value: 'interview', label: '面试模式 · 结束后复盘' },
+              ]"
+            />
+            <AppSelect
+              v-model="moduleId"
+              label="AI 面试专题"
+              :options="[
+                { value: '', label: '全部专题' },
+                ...modules.map((m) => ({ value: m.id, label: m.title })),
+              ]"
+            />
+            <AppSelect
+              v-model="difficulty"
+              label="AI 面试难度"
+              :options="
+                ['入门', '进阶', '挑战'].map((value) => ({
+                  value,
+                  label: value,
+                }))
+              "
+            />
+            <AppSelect
+              v-model="count"
+              label="AI 面试主题数"
+              :options="
+                [2, 5, 10].map((value) => ({ value, label: value + ' 个主题' }))
+              "
+            />
+          </div>
           <button
-            v-for="item in sessions"
-            :key="item.id"
-            class="ai-record-row"
-            @click="loadSession(item.id)"
+            class="btn primary"
+            :disabled="
+              loading ||
+              !ai.available ||
+              (!ai.account.exempt && ai.account.available <= 0)
+            "
+            @click="startInterview"
           >
-            <span
-              >{{ dateLabel(item.createdAt) }} ·
-              {{ item.status === "active" ? "继续面试" : "查看复盘" }}</span
-            ><span>{{ item.turns }} 轮 / {{ item.planned }} 个主题</span>
+            <Icon name="MessagesSquare" :size="17" />开始面试
           </button>
-        </div>
-        <p v-if="!sessions.length" class="ai-empty">还没有面试记录。</p>
-      </section>
-    </template>
-    <MyAiCredits v-if="tab === 'ledger'" />
+        </section>
+        <section v-else>
+          <p class="tiny muted">
+            {{ session.mode === "practice" ? "即时点评" : "结束后点评" }} ·
+            已回答 {{ session.turns.length }} 轮 ·
+            {{ session.questionIds.length }} 个主题
+          </p>
+          <article
+            v-for="(turn, i) in session.turns"
+            :key="turn.runId"
+            class="ai-interview-turn"
+          >
+            <h3>第 {{ i + 1 }} 轮 · 面试官</h3>
+            <p>{{ turn.prompt }}</p>
+            <h4>我的回答</h4>
+            <p class="ai-answer-text">{{ turn.answer }}</p>
+            <AppDisclosure
+              v-if="turn.evaluation"
+              :title="'查看本轮评阅 · ' + turn.evaluation.score + ' 分'"
+              ><AiEvaluation :value="turn.evaluation"
+            /></AppDisclosure>
+          </article>
+          <template v-if="session.status === 'active'"
+            ><h3>当前问题</h3>
+            <p class="ai-current-question">{{ session.currentPrompt }}</p>
+            <label class="field-label" for="ai-interview-answer"
+              >你的回答 · 10–3000 个字符</label
+            ><AppField
+              id="ai-interview-answer"
+              v-model="answer"
+              multiline
+              rows="7"
+              maxlength="3000"
+              :disabled="busy"
+              placeholder="先给结论，再解释机制、证据和边界。" />
+            <p class="tiny muted">{{ answer.length }} / 3000</p>
+            <div class="row wrap">
+              <button
+                class="btn primary"
+                :disabled="busy || loading || answer.trim().length < 10"
+                @click="submitTurn"
+              >
+                {{ busy ? "面试官正在评阅…" : "提交回答，继续面试" }}</button
+              ><button
+                class="btn"
+                :disabled="busy || loading"
+                @click="endInterview"
+              >
+                结束并生成复盘</button
+              ><button
+                v-if="busy && run"
+                class="text-btn"
+                @click="task.cancel()"
+              >
+                取消当前调用
+              </button>
+            </div>
+            <AiTaskProgress
+              v-if="(busy && !run) || run?.sessionId === session.id"
+              :run="run"
+              :busy="busy"
+              :connection="connection" />
+            <AiRunMeta v-if="run?.sessionId === session.id" :run="run"
+          /></template>
+          <section v-if="session.report" class="ai-report">
+            <h3>综合评分 {{ session.report.score ?? "暂无" }}</h3>
+            <p>
+              已覆盖 {{ session.report.covered }} /
+              {{ session.report.planned }} 个主题，按各主题最近一次回答计算。
+            </p>
+            <ul>
+              <li v-for="(item, i) in session.report.missing" :key="i">
+                {{ item }}
+              </li>
+            </ul>
+          </section>
+        </section>
+      </template>
+      <template #footer
+        ><button class="btn" :disabled="loading" @click="closeInterview">
+          返回列表
+        </button></template
+      >
+    </AppDialog>
   </div>
 </template>
+
+<style scoped>
+.ai-run-dialog {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+</style>

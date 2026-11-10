@@ -70,6 +70,8 @@ function validate(c) {
   if (c.loginEnabled && !/^[a-zA-Z0-9]{16,128}$/.test(c.appSecret))
     throw new AiError(400, "开放登录需要有效的 AppSecret");
   if (c.payEnabled) {
+    if (!/^[a-zA-Z0-9]{16,128}$/.test(c.appSecret))
+      throw new AiError(400, "JSAPI 支付需要先配置公众号 AppSecret");
     if (
       !/^\d{6,32}$/.test(c.merchantId) ||
       !/^[A-Fa-f0-9]{16,64}$/.test(c.merchantSerial) ||

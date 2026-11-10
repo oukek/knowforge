@@ -5790,3 +5790,11 @@ button.ai-record-row:hover {
 }
 
 .account-avatar { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; object-fit: cover; }
+
+.topbar-purchase { flex-shrink:0; gap:7px; white-space:nowrap; }
+.ai-balance-strip > .btn { flex-shrink:0; margin-left:auto; }
+.ai-credit-prompt { padding:10px 14px; border-radius:7px; background:#eef5f0; font-size:12px; color:var(--green); }
+.ai-credit-prompt .text-btn { font-weight:600; text-decoration:underline; text-underline-offset:3px; }
+@media(max-width:767px) { .topbar .top-date { display:none; }.topbar-purchase { padding:8px 10px; font-size:11px; }.topbar-purchase svg { display:none; }.ai-balance-strip > .btn { margin-left:0; } }
+
+@media(max-width:767px) { .topbar { gap:10px; }.topbar>.row { min-width:0; flex:1; overflow:hidden; }.topbar .breadcrumb { min-width:0; overflow:hidden; font-size:0; gap:0; }.topbar .breadcrumb>span { display:none; }.topbar .breadcrumb strong { font-size:11px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }.topbar .account-name>span { display:none; }.topbar-actions { flex-shrink:0; gap:8px; } }
