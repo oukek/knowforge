@@ -1,7 +1,9 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from "vue";
 import { request } from "../store.js";
+import QrCode from "../components/QrCode.vue";
 import { inWechat, chooseWechatPay, wechatSigningUrl } from "../wechat-sdk.js";
+const paymentUrl = ref("");
 const phase = ref("loading"),
   preview = ref(null),
   error = ref(""),
@@ -35,6 +37,8 @@ function capture() {
     !/^[a-f0-9]{64}$/.test(credentials.secret)
   )
     throw new Error("支付授权已失效，请返回原设备重新扫码");
+  paymentUrl.value =
+    location.origin + location.pathname + "#ticket=" + credentials.ticket;
 }
 const call = (path, body = {}) =>
   request("/payments/handoff/" + path, "POST", { ...credentials, ...body });
@@ -186,9 +190,18 @@ onBeforeUnmount(() => {
           phase === "loading" ? "正在确认微信支付身份…" : "正在调起微信支付…"
         }}
       </p>
-      <p v-if="phase === 'outside'">
-        请使用手机微信扫一扫打开此支付链接，页面将自动调起微信支付。
-      </p>
+      <template v-if="phase === 'outside'">
+        <div class="payment-qr">
+          <QrCode
+            :value="paymentUrl"
+            alt="网页支付二维码，请使用手机微信扫一扫"
+          />
+        </div>
+        <p>请用手机微信扫一扫，进入页面后将自动调起微信支付确认。</p>
+        <p class="tiny muted">
+          请在微信支付确认页核对商户和金额，完成支付后原订单会自动更新。
+        </p>
+      </template>
       <p v-if="phase === 'confirm'" class="payment-warning">
         当前微信与下单账号不一致。确认后将为上方账号付款，额度会发放给该账号。
       </p>
@@ -229,6 +242,11 @@ onBeforeUnmount(() => {
   </main>
 </template>
 <style scoped>
+.payment-qr {
+  display: flex;
+  justify-content: center;
+  margin: 24px 0;
+}
 .wechat-payment-page {
   min-height: 100dvh;
   display: grid;

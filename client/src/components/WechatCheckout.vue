@@ -6,6 +6,7 @@ import { inWechat } from "../wechat-sdk.js";
 import AppDialog from "./AppDialog.vue";
 const props = defineProps({ product: Object, orderId: String });
 const emit = defineEmits(["close", "paid"]);
+const wechat = inWechat();
 const order = ref(null),
   intent = ref(null),
   error = ref(""),
@@ -91,7 +92,7 @@ async function start() {
     intent.value = result.intent;
     notifyPaid();
     if (order.value.status === "pending") {
-      if (intent.value?.type === "handoff" && inWechat()) invoke();
+      if (intent.value?.type === "handoff" && wechat) invoke();
       sync();
     }
   } catch (e) {
@@ -122,6 +123,7 @@ onBeforeUnmount(() => {
         <template v-else>
           <QrCode
             v-if="
+              (!wechat || intent?.type === 'qr') &&
               ['qr', 'handoff'].includes(intent?.type) &&
               (intent.codeUrl || intent.url) &&
               Date.parse(order.expiresAt) > Date.now()
@@ -131,7 +133,7 @@ onBeforeUnmount(() => {
           />
           <p class="tiny muted">
             {{
-              intent?.type === "handoff" && inWechat()
+              intent?.type === "handoff" && wechat
                 ? "请在微信内完成支付，额度到账后将自动更新。"
                 : "请用手机微信扫一扫，进入支付页后会自动调起微信支付。"
             }}
@@ -143,11 +145,11 @@ onBeforeUnmount(() => {
             }}，关掉弹窗后仍可从订单列表核对。
           </p>
           <button
-            v-if="intent?.type === 'handoff'"
+            v-if="intent?.type === 'handoff' && wechat"
             class="btn primary"
             @click="invoke"
           >
-            在微信中继续支付
+            继续微信支付
           </button>
         </template>
         <p class="tiny muted">订单号 {{ order.id }}</p>
