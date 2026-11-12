@@ -150,7 +150,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: #fff;
-  box-shadow: 0 12px 45px #153c3326;
+  box-shadow: 0 12px 45px var(--theme-shadow);
   overflow: hidden;
 }
 .adaptive-heading {
@@ -175,7 +175,7 @@ onBeforeUnmount(() => {
   min-height: 0;
 }
 .is-sheet .adaptive-backdrop {
-  background: #142f3766;
+  background: var(--theme-backdrop);
   backdrop-filter: blur(3px);
 }
 .is-sheet .adaptive-panel {

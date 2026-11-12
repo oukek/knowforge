@@ -205,7 +205,7 @@ async function copy() {
 }
 .ai-test-facts dt {
   font-size: 11px;
-  color: #617467;
+  color: var(--theme-text);
 }
 .ai-test-facts dd {
   margin: 3px 0 0;
@@ -213,7 +213,7 @@ async function copy() {
   font-weight: 600;
 }
 .ai-test-attempt {
-  border-top: 1px solid #dce5df;
+  border-top: 1px solid var(--theme-border);
   margin-top: 12px;
   padding-top: 8px;
 }
@@ -223,7 +223,7 @@ async function copy() {
   font-size: 12px;
   line-height: 1.7;
   background: #fff;
-  border: 1px solid #dce5df;
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
   padding: 12px;
   max-height: 320px;

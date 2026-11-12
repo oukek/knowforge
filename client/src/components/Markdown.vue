@@ -122,13 +122,13 @@ onBeforeUnmount(() => observer?.disconnect());
 .prose :deep(.lesson-flow) {
   margin: 24px 0;
   padding: 20px;
-  border: 1px solid #c5d5cb;
+  border: 1px solid var(--theme-focus);
   border-radius: 10px;
-  background: #edf4ef;
+  background: var(--theme-soft);
 }
 .prose :deep(.lesson-flow figcaption) {
   font-weight: 700;
-  color: #294e3e;
+  color: var(--theme-ink);
   margin-bottom: 16px;
 }
 .prose :deep(.lesson-flow ol) {
@@ -144,7 +144,7 @@ onBeforeUnmount(() => observer?.disconnect());
   position: relative;
   margin: 0;
   padding: 12px 12px 12px 46px;
-  border: 1px solid #b4c9bb;
+  border: 1px solid var(--theme-focus);
   border-radius: 6px;
   background: #fff;
   counter-increment: diagram-step;
@@ -154,7 +154,7 @@ onBeforeUnmount(() => observer?.disconnect());
   position: absolute;
   left: 12px;
   top: 12px;
-  color: #69917a;
+  color: var(--theme-text);
   font-size: 12px;
 }
 .prose :deep(.lesson-flow li:not(:last-child)::after) {
@@ -162,7 +162,7 @@ onBeforeUnmount(() => observer?.disconnect());
   position: absolute;
   left: 20px;
   bottom: -25px;
-  color: #4b785e;
+  color: var(--theme-text);
 }
 .prose :deep(.lesson-flow strong),
 .prose :deep(.lesson-flow span) {

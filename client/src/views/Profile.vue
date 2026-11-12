@@ -7,10 +7,13 @@ import {
   changePassword,
   toast,
 } from "../store.js";
+import ThemeDialog from "../components/ThemeDialog.vue";
+import { currentTheme } from "../theme.js";
 import AppField from "../components/AppField.vue";
 import Icon from "../components/Icon.vue";
 import AppDialog from "../components/AppDialog.vue";
 import { avatars, avatarFor } from "../../../shared/avatars.mjs";
+const themeOpen = ref(false);
 const editOpen = ref(false),
   passwordOpen = ref(false);
 const selectedAvatar = ref(store.user?.avatarId);
@@ -201,6 +204,19 @@ onMounted(load);
             </button>
           </div>
         </section>
+        <section class="profile-panel" aria-labelledby="profile-theme-title">
+          <div class="profile-panel-heading">
+            <Icon name="SlidersHorizontal" :size="20" />
+            <div>
+              <h2 id="profile-theme-title">界面主题</h2>
+              <p>选择喜欢的色系，保存在当前浏览器。</p>
+            </div>
+          </div>
+          <div class="profile-summary">
+            <span>{{ currentTheme.name }}</span
+            ><button class="btn" @click="themeOpen = true">切换主题</button>
+          </div>
+        </section>
         <section
           v-if="store.user?.hasPassword"
           class="profile-panel"
@@ -227,6 +243,7 @@ onMounted(load);
       </div>
     </div>
   </div>
+  <ThemeDialog :open="themeOpen" @close="themeOpen = false" />
   <AppDialog
     :open="editOpen"
     title="修改头像与昵称"
@@ -412,7 +429,7 @@ onMounted(load);
 }
 .profile-identity {
   padding: 30px;
-  background: #f3f8f5;
+  background: var(--theme-soft);
 }
 .profile-summary {
   display: flex;
@@ -450,7 +467,7 @@ onMounted(load);
 }
 .avatar-option.selected {
   border-color: var(--green);
-  background: #eaf3ed;
+  background: var(--theme-soft);
 }
 .avatar-option:focus-visible {
   outline: 2px solid var(--green);
@@ -472,7 +489,7 @@ onMounted(load);
   width: 80px;
   height: 80px;
   border-radius: 16px;
-  background: #deece4;
+  background: var(--theme-soft-strong);
   color: var(--green-dark);
   font-size: 26px;
   font-weight: 600;
@@ -497,7 +514,7 @@ onMounted(load);
 .profile-id-card {
   margin-top: 28px;
   padding: 18px 0;
-  border-block: 1px solid #d5e3d9;
+  border-block: 1px solid var(--theme-border);
 }
 .profile-id-card > span {
   font-size: 12px;
@@ -606,7 +623,7 @@ onMounted(load);
 .profile-success {
   font-size: 13px;
   color: var(--green-dark);
-  background: #edf6ef;
+  background: var(--theme-soft);
   padding: 12px;
   border-radius: 7px;
   line-height: 1.8;

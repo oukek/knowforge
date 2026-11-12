@@ -68,9 +68,9 @@ function changed(event) {
   gap: 12px;
   width: 100%;
   padding: 16px;
-  border: 1px dashed #b6cbbf;
+  border: 1px dashed var(--theme-focus);
   border-radius: 9px;
-  background: #f8fbf9;
+  background: var(--theme-canvas);
 }
 .app-upload.is-dragging {
   border-color: var(--green);

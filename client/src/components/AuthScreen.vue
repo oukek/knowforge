@@ -1,4 +1,6 @@
 <script setup>
+import ThemeDialog from "./ThemeDialog.vue";
+import { themeId } from "../theme.js";
 import QrCode from "./QrCode.vue";
 import AppField from "./AppField.vue";
 import AppDialog from "./AppDialog.vue";
@@ -11,6 +13,7 @@ import { inWechat } from "../wechat-sdk.js";
 const route = useRoute(),
   router = useRouter(),
   wechat = inWechat();
+const themeOpen = ref(false);
 const username = ref(""),
   password = ref(""),
   busy = ref(false),
@@ -65,6 +68,7 @@ async function startWechat() {
   try {
     const result = await request("/auth/wechat/start", "POST", {
       mode: wechat ? "browser" : "qr",
+      theme: themeId.value,
     });
     if (disposed) return;
     flow.value = { ...result, returnTo: afterLoginPath(route.query.redirect) };
@@ -209,6 +213,9 @@ onBeforeUnmount(() => {
         <p class="auth-footnote">
           首次微信登录将自动创建学习账号。<br />每个账号独立保存笔记、作答和学习进度。
         </p>
+        <button class="text-btn legacy-login" @click="themeOpen = true">
+          切换主题
+        </button>
         <button
           class="text-btn legacy-login"
           @click="
@@ -219,6 +226,7 @@ onBeforeUnmount(() => {
           已有账号登录
         </button>
       </div>
+      <ThemeDialog :open="themeOpen" @close="themeOpen = false" />
       <AppDialog
         :open="legacy"
         title="已有账号登录"
@@ -269,14 +277,14 @@ onBeforeUnmount(() => {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  background: #fcfdfc;
+  background: var(--theme-canvas);
 }
 .auth-intro {
   padding: 52px clamp(28px, 6vw, 100px);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  background: #eaf1ec;
+  background: var(--theme-soft);
   min-height: 100vh;
 }
 .auth-copy {
@@ -292,17 +300,17 @@ onBeforeUnmount(() => {
   font-size: clamp(29px, 3vw, 44px);
   line-height: 1.55;
   margin: 22px 0;
-  color: #204c3e;
+  color: var(--theme-ink);
 }
 .auth-copy p {
-  color: #658073;
+  color: var(--theme-text);
   font-size: 15px;
 }
 .auth-points {
   display: grid;
   gap: 16px;
   margin-top: 38px;
-  color: #416957;
+  color: var(--theme-text);
 }
 .auth-points span {
   display: flex;
@@ -310,7 +318,7 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 .auth-intro > small {
-  color: #718b7e;
+  color: var(--theme-text);
 }
 .auth-panel {
   display: flex;

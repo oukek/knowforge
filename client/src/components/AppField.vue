@@ -46,7 +46,7 @@ defineExpose({
 .app-field {
   appearance: none;
   -webkit-appearance: none;
-  border: 1px solid #dce4df;
+  border: 1px solid var(--theme-border);
   border-radius: 7px;
   background: #fff;
   color: var(--ink);

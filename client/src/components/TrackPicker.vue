@@ -49,14 +49,14 @@ defineEmits(["update:modelValue"]);
   gap: 10px;
 }
 .track-options .app-choice {
-  border: 1px solid var(--border, #dce5de);
+  border: 1px solid var(--border, var(--theme-border));
   border-radius: 8px;
   padding: 12px;
   align-items: flex-start;
 }
 .track-options .is-checked {
-  background: #edf5ee;
-  border-color: #86a58d;
+  background: var(--theme-soft);
+  border-color: var(--theme-muted);
 }
 .track-options strong {
   display: block;
@@ -66,7 +66,7 @@ defineEmits(["update:modelValue"]);
   display: block;
   font-size: 11px;
   line-height: 1.7;
-  color: var(--muted, #657565);
+  color: var(--muted, var(--theme-text));
   margin-top: 5px;
 }
 @media (max-width: 1100px) {

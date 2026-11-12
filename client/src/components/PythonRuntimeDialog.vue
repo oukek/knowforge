@@ -520,7 +520,7 @@ onBeforeUnmount(() => {
 .python-runtime-backdrop {
   position: absolute;
   inset: 0;
-  background: #153b3559;
+  background: var(--theme-backdrop);
   backdrop-filter: blur(4px);
 }
 .python-runtime-panel {
@@ -530,10 +530,10 @@ onBeforeUnmount(() => {
   max-height: calc(100dvh - 48px);
   display: flex;
   flex-direction: column;
-  background: #fbfdfb;
+  background: var(--theme-canvas);
   border: 1px solid var(--line);
   border-radius: 18px;
-  box-shadow: 0 24px 80px #102e332e;
+  box-shadow: 0 24px 80px var(--theme-shadow);
   overflow: hidden;
 }
 .python-runtime-heading {
@@ -550,7 +550,7 @@ onBeforeUnmount(() => {
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: #e8f1ec;
+  background: var(--theme-soft);
   color: var(--green);
   flex-shrink: 0;
 }
@@ -598,14 +598,14 @@ onBeforeUnmount(() => {
   gap: 8px;
   font-size: 11px;
   line-height: 1.4;
-  color: #8d9c95;
+  color: var(--theme-muted);
 }
 .python-runtime-stages li > span {
   display: grid;
   place-items: center;
   width: 26px;
   height: 26px;
-  border: 1px solid #d8e1dc;
+  border: 1px solid var(--theme-border);
   border-radius: 50%;
   font-size: 11px;
   background: #fff;
@@ -622,7 +622,7 @@ onBeforeUnmount(() => {
   background: var(--green);
   color: #fff;
   border-color: var(--green);
-  box-shadow: 0 0 0 4px #2d775c0c;
+  box-shadow: 0 0 0 4px var(--theme-focus-soft);
 }
 .python-runtime-stages li.failed,
 .python-runtime-stages li.failed > span {
@@ -654,7 +654,7 @@ onBeforeUnmount(() => {
   height: 5px;
   overflow: hidden;
   border-radius: 8px;
-  background: #e8eeea;
+  background: var(--theme-soft);
 }
 .python-runtime-meter > span {
   display: block;
@@ -682,7 +682,7 @@ onBeforeUnmount(() => {
   color: var(--ink);
 }
 .python-runtime-files svg {
-  color: #a4b1aa;
+  color: var(--theme-muted);
   flex-shrink: 0;
 }
 .python-runtime-files svg.ready,
@@ -701,7 +701,7 @@ onBeforeUnmount(() => {
 .python-runtime-wait {
   height: 4px;
   overflow: hidden;
-  background: #e8eeea;
+  background: var(--theme-soft);
   border-radius: 4px;
   margin: 12px 0 20px;
 }
@@ -749,8 +749,8 @@ onBeforeUnmount(() => {
   overscroll-behavior: contain;
   padding: 12px;
   margin: 8px 0 0;
-  background: #eff4f0;
-  border: 1px solid #dce6df;
+  background: var(--theme-soft);
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
   font:
     11px/1.8 "SFMono-Regular",
@@ -764,7 +764,7 @@ onBeforeUnmount(() => {
   align-items: flex-start;
 }
 .python-runtime-logs time {
-  color: #83978b;
+  color: var(--theme-muted);
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }

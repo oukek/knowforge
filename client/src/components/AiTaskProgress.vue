@@ -123,12 +123,12 @@ const connectionText = computed(
 </template>
 <style scoped>
 .ai-task-progress {
-  border: 1px solid #cdded5;
+  border: 1px solid var(--theme-border);
   border-radius: 10px;
-  background: #f2f7f4;
+  background: var(--theme-soft);
   padding: 18px;
   margin: 18px 0;
-  color: #253b34;
+  color: var(--theme-ink);
   min-width: 0;
 }
 .ai-task-progress-heading {
@@ -142,13 +142,13 @@ const connectionText = computed(
   line-height: 1.7;
 }
 .ai-task-spinner {
-  color: #176b58;
+  color: var(--theme-ink);
   display: flex;
   animation: ai-task-spin 1.25s linear infinite;
 }
 .ai-task-elapsed {
   font-size: 12px;
-  color: #617467;
+  color: var(--theme-text);
   margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
@@ -164,19 +164,19 @@ const connectionText = computed(
   display: flex;
   align-items: center;
   gap: 6px;
-  border-top: 3px solid #dce6df;
+  border-top: 3px solid var(--theme-border);
   padding-top: 9px;
-  color: #75867c;
+  color: var(--theme-text);
   font-size: 12px;
 }
 .ai-task-stages li.current {
-  border-color: #176b58;
-  color: #176b58;
+  border-color: var(--theme-focus);
+  color: var(--theme-ink);
   font-weight: 600;
 }
 .ai-task-stages li.done {
-  border-color: #9ab9a8;
-  color: #496d5b;
+  border-color: var(--theme-muted);
+  color: var(--theme-text);
 }
 .ai-task-stage-mark {
   display: flex;
@@ -184,21 +184,21 @@ const connectionText = computed(
   justify-content: center;
   width: 18px;
   height: 18px;
-  border: 1px solid #cdded5;
+  border: 1px solid var(--theme-border);
   border-radius: 50%;
   flex-shrink: 0;
   font-size: 10px;
 }
 .current .ai-task-stage-mark {
-  background: #176b58;
-  border-color: #176b58;
+  background: var(--theme-primary);
+  border-color: var(--theme-focus);
   color: #fff;
 }
 .ai-task-progress p {
   margin: 0 0 10px;
   font-size: 12px;
   line-height: 1.8;
-  color: #617467;
+  color: var(--theme-text);
 }
 .ai-task-connection {
   display: flex;
@@ -206,7 +206,7 @@ const connectionText = computed(
   align-items: center;
   flex-wrap: wrap;
   font-size: 11px;
-  color: #617467;
+  color: var(--theme-text);
 }
 .ai-task-connection > span:first-child {
   width: 6px;
@@ -216,7 +216,7 @@ const connectionText = computed(
   flex-shrink: 0;
 }
 .ai-task-connection > span.live:first-child {
-  background: #176b58;
+  background: var(--theme-primary);
 }
 .ai-task-attempt {
   margin-left: auto;

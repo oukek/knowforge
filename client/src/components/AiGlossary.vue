@@ -105,8 +105,8 @@ watch([query, category], () => (limit.value = 12));
 .ai-foundation-guide {
   padding: 22px 24px;
   margin: 0 0 24px;
-  border: 1px solid #d6e3d5;
-  background: #f5f8f2;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-soft);
   border-radius: 10px;
   min-width: 0;
 }
@@ -117,7 +117,7 @@ watch([query, category], () => (limit.value = 12));
 .ai-foundation-guide > p {
   font-size: 12px;
   line-height: 1.9;
-  color: #617465;
+  color: var(--theme-text);
   margin: 12px 0;
 }
 .foundation-links {
@@ -125,7 +125,7 @@ watch([query, category], () => (limit.value = 12));
   margin-bottom: 15px;
 }
 .ai-foundation-guide .app-disclosure {
-  border-top: 1px solid #dce6d9;
+  border-top: 1px solid var(--theme-border);
   padding-top: 12px;
 }
 .glossary-filters {
@@ -149,7 +149,7 @@ watch([query, category], () => (limit.value = 12));
 }
 .glossary-card {
   padding: 17px 18px;
-  border: 1px solid #dce5d8;
+  border: 1px solid var(--theme-border);
   background: #fff;
   border-radius: 7px;
   min-width: 0;
@@ -163,7 +163,7 @@ watch([query, category], () => (limit.value = 12));
 .glossary-card h3 > span {
   font-size: 12px;
   font-weight: 500;
-  color: #65816a;
+  color: var(--theme-text);
   margin-left: 5px;
 }
 .glossary-card p {
@@ -172,7 +172,7 @@ watch([query, category], () => (limit.value = 12));
   margin: 0 0 10px;
 }
 .glossary-distinction {
-  color: #657568;
+  color: var(--theme-text);
 }
 .glossary-card .text-link {
   display: inline-flex;

@@ -252,7 +252,7 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   padding: 24px;
-  background: #f2f7f4;
+  background: var(--theme-soft);
 }
 .wechat-payment-card {
   width: 100%;

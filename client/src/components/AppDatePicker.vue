@@ -203,7 +203,7 @@ async function dayKey(event, date) {
   justify-content: space-between;
   gap: 10px;
   min-height: 42px;
-  border: 1px solid #dce4df;
+  border: 1px solid var(--theme-border);
   border-radius: 7px;
   background: #fff;
   padding: 9px 12px;
@@ -255,10 +255,10 @@ async function dayKey(event, date) {
   font-size: 14px;
 }
 .calendar-days button.other-month {
-  color: #9aa9a1;
+  color: var(--theme-muted);
 }
 .calendar-days button[aria-current="date"] {
-  box-shadow: inset 0 0 0 1px #8aaf9d;
+  box-shadow: inset 0 0 0 1px var(--theme-muted);
 }
 .calendar-days button.selected {
   color: #fff;

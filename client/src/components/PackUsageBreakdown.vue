@@ -117,7 +117,7 @@ header {
   justify-content: space-between;
   gap: 12px;
   padding: 16px;
-  background: #eaf2ec;
+  background: var(--theme-soft);
 }
 h4 {
   font-size: 14px;
@@ -126,7 +126,7 @@ h4 {
 header p {
   margin: 0;
   font-size: 12px;
-  color: #536b5c;
+  color: var(--theme-text);
 }
 .pack-error {
   color: #aa443a;
@@ -145,7 +145,7 @@ table {
 thead th {
   text-align: left;
   font-size: 10px;
-  background: #f4f8f5;
+  background: var(--theme-soft);
 }
 td,
 th {
@@ -164,7 +164,7 @@ tbody tr:last-child th {
   border-bottom: 0;
 }
 tbody tr:nth-child(even) {
-  background: #f8fbf9;
+  background: var(--theme-canvas);
 }
 td > span,
 td > strong,
@@ -174,7 +174,7 @@ small {
 small {
   font-size: 10px;
   font-weight: 400;
-  color: #65786d;
+  color: var(--theme-text);
   margin-top: 4px;
 }
 strong {
@@ -221,7 +221,7 @@ strong {
     content: attr(data-label);
     display: block;
     font-size: 10px;
-    color: #65786d;
+    color: var(--theme-text);
     margin-bottom: 4px;
   }
   header {

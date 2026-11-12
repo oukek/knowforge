@@ -77,8 +77,8 @@ function dates(source) {
 </template>
 <style>
 .interview-context {
-  border: 1px solid #d9e3d4;
-  background: #f4f7f0;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-soft);
   padding: 16px 18px;
   border-radius: 8px;
   margin: 16px 0 22px;
@@ -90,22 +90,22 @@ function dates(source) {
 .interview-boundary {
   font-size: 11px;
   line-height: 1.9;
-  color: #657565;
+  color: var(--theme-text);
   margin: 10px 0;
 }
 .interview-context .app-disclosure-trigger {
   font-size: 12px;
-  color: #365d42;
+  color: var(--theme-ink);
 }
 .interview-source {
   padding: 12px 0;
-  border-top: 1px solid #dce5d8;
+  border-top: 1px solid var(--theme-border);
 }
 .interview-source > a {
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
-  color: #365d42;
+  color: var(--theme-ink);
   font-size: 12px;
   font-weight: 600;
   text-decoration: underline;
@@ -116,13 +116,13 @@ function dates(source) {
   line-height: 1.8;
 }
 .interview-technical a {
-  color: #376446;
+  color: var(--theme-primary);
   text-decoration: underline;
 }
 .interview-followups {
   padding: 14px 18px;
-  border-left: 3px solid #b5cbb5;
-  background: #f4f7f1;
+  border-left: 3px solid var(--theme-focus);
+  background: var(--theme-soft);
   margin: 18px 0;
 }
 .interview-followups h4 {

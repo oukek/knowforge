@@ -152,8 +152,8 @@ onMounted(() => {
           "&": {
             fontSize: "12px",
             height: props.height + "px",
-            backgroundColor: "#fbfdfb",
-            color: "#304f40",
+            backgroundColor: "var(--theme-canvas)",
+            color: "var(--theme-ink)",
           },
           ".cm-scroller": {
             fontFamily: '"SFMono-Regular", Consolas, monospace',
@@ -163,25 +163,27 @@ onMounted(() => {
           ".cm-content": { padding: "15px 0", minHeight: "100%" },
           ".cm-line": { padding: "0 14px 0 9px" },
           ".cm-gutters": {
-            background: "#f3f7f1",
-            color: "#a0b29e",
-            borderRight: "1px solid #e4ece1",
+            background: "var(--theme-soft)",
+            color: "var(--theme-faint)",
+            borderRight: "1px solid var(--theme-border)",
             minWidth: "36px",
           },
-          ".cm-activeLine, .cm-activeLineGutter": { background: "#eaf2e766" },
+          ".cm-activeLine, .cm-activeLineGutter": {
+            background: "var(--theme-focus-soft)",
+          },
           "&.cm-focused": {
-            outline: "2px solid #b6d1ba",
+            outline: "2px solid var(--theme-focus)",
             outlineOffset: "-2px",
           },
           ".cm-tooltip": {
             fontSize: "12px",
-            border: "1px solid #cedfcb",
-            background: "#fcfefb",
+            border: "1px solid var(--theme-border)",
+            background: "var(--theme-surface)",
           },
           ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
-            background: "#cce3d2",
+            background: "var(--theme-soft-strong)",
           },
-          ".cm-cursor": { borderLeftColor: "#176b58" },
+          ".cm-cursor": { borderLeftColor: "var(--theme-primary)" },
         }),
       ],
     }),

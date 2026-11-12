@@ -82,7 +82,7 @@ function change(event) {
   width: 18px;
   height: 18px;
   flex: 0 0 18px;
-  border: 1.5px solid #a4b6ac;
+  border: 1.5px solid var(--theme-muted);
   border-radius: 5px;
   color: #fff;
   background: #fff;
@@ -101,7 +101,7 @@ function change(event) {
   background: #fff;
 }
 .app-choice-input:focus-visible + .app-choice-mark {
-  outline: 3px solid #74ac98;
+  outline: 3px solid var(--theme-accent);
   outline-offset: 3px;
 }
 .app-choice.is-disabled {

@@ -67,7 +67,7 @@ async function paid() {
   gap: 12px;
   padding: 14px 18px;
   margin-bottom: 20px;
-  background: #eef5f0;
+  background: var(--theme-soft);
   border-radius: 8px;
   font-size: 12px;
   color: var(--green);

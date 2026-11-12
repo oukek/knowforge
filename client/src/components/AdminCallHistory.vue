@@ -374,9 +374,9 @@ function reset() {
   overflow-wrap: anywhere;
 }
 .call-history {
-  --call-line: #e1e9e4;
-  --call-muted: #74867c;
-  color: #253b34;
+  --call-line: var(--theme-soft-strong);
+  --call-muted: var(--theme-text);
+  color: var(--theme-ink);
   min-width: 0;
 }
 .call-section-heading,
@@ -403,8 +403,8 @@ function reset() {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #61786b;
-  background: #edf3ef;
+  color: var(--theme-text);
+  background: var(--theme-soft);
   padding: 6px 10px;
   border-radius: 6px;
   font-size: 11px;
@@ -430,7 +430,7 @@ function reset() {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #627a6d;
+  color: var(--theme-text);
   font-size: 12px;
 }
 .call-metrics article > strong {
@@ -478,10 +478,10 @@ function reset() {
   gap: 8px 20px;
   margin: 14px 0 0;
   font-size: 11px;
-  color: #5f7669;
+  color: var(--theme-text);
 }
 .call-feature-strip > span:first-child {
-  color: #8b9a91;
+  color: var(--theme-muted);
 }
 .call-feature-strip strong {
   margin-left: 7px;
@@ -509,21 +509,21 @@ function reset() {
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: #176b58;
+  color: var(--theme-ink);
   white-space: nowrap;
 }
 .call-refreshing :deep(svg) {
   animation: call-spin 1.2s linear infinite;
 }
 .call-filters {
-  border-top: 1px solid #edf1ee;
+  border-top: 1px solid var(--theme-soft);
   border-bottom: 1px solid var(--call-line);
   padding: 13px 23px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: #fcfdfc;
+  background: var(--theme-canvas);
 }
 .call-filters > div {
   display: flex;
@@ -535,7 +535,7 @@ function reset() {
 }
 .call-filter-hint,
 .call-reset {
-  color: #809086;
+  color: var(--theme-muted);
   font-size: 11px;
   white-space: nowrap;
 }
@@ -543,7 +543,7 @@ function reset() {
   display: flex;
   align-items: center;
   gap: 5px;
-  color: #176b58;
+  color: var(--theme-ink);
 }
 .call-table {
   width: 100%;
@@ -552,10 +552,10 @@ function reset() {
   text-align: left;
 }
 .call-table th {
-  background: #f4f7f5;
+  background: var(--theme-soft);
   font-size: 11px;
   font-weight: 500;
-  color: #75897d;
+  color: var(--theme-text);
   padding: 13px 12px;
   border-bottom: 1px solid var(--call-line);
 }
@@ -579,7 +579,7 @@ function reset() {
   width: 8%;
 }
 .call-table td {
-  border-bottom: 1px solid #edf1ee;
+  border-bottom: 1px solid var(--theme-soft);
   padding: 18px 12px;
   vertical-align: top;
   overflow-wrap: anywhere;
@@ -591,14 +591,14 @@ function reset() {
   border-bottom: 0;
 }
 .call-table tbody tr:hover {
-  background: #f8fbf9;
+  background: var(--theme-canvas);
 }
 .call-table tbody tr.needs-review {
   background: #fffcf5;
 }
 .call-feature-label {
   font-size: 10px;
-  color: #617e6e;
+  color: var(--theme-text);
 }
 .call-task-title {
   display: block;
@@ -611,12 +611,12 @@ function reset() {
   overflow-wrap: anywhere;
 }
 .call-task-title:hover {
-  color: #176b58;
+  color: var(--theme-ink);
 }
 .call-user {
   margin-top: 7px;
   font-size: 10px;
-  color: #8a9990;
+  color: var(--theme-muted);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -630,8 +630,8 @@ function reset() {
   padding: 3px 7px;
   width: fit-content;
   white-space: nowrap;
-  background: #f0f3f1;
-  color: #708277;
+  background: var(--theme-soft);
+  color: var(--theme-text);
 }
 .call-badge > span {
   width: 5px;
@@ -640,8 +640,8 @@ function reset() {
   background: currentColor;
 }
 .call-badge[data-tone="success"] {
-  background: #eaf4ed;
-  color: #26704f;
+  background: var(--theme-soft);
+  color: var(--theme-primary);
 }
 .call-badge[data-tone="progress"] {
   background: #eaf0f8;
@@ -658,7 +658,7 @@ function reset() {
 .call-settlement {
   display: block;
   margin-top: 7px;
-  color: #8a9990;
+  color: var(--theme-muted);
   font-size: 10px;
 }
 .call-settlement[data-tone="warning"] {
@@ -675,13 +675,13 @@ function reset() {
   display: block;
   margin-top: 6px;
   font-size: 10px;
-  color: #7d8f83;
+  color: var(--theme-muted);
 }
 .call-credit-cell > strong {
   font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.4px;
-  color: #2e5e46;
+  color: var(--theme-ink);
   font-variant-numeric: tabular-nums;
 }
 .call-credit-cell > strong.provisional {
@@ -693,20 +693,20 @@ function reset() {
 }
 .call-time-cell time {
   font-size: 11px;
-  color: #657c6e;
+  color: var(--theme-text);
   white-space: nowrap;
 }
 .call-duration {
   display: block;
   font-size: 10px;
-  color: #96a299;
+  color: var(--theme-muted);
   margin-top: 6px;
 }
 .call-open {
   display: inline-flex;
   gap: 3px;
   padding: 5px 0;
-  color: #6d8979;
+  color: var(--theme-text);
   align-items: center;
   font-size: 11px;
 }
@@ -720,7 +720,7 @@ function reset() {
   gap: 16px;
   padding: 16px 23px;
   border-top: 1px solid var(--call-line);
-  color: #7c8d82;
+  color: var(--theme-muted);
   font-size: 11px;
 }
 .call-pagination > div {
@@ -746,10 +746,10 @@ function reset() {
   display: inline-flex;
   justify-content: center;
   align-items: center;
-  background: #f0f5f2;
-  border: 1px solid #e3ece6;
+  background: var(--theme-soft);
+  border: 1px solid var(--theme-border);
   border-radius: 15px;
-  color: #7e9d8a;
+  color: var(--theme-muted);
 }
 .call-empty h3 {
   font-size: 15px;
@@ -757,7 +757,7 @@ function reset() {
 }
 .call-empty p {
   font-size: 12px;
-  color: #82958a;
+  color: var(--theme-muted);
   margin: 0 0 16px;
 }
 .call-admin-audit {
@@ -772,17 +772,17 @@ function reset() {
 }
 .call-audit-note {
   font-size: 11px;
-  color: #7c9083;
+  color: var(--theme-muted);
   overflow-wrap: anywhere;
 }
 .call-audit-entry {
-  border-top: 1px solid #edf1ee;
+  border-top: 1px solid var(--theme-soft);
   padding: 9px 0;
 }
 .call-audit-entry pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  background: #f4f7f5;
+  background: var(--theme-soft);
   border: 1px solid var(--call-line);
   border-radius: 6px;
   padding: 14px;
@@ -886,7 +886,7 @@ function reset() {
     align-self: center;
   }
   .call-open {
-    border: 1px solid #dce8df;
+    border: 1px solid var(--theme-border);
     border-radius: 6px;
     padding: 6px 10px;
     font-size: 11px;

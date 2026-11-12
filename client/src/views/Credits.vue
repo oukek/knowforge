@@ -76,8 +76,8 @@ onMounted(() => refreshAi().catch(() => {}));
   display: flex;
   align-items: center;
   gap: 36px;
-  background: #eef5f0;
-  border: 1px solid #dce7df;
+  background: var(--theme-soft);
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
   padding: 24px 28px;
   margin-bottom: 16px;
@@ -94,7 +94,7 @@ onMounted(() => refreshAi().catch(() => {}));
 .credits-overview strong {
   font-size: 27px;
   line-height: 1.15;
-  color: #24483c;
+  color: var(--theme-ink);
   font-variant-numeric: tabular-nums;
 }
 .credits-overview small {

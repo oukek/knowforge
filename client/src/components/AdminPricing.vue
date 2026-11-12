@@ -649,14 +649,14 @@ onMounted(load);
 .pricing-cost-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  border: 1px solid #d5e1da;
+  border: 1px solid var(--theme-border);
   border-radius: 12px;
   background: #fff;
   overflow: hidden;
 }
 .pricing-cost-strip article {
   padding: 18px 20px;
-  border-right: 1px solid #e5eae7;
+  border-right: 1px solid var(--theme-border);
   min-width: 0;
 }
 .pricing-cost-strip article:last-child {
@@ -673,11 +673,11 @@ onMounted(load);
   font-size: 25px;
   letter-spacing: -0.5px;
   font-variant-numeric: tabular-nums;
-  color: #176b58;
+  color: var(--theme-ink);
 }
 .pricing-cost-strip article > div > span {
   font-size: 11px;
-  color: #65786d;
+  color: var(--theme-text);
   overflow-wrap: anywhere;
 }
 .pricing-cost-strip:has(article:nth-child(4)) {
@@ -688,12 +688,12 @@ onMounted(load);
 }
 .pricing-rates strong {
   font-size: 16px;
-  color: #253b34;
+  color: var(--theme-ink);
 }
 .pricing-use-note {
   display: flex;
   gap: 10px;
-  color: #547060;
+  color: var(--theme-text);
   margin: 16px 0 24px;
 }
 .pricing-use-note svg {
@@ -723,7 +723,7 @@ onMounted(load);
   font-size: 12px;
 }
 .pricing-formulas {
-  color: #65786d;
+  color: var(--theme-text);
   font-size: 12px;
 }
 .pricing-preset-row {
@@ -741,7 +741,7 @@ onMounted(load);
 }
 .pricing-parameter-form fieldset {
   border: 0;
-  border-top: 1px solid #e5eae7;
+  border-top: 1px solid var(--theme-border);
   padding: 18px 0 0;
   margin: 22px 0;
   min-width: 0;
@@ -752,7 +752,7 @@ onMounted(load);
   font-size: 14px;
 }
 .pricing-parameter-form .ai-admin-grid > label {
-  color: #536b5c;
+  color: var(--theme-text);
 }
 .pricing-parameter-form small {
   font-size: 11px;
@@ -760,7 +760,7 @@ onMounted(load);
 }
 .pricing-detail-channel {
   padding: 16px 0;
-  border-top: 1px solid #e5eae7;
+  border-top: 1px solid var(--theme-border);
 }
 .pricing-detail-channel h3 {
   margin: 0 0 12px;
@@ -778,7 +778,7 @@ onMounted(load);
   font-size: 12px;
 }
 .pricing-detail-channel dt {
-  color: #65786d;
+  color: var(--theme-text);
 }
 .pricing-detail-channel dd {
   margin: 0;
@@ -792,7 +792,7 @@ onMounted(load);
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .pricing-cost-strip article {
-    border-bottom: 1px solid #e5eae7;
+    border-bottom: 1px solid var(--theme-border);
   }
 }
 @media (max-width: 700px) {

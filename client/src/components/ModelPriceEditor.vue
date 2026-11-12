@@ -378,7 +378,7 @@ function save() {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  color: #536b5c;
+  color: var(--theme-text);
   font-size: 12px;
 }
 .price-mobile-tabs {
@@ -390,8 +390,8 @@ function save() {
   padding: 12px;
   margin-top: 12px;
   border-radius: 8px;
-  background: #eaf2ec;
-  color: #176b58;
+  background: var(--theme-soft);
+  color: var(--theme-ink);
   font-size: 12px;
   overflow-wrap: anywhere;
 }
@@ -423,8 +423,8 @@ function save() {
     font-size: 13px;
   }
   .price-mobile-tabs .active {
-    border-color: #176b58;
-    color: #176b58;
+    border-color: var(--theme-focus);
+    color: var(--theme-ink);
     font-weight: 600;
   }
   .price-mobile-hidden {

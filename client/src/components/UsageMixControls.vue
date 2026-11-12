@@ -83,7 +83,7 @@ label {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  color: #536b5c;
+  color: var(--theme-text);
   font-size: 12px;
   min-width: 0;
 }
@@ -98,7 +98,7 @@ label {
   line-height: 1.8;
 }
 a {
-  color: #176b58;
+  color: var(--theme-ink);
   text-decoration: underline;
 }
 </style>

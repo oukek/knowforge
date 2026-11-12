@@ -471,10 +471,10 @@ async function copyId() {
 </template>
 <style scoped>
 .run-detail {
-  color: #253b34;
+  color: var(--theme-ink);
   min-width: 0;
-  --run-line: #e2e9e4;
-  --run-muted: #7b8e82;
+  --run-line: var(--theme-soft-strong);
+  --run-muted: var(--theme-muted);
 }
 .run-hero {
   display: flex;
@@ -489,10 +489,10 @@ async function copyId() {
   width: 46px;
   height: 46px;
   flex-shrink: 0;
-  background: #edf4ef;
-  color: #37735a;
+  background: var(--theme-soft);
+  color: var(--theme-primary);
   border-radius: 11px;
-  border: 1px solid #dce9e0;
+  border: 1px solid var(--theme-border);
 }
 .run-hero > div:nth-child(2) {
   flex: 1;
@@ -500,7 +500,7 @@ async function copyId() {
 }
 .run-feature-name {
   font-size: 11px;
-  color: #78907f;
+  color: var(--theme-muted);
 }
 .run-hero h2 {
   font-size: 19px;
@@ -514,13 +514,13 @@ async function copyId() {
   align-items: center;
   gap: 7px;
   font-size: 10px;
-  color: #91a096;
+  color: var(--theme-muted);
 }
 .run-id code {
   overflow-wrap: anywhere;
 }
 .run-copy {
-  color: #789586;
+  color: var(--theme-muted);
   display: flex;
   align-items: center;
   padding: 5px;
@@ -540,14 +540,14 @@ async function copyId() {
   font-size: 11px;
   padding: 4px 9px;
   border-radius: 5px;
-  color: #708277;
-  background: #f0f3f1;
+  color: var(--theme-text);
+  background: var(--theme-soft);
   width: fit-content;
   white-space: nowrap;
 }
 .run-badge[data-tone="success"] {
-  color: #287450;
-  background: #eaf4ed;
+  color: var(--theme-primary);
+  background: var(--theme-soft);
 }
 .run-badge[data-tone="progress"] {
   color: #54739c;
@@ -562,7 +562,7 @@ async function copyId() {
   background: #faf1da;
 }
 .run-badge.secondary {
-  border: 1px solid #e3eae5;
+  border: 1px solid var(--theme-border);
 }
 .run-facts {
   display: grid;
@@ -578,7 +578,7 @@ async function copyId() {
 .run-facts dt,
 .run-attempt-facts dt,
 .run-payload-ids dt {
-  color: #8c9c91;
+  color: var(--theme-muted);
   font-size: 10px;
   margin-bottom: 6px;
 }
@@ -603,19 +603,19 @@ async function copyId() {
   padding: 12px 0;
   border-bottom: 2px solid transparent;
   font-size: 12px;
-  color: #7b8e82;
+  color: var(--theme-muted);
   display: flex;
   align-items: center;
   gap: 7px;
 }
 .run-tabs button.active {
-  border-color: #176b58;
-  color: #176b58;
+  border-color: var(--theme-focus);
+  color: var(--theme-ink);
   font-weight: 600;
 }
 .run-tabs button > span {
   font-size: 10px;
-  background: #edf3ef;
+  background: var(--theme-soft);
   border-radius: 4px;
   padding: 0 5px;
 }
@@ -629,15 +629,15 @@ async function copyId() {
   padding: 17px;
   border: 1px solid var(--run-line);
   border-radius: 9px;
-  background: #f9fbfa;
+  background: var(--theme-canvas);
   min-width: 0;
 }
 .run-amounts article:first-child {
-  background: #eff6f1;
-  border-color: #d4e4da;
+  background: var(--theme-soft);
+  border-color: var(--theme-border);
 }
 .run-amounts article > span {
-  color: #6d8676;
+  color: var(--theme-text);
   font-size: 11px;
 }
 .run-amounts strong {
@@ -651,14 +651,14 @@ async function copyId() {
 }
 .run-amounts small {
   font-size: 10px;
-  color: #7b8e82;
+  color: var(--theme-muted);
   margin-left: 5px;
   font-weight: 400;
   letter-spacing: 0;
 }
 .run-amounts p {
   font-size: 10px;
-  color: #829689;
+  color: var(--theme-muted);
   line-height: 1.8;
   margin: 0;
 }
@@ -722,7 +722,7 @@ async function copyId() {
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #8b9c90;
+  color: var(--theme-muted);
   font-size: 10px;
 }
 .run-usage-panel {
@@ -739,7 +739,7 @@ async function copyId() {
 }
 .run-token-grid dt {
   font-size: 10px;
-  color: #829789;
+  color: var(--theme-muted);
 }
 .run-token-grid dd {
   font-variant-numeric: tabular-nums;
@@ -751,7 +751,7 @@ async function copyId() {
 .run-usage-panel > p {
   margin: 0;
   font-size: 10px;
-  color: #8c9f92;
+  color: var(--theme-muted);
   line-height: 1.8;
 }
 .run-actions {
@@ -774,7 +774,7 @@ async function copyId() {
 .run-actions :deep(p) {
   font-size: 11px;
   line-height: 1.9;
-  color: #7f8d80;
+  color: var(--theme-muted);
   margin: 7px 0 14px;
 }
 .run-actions :deep(.call-action-disclosure) {
@@ -797,7 +797,7 @@ async function copyId() {
   display: grid;
   gap: 6px;
   font-size: 11px;
-  color: #66816e;
+  color: var(--theme-text);
 }
 .run-actions :deep(.call-action-fields .app-field) {
   width: 100%;
@@ -817,15 +817,15 @@ async function copyId() {
   font-size: 12px;
 }
 .run-actions :deep(.call-reviewed) {
-  background: #f2f7f3;
-  border: 1px solid #dae8de;
+  background: var(--theme-soft);
+  border: 1px solid var(--theme-border);
   padding: 15px 17px;
   border-radius: 8px;
   margin-top: 12px;
 }
 .run-actions :deep(.call-reviewed strong) {
   font-size: 12px;
-  color: #367255;
+  color: var(--theme-primary);
 }
 .run-actions :deep(.call-reviewed p) {
   margin-bottom: 0;
@@ -848,15 +848,15 @@ async function copyId() {
 }
 .run-chain-total {
   padding: 11px 14px;
-  border: 1px solid #e2eae5;
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
-  background: #f6f9f7;
+  background: var(--theme-soft);
   font-size: 11px;
-  color: #789181;
+  color: var(--theme-muted);
   margin: 15px 0 20px;
 }
 .run-chain-total strong {
-  color: #3b634b;
+  color: var(--theme-primary);
   font-weight: 500;
 }
 .run-attempt-list {
@@ -875,7 +875,7 @@ async function copyId() {
   top: 30px;
   bottom: -4px;
   width: 1px;
-  background: #dce7df;
+  background: var(--theme-soft-strong);
 }
 .run-attempt-index {
   position: absolute;
@@ -884,12 +884,12 @@ async function copyId() {
   width: 23px;
   height: 23px;
   border-radius: 50%;
-  border: 1px solid #d9e3dc;
-  background: #f3f6f4;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-soft);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #79917f;
+  color: var(--theme-muted);
   font-size: 10px;
 }
 .run-attempt-index.success {
@@ -918,7 +918,7 @@ async function copyId() {
 }
 .run-attempt-card > header > div > span {
   font-size: 10px;
-  color: #86a08c;
+  color: var(--theme-muted);
 }
 .run-attempt-card h4 {
   margin: 4px 0 0;
@@ -932,7 +932,7 @@ async function copyId() {
   gap: 12px;
   padding: 13px 0;
   margin: 13px 0 0;
-  border-top: 1px solid #edf1ee;
+  border-top: 1px solid var(--theme-soft);
 }
 .run-attempt-facts > div {
   min-width: 0;
@@ -941,14 +941,14 @@ async function copyId() {
   font-size: 10px;
 }
 .run-attempt-usage {
-  color: #819488;
+  color: var(--theme-muted);
   font-size: 10px;
   margin: 2px 0 10px;
   line-height: 1.9;
 }
 .run-attempt-card :deep(.app-disclosure-trigger) {
   font-size: 11px;
-  color: #6d8b77;
+  color: var(--theme-text);
 }
 .run-attempt-error {
   border-left: 2px solid #d5a486;
@@ -1003,8 +1003,8 @@ async function copyId() {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   padding: 14px;
-  background: #f4f7f5;
-  border: 1px solid #e1e9e3;
+  background: var(--theme-soft);
+  border: 1px solid var(--theme-border);
   border-radius: 7px;
   max-height: 390px;
   overflow: auto;
@@ -1027,7 +1027,7 @@ async function copyId() {
 .run-section-empty {
   text-align: center;
   padding: 45px 20px;
-  color: #91a396;
+  color: var(--theme-muted);
   font-size: 12px;
 }
 .run-section-empty :deep(svg) {

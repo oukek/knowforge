@@ -974,3 +974,101 @@ for (const proof of ["missing", "wrong", "other-flow"])
       "waiting",
     );
   });
+
+test("扫码确认表单保留来源，合法同源提交可完成登录，null 与外部来源仍被拒绝", async (t) => {
+  const f = await fixture(t);
+  const flow = (await f.api("/auth/wechat/start", "POST", {})).data;
+  const callback = await fetch(
+    f.base +
+      "/api/auth/wechat/callback?" +
+      new URLSearchParams({ state: flow.id, code: "fixture" }),
+  );
+  assert.equal(callback.status, 200);
+  assert.equal(callback.headers.get("referrer-policy"), "strict-origin");
+  const html = await callback.text();
+  const ticket = html.match(/name="ticket" value="([a-f0-9]+)"/)[1];
+  const confirm = (origin) =>
+    fetch(f.base + "/api/auth/wechat/confirm", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Origin: origin,
+      },
+      body: new URLSearchParams({ id: flow.id, ticket }),
+    });
+  assert.equal((await confirm("null")).status, 403);
+  assert.equal((await confirm("https://untrusted.example")).status, 403);
+  assert.equal(
+    (
+      await f.api("/auth/wechat/poll", "POST", {
+        id: flow.id,
+        secret: flow.secret,
+      })
+    ).data.status,
+    "waiting",
+  );
+  const confirmed = await confirm(f.base);
+  assert.equal(confirmed.status, 200);
+  assert.match(confirmed.headers.get("content-type"), /^text\/html/);
+  assert((await confirmed.text()).includes("登录已确认"));
+  assert.equal(
+    (
+      await f.api("/auth/wechat/poll", "POST", {
+        id: flow.id,
+        secret: flow.secret,
+      })
+    ).data.status,
+    "complete",
+  );
+  assert.equal((await confirm(f.base)).status, 400);
+});
+
+test("扫码登录主题随授权链接和确认表单传递，主题不能替代登录凭据", async (t) => {
+  const f = await fixture(t);
+  assert.equal(
+    (await f.api("/auth/wechat/start", "POST", { theme: "invalid" })).status,
+    400,
+  );
+  const flow = (
+    await f.api("/auth/wechat/start", "POST", { mode: "qr", theme: "blue" })
+  ).data;
+  const redirect = new URL(new URL(flow.url).searchParams.get("redirect_uri"));
+  assert.equal(redirect.searchParams.get("theme"), "blue");
+  const callback = await fetch(
+    f.base +
+      redirect.pathname +
+      redirect.search +
+      "&" +
+      new URLSearchParams({ state: flow.id, code: "fixture" }),
+  );
+  const html = await callback.text();
+  assert.equal(callback.status, 200);
+  assert(html.includes('data-theme="blue"'));
+  const ticket = html.match(/name="ticket" value="([a-f0-9]+)"/)[1];
+  const confirm = async (ticketValue) =>
+    fetch(f.base + "/api/auth/wechat/confirm", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Origin: f.base,
+      },
+      body: new URLSearchParams({
+        id: flow.id,
+        ticket: ticketValue,
+        theme: "blue",
+      }),
+    });
+  assert.equal((await confirm("0".repeat(64))).status, 400);
+  const done = await confirm(ticket);
+  assert.equal(done.status, 200);
+  assert((await done.text()).includes('data-theme="blue"'));
+  assert.equal(
+    (
+      await f.api("/auth/wechat/poll", "POST", {
+        id: flow.id,
+        secret: flow.secret,
+      })
+    ).data.status,
+    "complete",
+  );
+});

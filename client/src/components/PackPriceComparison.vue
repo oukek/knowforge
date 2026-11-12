@@ -52,7 +52,7 @@ const money = (value) => {
   font-size: 10px;
 }
 .offer {
-  color: #176b58;
+  color: var(--theme-ink);
 }
 .premium {
   color: #aa443a;

@@ -147,7 +147,7 @@ onBeforeUnmount(() => {
 }
 .credit-product-tag {
   color: var(--green);
-  background: #eaf3ed;
+  background: var(--theme-soft);
   padding: 3px 7px;
   font-size: 10px;
   border-radius: 4px;
@@ -164,7 +164,7 @@ onBeforeUnmount(() => {
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.04em;
-  color: #24483c;
+  color: var(--theme-ink);
 }
 .credit-product-amount span {
   font-size: 11px;

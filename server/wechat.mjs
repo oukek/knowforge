@@ -1,3 +1,5 @@
+import { DEFAULT_THEME, themes, normalizeTheme } from "../shared/themes.mjs";
+import { wechatLoginPage } from "./wechat-login-page.mjs";
 import { installWechatHandoff } from "./wechat-handoff.mjs";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { z } from "zod";
@@ -117,8 +119,11 @@ export async function installWechat(app, store, auth, ai, options = {}) {
   }));
   route("post", "/api/auth/wechat/start", async (req, res, c, gateway) => {
     needLogin(c);
-    const { mode } = z
-      .object({ mode: z.enum(["qr", "browser"]).default("qr") })
+    const { mode, theme } = z
+      .object({
+        mode: z.enum(["qr", "browser"]).default("qr"),
+        theme: z.enum(themes.map((theme) => theme.id)).default(DEFAULT_THEME),
+      })
       .strict()
       .parse(req.body);
     if (auth.limited(req, res, "wechat")) return;
@@ -156,7 +161,10 @@ export async function installWechat(app, store, auth, ai, options = {}) {
     const url = new URL("https://open.weixin.qq.com/connect/oauth2/authorize");
     url.search = new URLSearchParams({
       appid: c.appId,
-      redirect_uri: c.apiUrl + "/api/auth/wechat/callback",
+      redirect_uri:
+        c.apiUrl +
+        "/api/auth/wechat/callback" +
+        (theme === DEFAULT_THEME ? "" : "?theme=" + theme),
       response_type: "code",
       scope: "snsapi_userinfo",
       state: id,
@@ -172,7 +180,7 @@ export async function installWechat(app, store, auth, ai, options = {}) {
   route("get", "/api/auth/wechat/callback", async (req, res, c, gateway) => {
     needLogin(c);
     res.set({
-      "Referrer-Policy": "no-referrer",
+      "Referrer-Policy": "strict-origin",
       "Content-Security-Policy":
         "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
     });
@@ -295,11 +303,13 @@ export async function installWechat(app, store, auth, ai, options = {}) {
       });
       return res.redirect(303, c.frontendUrl + "/login?wechatReturn=1");
     }
-    res
-      .type("html")
-      .send(
-        `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>确认微信登录</title><body style="font-family:system-ui;padding:48px 24px;text-align:center"><h2>登录 KnowForge 知行实验室</h2><p>仅在你本人发起登录时确认。确认后，发起扫码的设备将登录你的账号。</p><form method="post" action="/api/auth/wechat/confirm"><input type="hidden" name="id" value="${state}"><input type="hidden" name="ticket" value="${ticket}"><button style="padding:14px 32px">确认登录</button></form></body></html>`,
-      );
+    res.type("html").send(
+      wechatLoginPage({
+        id: state,
+        ticket,
+        theme: normalizeTheme(req.query.theme),
+      }),
+    );
   });
   app.use(
     "/api/auth/wechat/confirm",
@@ -309,10 +319,11 @@ export async function installWechat(app, store, auth, ai, options = {}) {
     }),
   );
   route("post", "/api/auth/wechat/confirm", async (req, res, c, gateway) => {
-    const { id, ticket } = z
+    const { id, ticket, theme } = z
       .object({
         id: z.string().regex(/^[a-f0-9]{32}$/),
         ticket: z.string().regex(/^[a-f0-9]{64}$/),
+        theme: z.enum(themes.map((theme) => theme.id)).default(DEFAULT_THEME),
       })
       .strict()
       .parse(req.body);
@@ -330,12 +341,10 @@ export async function installWechat(app, store, auth, ai, options = {}) {
       .set({
         "Referrer-Policy": "no-referrer",
         "Content-Security-Policy":
-          "default-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+          "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
       })
       .type("html")
-      .send(
-        `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>登录已确认</title><h2>登录已确认</h2><p>请返回发起登录的页面；在微信内登录请点击下方链接。</p><a href="${c.frontendUrl}/?wechatReturn=1">返回学习空间</a></html>`,
-      );
+      .send(wechatLoginPage({ confirmed: true, theme }));
   });
   route("post", "/api/auth/wechat/poll", async (req, res, c, gateway) => {
     needLogin(c);

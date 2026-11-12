@@ -508,7 +508,7 @@ watch(
   padding: 8px 0;
 }
 .chapter-contents a {
-  color: #426d57;
+  color: var(--theme-text);
   font-size: 13px;
   line-height: 1.6;
 }

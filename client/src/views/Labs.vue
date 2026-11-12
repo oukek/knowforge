@@ -478,7 +478,7 @@ const passed = computed(
 <style>
 .acm-sample {
   margin: 20px 0;
-  border: 1px solid #d7e3d9;
+  border: 1px solid var(--theme-border);
   border-radius: 8px;
   padding: 14px;
   min-width: 0;
@@ -495,14 +495,14 @@ const passed = computed(
 .acm-input-panel label,
 .stdio-diff span {
   font-size: 12px;
-  color: #54705e;
+  color: var(--theme-text);
 }
 .acm-sample-columns pre,
 .stdio-diff pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  background: #edf3ee;
-  border: 1px solid #dae5dc;
+  background: var(--theme-soft);
+  border: 1px solid var(--theme-border);
   border-radius: 4px;
   padding: 10px;
   font-family: var(--font-mono, monospace);
@@ -511,7 +511,7 @@ const passed = computed(
 }
 .acm-input-panel {
   padding: 14px;
-  border-top: 1px solid #d7e3d9;
+  border-top: 1px solid var(--theme-border);
 }
 .acm-input-panel textarea {
   display: block;

@@ -150,11 +150,11 @@ onBeforeUnmount(() => {
   max-width: min(280px, calc(100vw - 16px));
   padding: 7px 11px;
   border-radius: 7px;
-  background: #203e34;
+  background: var(--theme-hover);
   color: #fff;
   font-size: 12px;
   line-height: 1.6;
-  box-shadow: 0 4px 16px #173a3026;
+  box-shadow: 0 4px 16px var(--theme-shadow);
   pointer-events: none;
   overflow-wrap: anywhere;
 }

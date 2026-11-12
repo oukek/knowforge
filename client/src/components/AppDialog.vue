@@ -128,7 +128,7 @@ onBeforeUnmount(() => unlockModal(owner));
 .app-dialog-backdrop {
   position: absolute;
   inset: 0;
-  background: #142f3766;
+  background: var(--theme-backdrop);
   backdrop-filter: blur(3px);
 }
 .app-dialog-panel {
@@ -140,7 +140,7 @@ onBeforeUnmount(() => unlockModal(owner));
   background: var(--surface, #fff);
   border: 1px solid var(--line);
   border-radius: 14px;
-  box-shadow: 0 24px 80px #153c3330;
+  box-shadow: 0 24px 80px var(--theme-shadow);
   outline: none;
   min-width: 0;
 }

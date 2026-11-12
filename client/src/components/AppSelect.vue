@@ -306,7 +306,7 @@ onBeforeUnmount(() => {
   width: 100%;
   min-height: 42px;
   padding: 9px 12px;
-  border: 1px solid #dce4df;
+  border: 1px solid var(--theme-border);
   border-radius: 7px;
   background: #fff;
   text-align: left;
@@ -325,7 +325,7 @@ onBeforeUnmount(() => {
 }
 .app-select.is-open .app-select-trigger {
   border-color: var(--green);
-  box-shadow: 0 0 0 3px #28765c12;
+  box-shadow: 0 0 0 3px var(--theme-focus-soft);
 }
 .app-select.is-open .app-select-trigger > svg {
   transform: rotate(180deg);
@@ -352,7 +352,7 @@ onBeforeUnmount(() => {
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 11px;
-  box-shadow: 0 12px 45px #153c3326;
+  box-shadow: 0 12px 45px var(--theme-shadow);
   overflow: hidden;
 }
 .app-select-list {
@@ -379,7 +379,7 @@ onBeforeUnmount(() => {
   color: var(--green);
 }
 .app-select-option[data-active="true"] {
-  background: #f0f5f2;
+  background: var(--theme-soft);
 }
 .app-select-option[aria-selected="true"] {
   color: var(--green-dark);
@@ -399,7 +399,7 @@ onBeforeUnmount(() => {
   color: var(--muted);
 }
 .is-sheet .app-select-backdrop {
-  background: #142f3766;
+  background: var(--theme-backdrop);
   backdrop-filter: blur(3px);
 }
 .is-sheet .app-select-panel {
@@ -429,7 +429,7 @@ onBeforeUnmount(() => {
   width: 36px;
   height: 4px;
   border-radius: 4px;
-  background: #cbd7d1;
+  background: var(--theme-faint);
 }
 .app-select-close {
   position: absolute;

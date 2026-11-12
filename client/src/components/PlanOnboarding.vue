@@ -121,7 +121,7 @@ onBeforeUnmount(unlock);
 .plan-onboarding-backdrop {
   position: absolute;
   inset: 0;
-  background: #162b2466;
+  background: var(--theme-backdrop);
   backdrop-filter: blur(3px);
 }
 .plan-onboarding-panel {
@@ -132,7 +132,7 @@ onBeforeUnmount(unlock);
   background: var(--surface, #fff);
   border-radius: 16px;
   padding: 32px;
-  box-shadow: 0 20px 80px #162b2433;
+  box-shadow: 0 20px 80px var(--theme-shadow);
 }
 .plan-onboarding-panel > svg {
   color: var(--green);
