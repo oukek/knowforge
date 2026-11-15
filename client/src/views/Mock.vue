@@ -1,4 +1,5 @@
 <script setup>
+import QuestionPrompt from "../components/QuestionPrompt.vue";
 import AppDisclosure from "../components/AppDisclosure.vue";
 import AppChoice from "../components/AppChoice.vue";
 import AppField from "../components/AppField.vue";
@@ -402,7 +403,7 @@ const objectiveCount = computed(
               >{{ typeLabel[current.type] }} · {{ current.priority }}</span
             >
           </div>
-          <h2>{{ current.prompt }}</h2>
+          <QuestionPrompt :content="current.prompt" />
           <fieldset v-if="current.type === 'choice'" class="options">
             <legend class="sr-only">选择答案</legend>
             <AppChoice

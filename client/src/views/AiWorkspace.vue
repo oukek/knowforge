@@ -1,4 +1,5 @@
 <script setup>
+import QuestionPrompt from "../components/QuestionPrompt.vue";
 import { ref, watch, onMounted, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { request, modules, store, dateLabel } from "../store.js";
@@ -492,7 +493,7 @@ onMounted(async () => {
           class="ai-generated-list"
         >
           <article v-for="q in selected.result.questions" :key="q.id">
-            <h3>{{ q.prompt }}</h3>
+            <QuestionPrompt :content="q.prompt" />
             <RouterLink :to="'/practice/' + q.id" class="text-link"
               >继续练习这道生成题 →</RouterLink
             >

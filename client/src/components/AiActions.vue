@@ -1,4 +1,5 @@
 <script setup>
+import QuestionPrompt from "./QuestionPrompt.vue";
 import { ref, watch } from "vue";
 import { ai, useAiTask } from "../ai.js";
 import { request, store } from "../store.js";
@@ -179,7 +180,7 @@ function variants() {
     >
       <article v-for="q in run.result.questions" :key="q.id">
         <span class="badge subtle">AI 生成 · {{ q.difficulty }}</span>
-        <h4>{{ q.prompt }}</h4>
+        <QuestionPrompt :content="q.prompt" />
         <RouterLink :to="'/practice/' + q.id" class="text-link"
           >开始作答 →</RouterLink
         >

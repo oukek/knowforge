@@ -362,7 +362,7 @@ export class AiService {
             "。改变约束或失败情景，不仅换变量名；题目答案自洽，不冒充公司原题。"
           : "按正确性、要点覆盖、原理解释、边界分析、表达五项分别打 0–100 分。五个维度各出现一次。参考答案是依据，不要求字面一致。";
       if (feature === "variants")
-        task += "不得复用上下文 previousPrompts 中已经生成的题目。";
+        task += "不得复用上下文 previousPrompts 中已经生成的题目。prompt 使用 Markdown 分段，背景、代码、作答要求分开；代码必须使用带语言标识的独立围栏代码块，保留真实换行与缩进，不得将代码压成一行。";
       if (session)
         task +=
           "评阅当前面试回答，并选择 followup 或 advance。难度：" +

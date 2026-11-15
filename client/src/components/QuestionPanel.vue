@@ -1,4 +1,5 @@
 <script setup>
+import QuestionPrompt from "./QuestionPrompt.vue";
 import AppChoice from "./AppChoice.vue";
 import AppField from "./AppField.vue";
 import { ref, watch, computed } from "vue";
@@ -76,7 +77,7 @@ async function submit(selfRating) {
         />
       </button>
     </div>
-    <h2 class="question-title">{{ q.prompt }}</h2>
+    <QuestionPrompt :content="q.prompt" />
     <aside
       v-if="['user-reported', 'editorial-inference'].includes(q.provenance)"
       class="interview-context"
